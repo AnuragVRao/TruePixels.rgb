@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Frontend
+node_modules/
+dist/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime and ML artefacts
+storage/uploads/*
+storage/tensors/*
+storage/models/*
+storage/explainability/*
+ml/datasets/raw/
+ml/outputs/
+ml/checkpoints/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.coverage
