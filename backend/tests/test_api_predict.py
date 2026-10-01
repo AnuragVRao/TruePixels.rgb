@@ -24,6 +24,7 @@ from app.m1_access.models import User
 from app.m1_access.security import create_session_token, hash_password
 from app.m2_analysis import frequency_detector
 from app.main import app
+from app.shared import config
 from app.shared.db import Base, get_db
 
 pytestmark = pytest.mark.slow
@@ -199,10 +200,16 @@ def test_scores_are_not_all_identical(sample_png, auth):
 
 
 def test_fusion_is_the_documented_average_of_the_two_branches(sample_png, auth):
-    """PRD2 FR-03 strategy A with w = 0.5, asserted over HTTP."""
+    """PRD2 FR-03 strategy A with the configured w, asserted over HTTP.
+
+    w is an operating-point constant (0.25 since 2026-10-01, chosen on a
+    validation split), so the expectation reads it from config rather than
+    hard-coding the old 0.5 - which is what this test did until 2026-10-02.
+    """
     body = predict(upload(sample_png, auth), auth).json()
 
-    expected = 0.5 * body["semantic_score"] + 0.5 * body["frequency_score"]
+    w = config.FUSION_WEIGHT
+    expected = w * body["semantic_score"] + (1.0 - w) * body["frequency_score"]
     assert body["fusion_score"] == pytest.approx(expected, abs=1e-6)
 
 
