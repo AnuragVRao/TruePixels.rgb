@@ -1,0 +1,462 @@
+# changes.md — integrating M1 and M3
+
+On 2026-09-30, the M1 (`M1 TruePixel.zip`, *Truepixels.rgb-main*) and M3
+(`M3 TruePixel.zip`, *AI Generated Image Detection System*) projects were
+merged into this repository alongside M2. The rule was to **keep their code
+as it was and change it only where integration required it**. This file lists
+every change to their code and the reason for it.
+
+Each changed line in their files also carries an `INTEGRATION:` comment, so
+`grep -rn INTEGRATION backend frontend` finds all of them.
+
+---
+
+## At a glance
+
+| | Files copied | Files unchanged | Files changed |
+|---|---|---|---|
+| **M1** backend (`app/m1_access/`) | 12 | 10 | 2: `config.py`, `email_service.py` |
+| **M1** tests | 6 | **6** | 0 |
+| **M1** React frontend | all | **all** | 0 |
+| **M1** other | `seed_admin.py`, `.env.example` | `seed_admin.py` | `.env.example` (one line) |
+| **M3** backend (`app/m3_results/`) | 12 | 6 | 6: `models.py`, `router_reports.py`, `router_results.py`, `router_history.py`, `explain.py`, `overlay.py` (+ 1 new: `urls.py`) |
+| **M3** stubs (`app/stubs/`) | 3 | 2 | 1 (docstring only) |
+| **M3** tests | 7 | **6** test files | `conftest.py` |
+| **M3** frontend | 2 | 0 | `index.html`, `api_tester.html` |
+| Both: `app/shared/*`, `app/main.py` | — | — | **merged** — each team shipped its own copy (see §1) |
+
+Test results after integration: **M1 36/36, M3 27/27, M2 76/76 fast + 13/13
+model-backed** — 152 in total, all green. M1's test files and M3's test files
+run unchanged. The 13 model-backed tests now drive the whole chain: upload
+through M1, predict through M2, and read the result back through M3.
+
+---
+
+## Where things went
+
+| From | To | Why |
+|---|---|---|
+| M1 `app/m1_access/` | `backend/app/m1_access/` | Same package name as the placeholder that was already there. |
+| M3 `app/m3_results/` | `backend/app/m3_results/` | PRD4 §7 names the package `m3_results`; this repo's placeholder was called `m3_reporting`. The placeholder README moved into it, so none of M3's imports had to change. |
+| M3 `app/stubs/` | `backend/app/stubs/` | Kept where M3's tests import it from. **Test-only now** (see §3.1). |
+| M1 `tests/` | `backend/tests/m1/` | Each team's conftest defines its own `client`/`db_session`, so each suite gets its own directory. |
+| M3 `tests/` | `backend/tests/m3/` | Same; an `__init__.py` was added so the two `conftest.py` files don't clash. |
+| M1 `frontend/` (React/Vite) | `frontend/` | Merged into the existing placeholder tree; nothing overwritten. |
+| M3 `frontend/index.html`, `api_tester.html` | `frontend/m3_dashboard/` | `frontend/` is now M1's React app. `main.py` serves these files at `/` and `/api-tester` as before. |
+| M1 `seed_admin.py` | `backend/seed_admin.py` | Same position relative to `app/` as in M1's repo, so it still runs unchanged from `backend/`. |
+| M1 `.env.example` | `backend/.env.example` | `load_dotenv()` searches upward from `app/m1_access/`, so `backend/.env` is found. |
+| M1 `requirements.txt` | merged into `backend/requirements.txt` | Pinned to the versions the suite was run with. `alembic`, `pydantic-settings` and `pytest-asyncio` were listed but never imported; `passlib` is only a fallback for when `argon2-cffi` is missing. These four were left out. |
+| M3 needed `reportlab`, `matplotlib` | added to `backend/requirements.txt` | M3 shipped no requirements file. |
+
+**Not copied.** From M3: `truepixels.db`, `test_out.pdf`, `uploads/` (mock
+images, random tensors, rendered heatmaps), `__pycache__/`, `.pytest_cache/`,
+and the three seeding scripts `generate_mock_dataset.py`, `seed_data.py` and
+`seed_internet_benchmarks.py`. The scripts fill the database with fabricated
+predictions, and the old `/mock/predict` endpoint needed
+`generate_mock_dataset.py` (see §3.1). From M1: `storage/.gitkeep`, since the
+repo already has `storage/`.
+
+---
+
+## 1. Files both teams shipped — merged
+
+M1 and M3 each shipped their own `app/main.py` and their own
+`app/shared/{db,deps,errors,logging,schemas}.py`, and M2 had its own
+`app/shared/contracts/`. Only one copy of each can exist, so these were
+merged. The rule for each merge: **keep what both sides relied on, so neither
+side's code has to change.**
+
+### 1.1 `app/shared/db.py`
+The two copies were nearly identical. **M1's** is used, since it owns D1/D2
+and ships `init_db()`. It has two additions:
+- M3's `SQL_ECHO` switch now works alongside M1's `DEBUG` switch.
+- `init_db()` imports all three model modules before `create_all()`, so D1–D6
+  are all created no matter which router was imported first.
+
+### 1.2 `app/shared/deps.py` (Contract C3)
+**M1's file, unchanged.** M3's version was a mock: an in-memory
+`ACTIVE_SESSIONS` table of fixed tokens such as `test-user-token-1`. Anyone who
+knew those strings could act as any user in the running app. That table now
+lives only in `backend/tests/m3/conftest.py` (§3.4).
+
+### 1.3 `app/shared/errors.py`
+The union of the two:
+- `ERROR_REGISTRY` and the `AppException` signature come from **M3**. They are
+  a superset of M1's: `message` and `status_code` default from the registry
+  when omitted, and every M1 call site passes both explicitly, so M1's
+  behaviour is unchanged.
+- The named subclasses (`AuthTokenInvalidException`, `ImgNotFoundException`,
+  …) and both handlers come from **M1**. M1's catch-all handler replaces the
+  equivalent one in M3's `main.py`; it also returns the request id, where
+  M3's returned `null`.
+
+### 1.4 `app/shared/logging.py` (Contract C5)
+`emit()` now does what **both** versions did:
+- **M3's behaviour:** persist the event to the D6 `logs` table through M3's
+  `logging_service.emit_log`. M3 owns C5 and D6, and the admin log viewer
+  reads that table.
+- **M1's behaviour:** echo a redacted line to stdout. This is kept because
+  M1's console e-mail backend depends on it: with `EMAIL_BACKEND=console`,
+  this output is the only place the OTP code appears.
+
+`severity` keeps M1's default of `"info"`. M3 made it required, but every M3
+call passes it.
+
+### 1.5 `app/shared/schemas.py` (Contracts C1, C2, C3)
+M1, M3 and M2 each had their own definitions of `PreprocessedImage`,
+`InferenceOutput`, `ActivationBundle` and `SessionContext`. Three copies of
+one contract is how the seams drift apart. Now:
+- C1 and C2 are defined once, in `app/shared/contracts/c1.py` and `c2.py`
+  (M2's existing files).
+- C3 `SessionContext` is defined once, in the new `contracts/c3.py`. It is the
+  union of M1's and M3's versions: M3's defaults for `account_status` and
+  `issued_at` (M3's tests build sessions without them), plus M1's
+  `from_attributes` config.
+- `app/shared/schemas.py` keeps its name and re-exports all of them plus
+  M3's `ErrorEnvelope`, so every `from app.shared.schemas import …` in M1 and
+  M3 still works.
+
+Other differences, none of which affects any existing call:
+- M1's `PreprocessedImage` and M3's `ActivationBundle` had defaults for some
+  fields. The contract versions require them, and both teams already pass
+  them.
+- In `InferenceOutput`, `frequency_score` is `float | None`, because M2's
+  frequency branch can be disabled. The other fields match M1/M3 exactly.
+
+### 1.6 `app/main.py`
+Everything both files registered is registered here:
+- **From M1:** the `lifespan` that calls `init_db()`, CORS, the request-id and
+  timing middleware, both exception handlers, the `/auth`, `/images` and
+  `/users` routers.
+- **From M3:** the `/results`, `/history`, `/reports` and `/admin` routers,
+  the dashboard at `/`, the API tester at `/api-tester` (also `/developer`
+  and `/playground`), and `/api/v1/health`.
+- **From M2:** `/api/v1/predictions` and the detailed `/health`. M1's
+  `/health` was a three-field subset of this one; its fields
+  (`status`, `service`, `version`) are included.
+
+Differences from M3's `main.py`:
+- M3 mounted `./uploads` (relative to the working directory) at
+  `/static/uploads`. Now the shared `storage/` tree is mounted at `/static`
+  (see §4).
+- M3 found its HTML with `os.getcwd()/frontend/…`. It now uses
+  `REPO_ROOT/frontend/m3_dashboard/…`, so the page is served whatever
+  directory uvicorn starts from.
+- M3's startup created `./uploads/images`, `./uploads/tensors`,
+  `./uploads/xai` and `./frontend` in the working directory. That step is
+  gone; the shared storage layout is created instead.
+
+---
+
+## 2. Changes to M1's code
+
+### 2.1 `app/m1_access/email_service.py` — hard-coded Gmail password removed (**security**)
+```diff
+- smtp_password = os.getenv("SMTP_PASSWORD", "<a real app password>")...
++ smtp_password = os.getenv("SMTP_PASSWORD", "")...
+```
+The default value was a real Google app password for a developer's personal
+Gmail account. Committing it would publish a working credential. The literal
+is redacted here too - a changelog that quotes the secret it removed has not
+removed it. With no password set, the code falls through to M1's existing
+console path, which logs the OTP. To send real mail, put `SMTP_PASSWORD` in
+`backend/.env`.
+
+> ⚠ **Action for M1's owner:** that password was in the zip and is probably
+> in M1's own git history. **Revoke it** in the Google account (Security →
+> App passwords) and create a new one. Removing it from this repository does
+> not make the old one safe.
+
+### 2.1b `app/m1_access/config.py` + `email_service.py` — signing key and personal address (**security**, 2026-09-30)
+
+Found while making the tree commit-ready.
+
+```diff
+- JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev_secret_key_truepixels_rgb_8473…")
++ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or secrets.token_urlsafe(64)  # + a loud warning
+```
+A signing key written into the source is not a secret: anyone who can read the
+repository can mint a valid session token for any user, on any deployment that
+did not override it — and this one is headed for a public tunnel. Unset now
+means *unguessable* rather than *published*. The cost is that sessions end at
+every restart while the variable is unset, which is the right way round, and
+the warning says so. **Set `JWT_SECRET_KEY` in `backend/.env` before deploying**,
+and note that more than one uvicorn worker *requires* it — otherwise each
+worker signs with a different key and rejects the others' tokens.
+`backend/.env.example` carried the same fixed key and now carries instructions
+for generating one.
+
+`SMTP_USER` and `SMTP_FROM` (in both `config.py` and `email_service.py`)
+defaulted to a developer's personal Gmail address. Now empty; set them in
+`.env`. With no `SMTP_PASSWORD` the console fallback is unchanged, so local
+development is unaffected.
+
+### 2.1c `app/main.py` — wildcard CORS with credentials (**security**, 2026-09-30)
+
+```diff
+- allow_origins=["*"], allow_credentials=True, allow_methods=["*"]
++ allow_origins=config.CORS_ALLOWED_ORIGINS, allow_credentials=True,
++ allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+```
+`"*"` together with `allow_credentials=True` is the dangerous pairing: rather
+than sending `Access-Control-Allow-Origin: *` (which browsers refuse to use
+with credentials), Starlette **echoes the caller's Origin**, so any website a
+signed-in user happened to visit could call this API with their session
+cookie or token. Both module mains shipped it.
+
+The allowlist lives in `app/shared/config.py` as `CORS_ALLOWED_ORIGINS` and
+defaults to the local dev origins (M1's React server on :3000 or :5173, and
+the API's own host). M3's dashboard is served from the API itself, so it is
+same-origin and needs no CORS at all. Add a deployment origin with
+`TRUEPIXELS_CORS_ORIGINS=https://…` rather than widening the default.
+
+### 2.2 `app/m1_access/config.py` — one shared storage directory
+```diff
+- STORAGE_DIR = Path(os.getenv("STORAGE_DIR", str(BASE_DIR / "storage")))
++ STORAGE_DIR = Path(os.getenv("STORAGE_DIR", str(BASE_DIR.parent / "storage")))
+```
+`BASE_DIR` is `backend/`, so M1 used to store uploads in `backend/storage/`,
+while M2 reads from repo-root `storage/`. The two would never have found each
+other's files. M2's config now also honours M1's `STORAGE_DIR` variable, so
+setting it moves all three modules together.
+
+### 2.3 `.env.example`
+`STORAGE_DIR=./storage` was commented out. Copied to `.env`, that line would
+have overridden the shared default with a path relative to wherever uvicorn
+was started.
+
+### Not changed in M1, deliberately
+All routers, validation, preprocessing, security, models and schemas are
+**unchanged**. All 36 of M1's tests pass as written.
+
+---
+
+## 3. Changes to M3's code
+
+### 3.0 `frequency_score` may be null (2026-09-30)
+
+M2's frequency branch (SPAI) tiles its input into 224x224 patches and cannot
+score an image smaller than that in either dimension - the vendored tensor
+code raises. M1 accepts images down to 64px (PRD C.9), so a 100x100 upload
+reached M2 and came back as **HTTP 500**. Confirmed by probe: 223x223 fails,
+224x224 works.
+
+Contract C2 has always typed the field `float | None`, so the fix is the one
+the contract already allows: M2 returns **null** and fusion degrades to its
+documented passthrough (a verdict from the semantic branch alone), exactly as
+when the branch is switched off in config. Two of M3's files assumed the
+field was always a number:
+
+- **`schemas.py`: `frequency_score: float` -> `float | None`.** It now matches
+  C2, which M3's own schema is a projection of.
+- **`reporting.py`: the PDF cell** formatted `f"{...:.4f}"` unconditionally,
+  which raises on null. It now prints `unavailable`.
+
+Also changed on M2's side of the seam: `models.py` makes the D4 column
+`nullable=True` (a stand-in number there would outlive the request and end up
+in reports), and `pipeline.py` no longer refuses a null - the guard that did
+so was added on the assumption that M3 could not render one.
+
+**No migration needed** as long as the SQLite file is recreated: the column
+was `NOT NULL` in any database created before this change.
+
+### 3.0b The dashboard shipped a hard-coded verdict (2026-10-01)
+
+§3.1 below removed M3's mock prediction *endpoint*. The static page kept its
+own copy of the same idea: `frontend/m3_dashboard/index.html` rendered the
+result card unconditionally, pre-filled with **"Real", "High Confidence",
+"96.2%"**, branch scores `0.0320 / 0.0480 / 0.0380`, model
+`TruePixels-Ensemble-ViT-FFT v1.0.0` and a `2026-09-06` timestamp. Signing in
+and touching nothing therefore displayed a confident verdict for an image that
+had never been analysed — with an empty `predictions` table behind it. Found
+by the user on first use.
+
+- The card is now `hidden` until a prediction has actually been rendered, and
+  an **empty state** ("No image analysed yet") sits in its place.
+- Every pre-filled value is now an em dash, so nothing fabricated can appear
+  even for the instant before real data lands.
+- The two explainability panels had `<img src="">`, which browsers draw as
+  broken-image icons. They now carry an explicit "Not available" note —
+  M2 exports no activations yet, so `/explainability` answers
+  `XAI_UNAVAILABLE`, and `showPanel()` reveals an image only if the API
+  returned a URL.
+
+This is the same rule as CLAUDE.md §3's "never populate a field with a
+stand-in value to satisfy a schema", applied to the UI: a demo audience
+reading a fabricated 96.2% has been misled more effectively than by any
+wrong number the model could produce.
+
+### 3.1 Mock predictions and synthetic explainability removed from the live app
+M3 was built before M2 existed, and like M2's old `dev_intake.py` it
+contained stand-ins for the missing module. Now that the real module exists,
+they come out of the running app, just as `dev_intake.py` came out of M2
+when M1 arrived.
+
+- **`router_results.py`: `POST /api/v1/mock/predict` removed.** It stored
+  random scores in the real `predictions` table, where they would have mixed
+  with genuine predictions in history, analytics and PDF reports. It also
+  imported `generate_mock_dataset` from outside the `app` package, which is
+  not importable here. Predictions now come from `POST /api/v1/images` →
+  `POST /api/v1/predictions`. `CreateMockPredictionRequest` is left in
+  `schemas.py`, now unused.
+- **`explain.py`: the synthetic-heatmap fallback removed.** With no attention
+  or gradient data, `build_relevance_map()` used to return a Gaussian blob
+  labelled `synthetic-fallback`. That renders as a convincing heatmap that
+  explains nothing. PRD4 §4.2.2 says M3 must "surface XAI_UNAVAILABLE rather
+  than … fabricating a blank heat map", so it now raises `XAI_UNAVAILABLE`.
+- **`overlay.py`: the synthetic-spectrum fallback removed,** for the same
+  reason (`XAI_UNAVAILABLE` instead).
+- **`app/stubs/__init__.py`: docstring only.** It now states that the package
+  is test-only. The stubs themselves are unchanged. Nothing under `app/`
+  imports them; only M3's tests do.
+
+**What M3 shows today:** M2 does not yet produce an `ActivationBundle` (M2
+milestone Step 6). So a result page shows the verdict and all scores but no
+panels, and `GET /api/v1/explainability/{id}` answers `501 XAI_UNAVAILABLE`.
+That is the honest answer until Step 6 lands.
+
+### 3.2 `router_reports.py` — report download had no authentication (**security**)
+The original handler's parameters were `token`, `session` and
+`authorization`, all without `Header()`/`Depends()`, so FastAPI read all
+three from the **query string**. The `Authorization` header was never looked
+at. Tokens were looked up in the mock `ACTIVE_SESSIONS` table, and **when no
+session was found the handler fell back to test user 1**. Result: anyone,
+with no credentials at all, could download user 1's reports. M3's own
+isolation test (case 3) passed only because its attacker happened to be
+user 1.
+
+Now a `report_session` dependency takes the token from the `Authorization`
+header or from `?token=`, which the dashboard's download button needs because
+a plain browser download can't set headers. It checks the token with **M1's**
+`verify_session_token`, including the live account-status check, and
+answers `401 AUTH_TOKEN_INVALID` when there is no token. The ownership and
+admin logic below it is unchanged.
+
+### 3.3 `models.py` — D1–D4 no longer redefined
+M3's `models.py` declared its own `User` (D1), `Image` (D2), `ModelRegistry`
+(D3) and `Prediction` (D4). With M1 also declaring `users` and `images` on the
+same `Base`, the app **crashes on import** with `Table 'users' is already
+defined for this MetaData instance`. Now:
+- `User` and `Image` are imported from `app.m1_access.models` (M1 owns D1/D2).
+- `ModelRegistry` and `Prediction` moved to `app/m2_analysis/models.py`
+  (PRD4 §4.2.4: M2 owns D3/D4 and is the only writer of D4), with **M3's
+  columns unchanged** apart from the two notes below. They are re-imported
+  here, so every `from app.m3_results.models import …` still works.
+- `Explainability` (D5) and `LogEntry` (D6) are M3's, unchanged, except that
+  `LogEntry.user` no longer declares `back_populates="logs"`: M1's `User` has
+  no `logs` attribute, and nothing reads it. `Prediction.image` lost its
+  `back_populates` for the same reason.
+
+Two column notes in the moved D3/D4 classes:
+- `models.artifact_sha256` is now **nullable**. The SigLIP 2 checkpoint is
+  loaded from Hugging Face by name, and no hash of it is pinned. An invented
+  hash would be worse than `NULL`.
+- `predictions.frequency_score` **stays NOT NULL**, as M3 wrote it, because
+  M3's views and PDF report format it unconditionally. If M2's frequency
+  branch is ever disabled, the prediction fails with a clear message instead
+  of storing a stand-in number.
+
+### 3.4 URLs for stored files — new `urls.py`, used by `router_results.py` and `router_history.py`
+M3 built image URLs as `f"/static/{file_reference}"`. That only works for
+paths relative to the working directory, but M1 stores **absolute** paths
+(`C:\…\storage\uploads\ab\cd\<sha>.jpg`), which produced broken links like
+`/static/C:\…`. The new `storage_url()` turns a path inside the shared
+storage tree into its `/static/…` URL. For anything else it falls back to
+M3's original format. Three lines changed: `original_image_url`,
+`thumbnail_url` and `visualization_url` (×2).
+
+### 3.5 `overlay.py` — where explainability images are written
+The default `storage_dir` changed from `"./uploads/xai"` (relative to the
+working directory) to `storage/explainability/`. That folder is inside the
+tree served at `/static` and already gitignored.
+
+### 3.6 Frontend — `index.html` (dashboard)
+Only the three parts that depended on mocks changed:
+1. **Sign-in.** The three persona buttons, which picked a fixed fake token,
+   became an email/password form. It calls M1's `/auth/login` or
+   `/auth/admin/login`, and handles M1's optional OTP step via
+   `/auth/otp/verify`. "Switch User" became "Sign Out" and calls
+   `/auth/logout`. The session survives a page reload (`sessionStorage`).
+2. **Scanning.** "Simulate New Scan", which called the removed mock endpoint,
+   became "Scan New Image": pick a file → `POST /api/v1/images` →
+   `POST /api/v1/predictions` → show the result.
+3. **Removed:** the "Quick Test Cases" buttons, which linked to prediction ids
+   33, 34 and 13 in M3's seeded mock database, with the percentages hard-coded
+   into their labels. Also, diagnostics check 5 now uses the signed-in session
+   instead of a hard-coded admin token, and expects `403` for non-admins.
+
+Results, history, reports, admin analytics, charts and styling are
+unchanged.
+
+### 3.7 Frontend — `api_tester.html`
+- The token dropdown's three fake tokens were replaced by "Signed-in session
+  (from dashboard)", which reads the dashboard's login. Same origin, so they
+  share it. The "invalid token" and "no header" options remain.
+- "Run all" used a hard-coded fake token and now uses the selected one.
+- The "Simulate Pipeline Scan" entry now points at `POST /api/v1/predictions`.
+
+Its sample URLs still contain M3's example ids (e.g. `/reports/33`); edit
+them to one of your own predictions.
+
+### 3.8 `tests/m3/conftest.py`
+M3's **test files are unchanged**. The conftest now:
+- holds M3's original mock `ACTIVE_SESSIONS` table and mock `current_session`
+  logic (moved here from `app/shared/deps.py`, logic unchanged), and applies
+  them through `app.dependency_overrides` for M1's `current_session` and the
+  new `report_session`. The test files' `"Bearer test-user-token-1"` headers
+  therefore still work;
+- runs the suite from a scratch directory, so the relative `./uploads/…` paths
+  M3's tests write to don't land in the repository.
+
+### Not changed in M3, deliberately
+`analytics.py`, `logging_service.py`, `reporting.py`, `router_admin.py`,
+`schemas.py`, `m1_stub.py`, `m2_stub.py` and all six test files are
+**unchanged**. All 27 of M3's tests pass.
+
+---
+
+## 4. Changes on M2's side (our code), for completeness
+
+- **`dev_intake.py` deleted.** It was the temporary M1 stand-in, documented
+  from the start to be deleted when M1 shipped.
+- **`POST /api/v1/predictions`** is now PRD2 §10.1's form: a JSON body
+  `{image_id, xai}`, `Depends(current_session)`, owner-only, with the image
+  resolved through M1's `prepare_model_input` (Contract C1). A missing image
+  and someone else's image both return `404 IMG_NOT_FOUND`, so ids can't be
+  probed. Errors use the shared `{"error": {code, message, request_id}}`
+  envelope instead of FastAPI's `{"detail": …}`.
+- **D3/D4 persistence.** `run_detection()` writes the D4 row and commits
+  before returning (PRD4 §4.2.4), so `prediction_id` and `model_id` are real
+  integers again. `registry.record()` writes one D3 row for each artefact
+  that actually ran: SigLIP 2, SPAI and the fusion configuration. The rows
+  come from config, and `metrics` is always `NULL` (this system has no
+  benchmark). M3's admin "activate" endpoint flips `is_active`, but M2 still
+  runs whatever config says; making D3 authoritative is the rest of Step 5.
+- **Storage.** `config.STORAGE_ROOT` honours `STORAGE_DIR`, and
+  `EXPLAINABILITY_DIR` was added. Model weights stay in repo `storage/models/`
+  regardless.
+- **Tests.** The model-backed API tests now go through M1 upload and M1 auth,
+  and read the result back through M3. The two input-validation tests moved
+  to M1's domain (its suite covers them) and were replaced by persistence,
+  `XAI_UNAVAILABLE`, auth and isolation checks. The root
+  `tests/conftest.py` points `DATABASE_URL` and `STORAGE_DIR` at a scratch
+  directory, so no test touches real data.
+
+---
+
+## 5. Known issues left as they are (not integration blockers)
+
+Found while integrating and left alone, because fixing them would change
+module behaviour rather than make the modules fit together. They are listed
+so their owners can decide.
+
+| Module | Issue |
+|---|---|
+| M1 | With `EMAIL_BACKEND=console` (or no SMTP password), the **OTP is written to the log**, and since C5 persists logs, it ends up in the D6 table, visible to admins in the log viewer. Fine for development; turn it off in production. |
+| M1 | `DUMMY_HASH` is computed at import time (an Argon2 hash), which adds a little to startup time. |
+| M1 | ~~`seed_admin.py` prints a fixed admin password.~~ **Fixed 2026-10-02**: the password now comes from `SEED_ADMIN_PASSWORD`, or is generated randomly and printed once; no credential is in source. If you seeded an admin with the old script, change that account's password. |
+| M1 + M3 | Two user-admin APIs exist: M1's `/api/v1/users` (used by M1's React app) and M3's `/api/v1/admin/users` (used by M3's dashboard). Both work, with slightly different rules: M1 blocks **any** self-change, M3 only self-disable and self-remove. Worth consolidating. |
+| M3 | `/api/v1/reports/{id}?token=…` puts the session token in the URL, where it can end up in browser history and server logs. Kept because the dashboard's download button depends on it. |
+| All | `/static` serves the whole storage tree without authentication. Upload file names are SHA-256 hashes and so hard to guess, but that is obscurity, not access control. M3's original `/static/uploads` mount had the same property. |
+| M1 → M2 | M1 caps uploads at 10 MB and 25 MP. Two of M2's smoke-test images (6144², 8192×4096) are over the pixel cap and are now rejected at upload. |
+| M1 → M2 | M1 builds and saves the CLIP tensor both at upload and again at prediction, and no detector reads it (CLAUDE.md §8, item 4). Contract C1 v2 should drop it. |

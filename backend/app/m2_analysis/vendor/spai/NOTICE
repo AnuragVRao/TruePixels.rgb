@@ -1,0 +1,42 @@
+SPAI - Any-Resolution AI-Generated Image Detection by Spectral Learning
+Copyright (c) 2025 Centre for Research and Technology Hellas and University of
+Amsterdam. Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Upstream:  https://github.com/mever-team/spai
+Commit:    8ff7b3b6779b4fcb43cf313471d9cb1c62d129a4
+Paper:     D. Karageorgiou, S. Papadopoulos, I. Kompatsiaris, E. Gavves,
+           "Any-Resolution AI-Generated Image Detection by Spectral Learning",
+           CVPR 2025. https://arxiv.org/abs/2411.19417
+
+This directory contains the subset of the upstream `spai/models` package that
+inference needs, vendored by TruePixels.rgb on 2026-09-12. TruePixels.rgb does
+NOT train, fine-tune or otherwise alter the published weights.
+
+Files and their relationship to upstream
+----------------------------------------
+filters.py            spai/models/filters.py, verbatim.
+vision_transformer.py spai/models/vision_transformer.py, verbatim except that
+                      the `timm.models.layers` import is replaced by
+                      `layers.py` (see below).
+sid.py                spai/models/sid.py, REDUCED to the classes the released
+                      `spai.pth` checkpoint uses: PatchBasedMFViT, MFViT,
+                      FrequencyRestorationEstimator, FeatureSpecificProjector,
+                      Projector, ClassificationHead, FeatureImportanceProjector,
+                      build_mf_vit, _init_weights, plus patchify_image from
+                      spai/models/utils.py. Removed: ONNX export methods,
+                      attention-mask export, CLIP/DINOv2 backbones, the
+                      "single_extraction" model family, and the
+                      DenseIntermediateFeaturesProcessor variants.
+                      `einops.rearrange` calls replaced by equivalent
+                      reshape/permute; `torchvision.transforms.Normalize` and
+                      `torchvision.transforms.functional.five_crop` replaced by
+                      equivalents in layers.py. No arithmetic was changed.
+layers.py             NEW. Minimal replacements for the timm / torchvision /
+                      einops symbols the upstream code imports.
+config.py             NEW. The upstream yacs configuration (spai/config.py
+                      defaults merged with configs/spai.yaml) transcribed as a
+                      plain attribute tree, restricted to the keys the model
+                      builders read. Values were cross-checked against the
+                      config embedded in the released checkpoint.
+
+Every local edit inside a vendored file is marked with a `# TruePixels:` comment.

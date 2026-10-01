@@ -1,0 +1,48 @@
+# Backend dependencies for TruePixels.rgb.
+#
+# Pinned to the versions verified working on 2026-09-07. PRD2 section 4 specifies
+# Python 3.11; the current development machine runs 3.13.6. See CLAUDE.md section 6.
+
+# Web layer
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic==2.13.5
+python-multipart==0.0.20
+
+# Inference.
+# torch: pip's default index serves the CPU-only build. For the GPU build (an
+# RTX 4050 / driver 555.97 is the development machine), install the same
+# pinned version from the cu126 index - the local-version tag must be
+# explicit or pip treats the CPU build as already satisfying the pin:
+#   pip install --index-url https://download.pytorch.org/whl/cu126 #       "torch==2.13.0+cu126" "torchvision==0.28.0+cu126"
+# Nothing in the code depends on which build is present; config.DEVICE picks
+# CUDA when torch reports it.
+torch==2.13.0
+transformers==4.57.1
+# Tensors-only weight files for the SPAI frequency detector (already a
+# transformers dependency; pinned here because the loader imports it directly).
+safetensors==0.6.2
+
+# Image and signal processing
+pillow==12.1.1
+numpy==2.2.6
+scipy==1.15.3
+
+# Calibration and baseline classifiers (M2.3 onward)
+scikit-learn==1.7.0
+
+# M1 - accounts, sessions, upload validation (from M1's requirements.txt,
+# pinned to the versions the integrated suite was run with on 2026-09-30)
+sqlalchemy==2.1.1
+python-jose[cryptography]==3.5.0
+argon2-cffi==25.1.0
+python-dotenv==1.2.3
+email-validator==2.3.0
+
+# M3 - PDF reports and explainability panels (M3 shipped no requirements file)
+reportlab==5.0.1
+matplotlib==3.11.2
+
+# Testing
+pytest==9.1.1
+httpx==0.28.1

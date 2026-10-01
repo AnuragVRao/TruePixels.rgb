@@ -1,40 +1,143 @@
 # TruePixels.rgb
 
-AI-generated image detection system based on the four product requirement documents in this repository.
+Detects AI-generated images by running **two independently pretrained models**
+over the same picture and fusing their verdicts:
+
+- a **semantic** branch — [`prithivMLmods/AIorNot-SigLIP2`](https://huggingface.co/prithivMLmods/AIorNot-SigLIP2),
+  a SigLIP 2 fine-tune, which asks *what is this a picture of, and does it look
+  like the AI images it was trained on*;
+- a **frequency-domain** branch — [SPAI](https://github.com/mever-team/spai)
+  (CVPR 2025), which ignores content and asks *does this pixel grid carry the
+  spectral signature of a synthesis pipeline*.
+
+The argument for running both is that a generator which defeats one kind of
+evidence has no particular reason to have defeated the other. Measurements
+below show where that holds and where it does not.
+
+> ### This project never trains, fine-tunes or retrains a model
+>
+> Not deferred — permanently out of scope. Every score comes from a
+> third-party checkpoint used exactly as published, and there is no randomly
+> initialised weight anywhere in the inference path. Where the PRDs call for a
+> trained component, the architecture was changed to use pretrained weights
+> instead, and the supersession is recorded in `CLAUDE.md` §8.
+
+## Quick start
+
+Requires **Python 3.13** (the pinned torch wheel does not exist for 3.14).
+
+```bash
+python -m venv .venv && .venv\Scripts\Activate.ps1      # Windows
+pip install -r backend/requirements.txt
+
+# GPU (optional but ~25x faster): pip's default index serves the CPU-only
+# build, so the +cu126 tag must be explicit or pip thinks the pin is satisfied.
+pip install --index-url https://download.pytorch.org/whl/cu126 \
+    "torch==2.13.0+cu126" "torchvision==0.28.0+cu126"
+```
+
+**One-time: the SPAI weights.** They are published on Google Drive, which
+cannot be fetched reproducibly by URL, so nothing downloads them for you.
+Download `spai.pth` (935 MB) from the link in
+`config.DETECTOR_FREQUENCY_SOURCE_URL` into `storage/models/`, then:
+
+```bash
+cd backend && python scripts/convert_spai_checkpoint.py
+```
+
+That verifies the upstream SHA-256, extracts the model tensors under a
+restricted unpickler, and writes a tensors-only `spai.safetensors` (560 MB).
+The server loads only that file, checks it against a pinned digest of the
+weights, and loads it **strictly** — a partial load is refused, never
+tolerated.
+
+```bash
+cd backend
+cp .env.example .env            # set JWT_SECRET_KEY before deploying
+python seed_admin.py            # creates the first admin account
+python -m uvicorn app.main:app --reload
+```
+
+Then open <http://127.0.0.1:8000/> for the dashboard, or `/docs` for the API.
+`GET /health` reports the device, both checkpoints and whether each is loaded.
+
+```bash
+python -m pytest backend/tests -q                 # 158 tests: M1 + M2 + M3
+python -m pytest backend/tests -q -m "not slow"   # skip the model-backed ones
+```
+
+## What it measures, honestly
+
+Benchmarked on **Synthbuster** (9 generators) versus **RAISE-1k** camera
+originals, 99 images per class, scene-paired, with 95 % intervals. The fusion
+weight and threshold (w = 0.25, τ = 0.7558) were chosen on a **separate
+validation split** of 198 images per class that shares no scene with this one,
+so these are held-out figures:
+
+| branch | accuracy | recall | false positives on real | AUC |
+|---|---|---|---|---|
+| SigLIP 2 | 0.672 [0.60, 0.73] | 0.475 | 0.131 | 0.728 [0.66, 0.80] |
+| SPAI | 0.884 [0.83, 0.92] | 0.909 | 0.141 | **0.967 [0.95, 0.98]** |
+| **fused (what the system returns)** | 0.864 [0.81, 0.90] | 0.838 | **0.111 [0.06, 0.19]** | 0.941 [0.91, 0.97] |
+
+**The claim this supports, and no more:** *detection of whole-image synthesis
+from 2022–23 generators versus pristine Nikon RAW-derived TIFFs, 99 images per
+class.* It is not "the accuracy of the system".
+
+What else the benchmark established, including the inconvenient parts:
+
+- **Resizing breaks this system; recompression barely touches it.** JPEG q75
+  on both classes costs 0.019 AUC; halving both takes SPAI's recall from
+  0.939 to 0.616. Do not downscale before analysis.
+- **Fusion buys robustness, not peak accuracy.** On pristine images fusion is
+  *worse* than SPAI alone; under degradation it is better.
+- **The false-positive target is still missed, narrowly** — 0.111 against a
+  ≤ 0.10 requirement, after choosing the operating point specifically to meet
+  it. The validation split predicted 0.096; the held-out set came in worse,
+  which is what two constants chosen on 198 images per class buys you.
+- **Behaviour on post-2023 generators is unknown**, and the one modern image
+  tried was missed outright with full confidence.
+- **Real photographs that have been through a learned enhancer** — phone
+  camera pipelines, upscalers — look synthetic to the frequency branch.
+
+Full results, every control and degradation arm, and the per-generator
+breakdown: **[ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md)**.
 
 ## Project structure
 
 ```text
-TruePixels.rgb/
-├── backend/        FastAPI application and database migrations
-├── frontend/       React user and administrator interface
-├── ml/             Training, evaluation, and experiment assets
-├── storage/        Local development storage layout for files and artefacts
-├── infra/          Containers, database setup, and deployment scripts
-├── docs/           Architecture, contracts, and technical decisions
-├── tests/          Cross-module contract, integration, and end-to-end tests
-└── PRD*.md         Product requirements and module specifications
+backend/app/
+  m1_access/     M1 — accounts, sessions, upload, validation, preprocessing
+  m2_analysis/   M2 — the two detectors, fusion, prediction records, registry
+    vendor/spai/ SPAI's model code as published (Apache-2.0) + LICENSE + NOTICE
+  m3_results/    M3 — results, history, PDF reports, administration, logging
+  shared/        config, database, and the C1–C5 contracts between modules
+backend/tests/   M2's suite plus M1's and M3's, unchanged
+frontend/        M1's React app; m3_dashboard/ is M3's static dashboard
+ml/evaluation/   evaluate.py, select_threshold.py, and RESULTS.md
+ml/datasets/     fetch scripts for the evaluation sets (no images committed)
+storage/         local artefacts: uploads, model weights (all gitignored)
+docs/            contracts, decisions, session-log archive
+PRD*.md          the four product requirement documents
 ```
 
-## Module ownership
+## Documentation
 
-- `backend/app/m1_access`: M1, image access management, authentication, validation, and preprocessing.
-- `backend/app/m2_analysis`: M2, model inference, fusion, prediction persistence, and model registry.
-- `backend/app/m3_reporting`: M3, explainability, results, history, reports, administration, and logging.
-- `backend/app/shared`: shared configuration, database wiring, dependencies, and cross-module contracts.
-- `frontend`: React screens that consume the backend APIs.
-- `ml`: Offline training and evaluation. Training data and model artefacts are not committed here.
+| File | What it is for |
+|---|---|
+| **[CLAUDE.md](CLAUDE.md)** | Working notes: the models, the rules that are easy to break, how to run, milestones, what is real and what is not. Read this before changing anything. |
+| [changes.md](changes.md) | Every edit made to M1's and M3's code during integration, and why |
+| [ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md) | Every measurement, with its intervals and its limits |
+| [docs/contracts/](docs/contracts/) | The C1–C5 module seams, and the documented deviations from PRD4 |
 
-## Planned technology baseline
+## Licences
 
-- Backend: Python 3.11, FastAPI, Pydantic v2, SQLAlchemy 2.x, Alembic.
-- Database: PostgreSQL 15 with `citext`.
-- Image and tensor processing: Pillow and NumPy.
-- Inference: PyTorch 2.x and Hugging Face Transformers.
-- Frontend: React 18.
+The application code is this project's. Two third-party components carry their
+own terms, and both matter:
 
-## Getting started
-
-This commit establishes the project layout only. Implementation, dependency manifests, environment configuration, and run commands will be added after the open decisions in the PRDs are resolved.
-
-Read the README in each top-level folder before adding code there. Cross-module changes must follow `docs/contracts/` and the integration rules in `PRD4_Shared_Interface_Integration.md`.
+- **SPAI** (`backend/app/m2_analysis/vendor/spai/`) — Apache-2.0, code and
+  weights. See its `NOTICE` for the list of local modifications, none of which
+  change the arithmetic.
+- **Synthbuster**, used only as evaluation data and never committed —
+  **CC-BY-NC-SA-4.0, non-commercial**. RAISE-1k is research-use. Neither is
+  redistributed here; `ml/datasets/fetch_*.py` fetch them on request.

@@ -6,20 +6,40 @@ __pycache__/
 # Frontend
 node_modules/
 dist/
+frontend/.vite/
 
-# Local configuration
+# Local configuration and secrets
 .env
 .env.*
 !.env.example
 
-# Runtime and ML artefacts
+# Local databases (M1/M3 default to SQLite in the working directory)
+*.db
+*.sqlite
+*.sqlite3
+
+# Runtime artefacts. storage/models/ holds the SPAI weights (560 MB, and the
+# 935 MB upstream checkpoint they are converted from) - see CLAUDE.md §4.
 storage/uploads/*
 storage/tensors/*
 storage/models/*
 storage/explainability/*
-ml/datasets/raw/
+
+# Evaluation image sets and their results. Every one of these is FETCHED, by
+# ml/datasets/fetch_*.py, and DERIVED, by make_variants.py - so the scripts and
+# manifests are the reproducible record and the pixels never enter git.
+# Covers synthbuster_raise/, its __crop1024 / __jpeg75 / __half variants,
+# sbr_val/ and anything added later.
+ml/datasets/*/
 ml/outputs/
 ml/checkpoints/
+AttGAN/
+dataset/synthbuster_1k/
+
+# The original module deliveries from M1 and M3, already extracted into the
+# tree (changes.md records every edit). Root-level only, so the small
+# dataset/RAISE_1k.csv.zip manifest is still tracked.
+/*.zip
 
 # Tooling
 .pytest_cache/
