@@ -560,11 +560,33 @@
 
     // Show a panel image only when the API actually returned one; otherwise
     // leave the explanation of its absence in place.
-    function showPanel(imgId, noneId, url) {
+    // Stored images are served only to their owner, behind the Bearer token
+    // (there is no public /static any more), so an <img src> cannot fetch
+    // them directly: fetch with the header and hand the <img> a blob URL.
+    async function setAuthImage(img, url) {
+      if (img.dataset.blobUrl) {
+        URL.revokeObjectURL(img.dataset.blobUrl);
+        delete img.dataset.blobUrl;
+      }
+      const res = await fetch(url, { headers: { "Authorization": `Bearer ${currentPersonaToken}` } });
+      if (!res.ok) throw new Error(`image ${res.status}`);
+      const blobUrl = URL.createObjectURL(await res.blob());
+      img.dataset.blobUrl = blobUrl;
+      img.src = blobUrl;
+    }
+
+    async function showPanel(imgId, noneId, url) {
       const img = document.getElementById(imgId);
       const none = document.getElementById(noneId);
       if (url) {
-        img.src = url;
+        try {
+          await setAuthImage(img, url);
+        } catch (err) {
+          img.removeAttribute("src");
+          img.classList.add("hidden");
+          none.classList.remove("hidden");
+          return;
+        }
         img.classList.remove("hidden");
         none.classList.add("hidden");
       } else {
@@ -671,7 +693,7 @@
           tr.innerHTML = `
             <td class="py-3 px-4 font-bold text-white">#${item.prediction_id}</td>
             <td class="py-3 px-4">
-              <img src="${item.thumbnail_url}" class="w-10 h-7 rounded object-cover border border-slate-700" />
+              <img data-auth-src="${item.thumbnail_url}" alt="" class="w-10 h-7 rounded object-cover border border-slate-700" />
             </td>
             <td class="py-3 px-4">
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">${item.predicted_class}</span>
@@ -684,6 +706,8 @@
             </td>
           `;
           tbody.appendChild(tr);
+          const thumb = tr.querySelector("img[data-auth-src]");
+          setAuthImage(thumb, thumb.dataset.authSrc).catch(() => thumb.classList.add("hidden"));
         });
 
         document.getElementById("historyTotal").textContent = `Showing ${data.items.length} of ${data.total} scans (Page ${data.page} of ${data.total_pages})`;

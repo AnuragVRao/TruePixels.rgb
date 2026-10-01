@@ -21,7 +21,8 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # User data: M1's uploads and tensors, M3's explainability panels. All three
-# modules share this one tree, served read-only at /static by main.py. It
+# modules share this one tree. It is NOT web-served: files leave only through
+# owner-checked endpoints (app/shared/files.py). It
 # honours M1's STORAGE_DIR variable so the two can never disagree; M1's own
 # default points here too.
 STORAGE_ROOT = Path(os.getenv("STORAGE_DIR", str(REPO_ROOT / "storage"))).resolve()

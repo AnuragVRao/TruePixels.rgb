@@ -21,7 +21,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.m1_access.router_auth import router as auth_router
 from app.m1_access.router_images import router as images_router
@@ -120,9 +119,11 @@ async def request_id_and_timing_middleware(request: Request, call_next):
 app.add_exception_handler(AppException, app_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 
-# Shared storage (uploads, explainability panels), read-only. M3 mounted
-# ./uploads at /static/uploads; see app/m3_results/urls.py.
-app.mount("/static", StaticFiles(directory=str(config.STORAGE_ROOT)), name="storage")
+# No static mount over the storage tree. It used to be served at /static
+# without authentication - every user's uploads, and the model weights, to
+# anyone with the URL (changes.md). Stored files now go out only through
+# owner-checked endpoints: GET /api/v1/images/{id}/file (M1) and
+# GET /api/v1/explainability/{prediction_id}/{branch} (M3).
 
 # M1 routers under /api/v1
 app.include_router(auth_router, prefix="/api/v1")

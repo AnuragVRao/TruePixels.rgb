@@ -2,16 +2,20 @@
 Module M3 Prediction Results and Explainability endpoints (F.10, F.11, C.3).
 """
 from __future__ import annotations
+from typing import Literal
 from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from app.shared import config
 from app.shared.db import get_db
+from app.shared.files import stored_file_response
 from app.shared.deps import current_session
 from app.shared.schemas import SessionContext
 from app.shared.errors import AppException
 from app.m3_results.models import Prediction, Image, Explainability
 from app.m3_results.schemas import PredictionResultView, ExplainabilityItem
 from app.m3_results.reporting import compute_confidence_band
-from app.m3_results.urls import storage_url
+from app.m3_results.urls import explainability_file_url, image_file_url
 
 router = APIRouter(tags=["Results & Explainability"])
 
@@ -57,7 +61,7 @@ def get_prediction_result(
         ExplainabilityItem(
             branch=x.branch,
             technique=x.technique,
-            visualization_url=storage_url(x.visualization_reference),
+            visualization_url=explainability_file_url(x.prediction_id, x.branch),
             generated_at=x.generated_at,
         )
         for x in xai_rows
@@ -78,7 +82,7 @@ def get_prediction_result(
         semantic_score=pred.semantic_score,
         frequency_score=pred.frequency_score,
         fusion_score=pred.fusion_score,
-        original_image_url=storage_url(img.file_reference),
+        original_image_url=image_file_url(img.image_id),
         visualizations=vis_items,
         model_name=model_name,
         model_version=model_version,
@@ -132,7 +136,7 @@ def get_explainability(
         ExplainabilityItem(
             branch=x.branch,
             technique=x.technique,
-            visualization_url=storage_url(x.visualization_reference),
+            visualization_url=explainability_file_url(x.prediction_id, x.branch),
             generated_at=x.generated_at,
         )
         for x in xai_rows
@@ -144,3 +148,46 @@ def get_explainability(
 # with genuine predictions in history, analytics and reports. Predictions now
 # come from M2: POST /api/v1/images, then POST /api/v1/predictions. See
 # changes.md.
+
+
+def _not_found(prediction_id: int) -> AppException:
+    return AppException(
+        code="INF_PREDICTION_NOT_FOUND",
+        message=f"Prediction #{prediction_id} not found.",
+        status_code=404,
+    )
+
+
+@router.get(
+    "/explainability/{prediction_id}/{branch}",
+    response_class=FileResponse,
+    summary="Download one explainability panel (owner only)",
+)
+def get_explainability_file(
+    prediction_id: int,
+    branch: Literal["semantic", "frequency"],
+    session: SessionContext = Depends(current_session),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """INTEGRATION: replaces the unauthenticated /static mount (changes.md).
+
+    Same ownership join and same INF_PREDICTION_NOT_FOUND as the endpoints
+    above, so "not yours", "no such prediction" and "no such panel" all look
+    alike to the caller.
+    """
+    row = (
+        db.query(Explainability)
+        .join(Prediction, Prediction.prediction_id == Explainability.prediction_id)
+        .join(Image, Image.image_id == Prediction.image_id)
+        .filter(
+            Explainability.prediction_id == prediction_id,
+            Explainability.branch == branch,
+            Image.user_id == session.user_id,
+        )
+        .first()
+    )
+    if row is None:
+        raise _not_found(prediction_id)
+    return stored_file_response(
+        row.visualization_reference, config.EXPLAINABILITY_DIR, _not_found(prediction_id)
+    )

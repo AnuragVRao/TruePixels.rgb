@@ -114,7 +114,8 @@ def generate_and_persist_explainability(
     activation_bundle: ActivationBundle,
     db: Session,
     # INTEGRATION: was "./uploads/xai" (relative to the working directory);
-    # now the shared storage tree that main.py serves at /static.
+    # now the shared storage tree, served only through the owner-checked
+    # GET /api/v1/explainability/{prediction_id}/{branch}.
     storage_dir: str = str(config.EXPLAINABILITY_DIR),
 ) -> list[Explainability]:
     """

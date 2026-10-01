@@ -457,6 +457,55 @@ so their owners can decide.
 | M1 | ~~`seed_admin.py` prints a fixed admin password.~~ **Fixed 2026-10-02**: the password now comes from `SEED_ADMIN_PASSWORD`, or is generated randomly and printed once; no credential is in source. If you seeded an admin with the old script, change that account's password. |
 | M1 + M3 | Two user-admin APIs exist: M1's `/api/v1/users` (used by M1's React app) and M3's `/api/v1/admin/users` (used by M3's dashboard). Both work, with slightly different rules: M1 blocks **any** self-change, M3 only self-disable and self-remove. Worth consolidating. |
 | M3 | `/api/v1/reports/{id}?token=…` puts the session token in the URL, where it can end up in browser history and server logs. Kept because the dashboard's download button depends on it. |
-| All | `/static` serves the whole storage tree without authentication. Upload file names are SHA-256 hashes and so hard to guess, but that is obscurity, not access control. M3's original `/static/uploads` mount had the same property. |
+| All | ~~`/static` serves the whole storage tree without authentication.~~ **Fixed 2026-10-02**, see §6.1. |
 | M1 → M2 | M1 caps uploads at 10 MB and 25 MP. Two of M2's smoke-test images (6144², 8192×4096) are over the pixel cap and are now rejected at upload. |
 | M1 → M2 | M1 builds and saves the CLIP tensor both at upload and again at prediction, and no detector reads it (CLAUDE.md §8, item 4). Contract C1 v2 should drop it. |
+
+---
+
+## 6. Changes during the completion phases (2026-10-02 onwards)
+
+Edits to M1's and M3's code made while finishing the project, one entry per
+change, with the reason. The phase plan lives outside the repo; each entry
+names its phase.
+
+### 6.1 Stored files no longer public — `/static` mount removed (**security**, phase 1a)
+
+**Problem.** `main.py` mounted the whole storage tree at `/static` with no
+authentication. Anyone with a URL could fetch any user's uploaded original,
+any explainability panel and - because `storage/models/` sits inside the same
+tree by default - `spai.pth` and `spai.safetensors`. The SHA-256 file names
+made URLs hard to guess, which is obscurity, not access control, and the URLs
+themselves were handed out in `/results` and `/history` responses.
+
+**Change.**
+- `app/main.py`: the `StaticFiles` mount is gone. Nothing under
+  `storage/` is web-served directly.
+- **M1** `router_images.py`: new `GET /api/v1/images/{image_id}/file`. It
+  uses M1's existing rule for image metadata - owner or Admin - and the same
+  `IMG_NOT_FOUND` for "not yours" and "does not exist".
+- **M3** `router_results.py`: new
+  `GET /api/v1/explainability/{prediction_id}/{branch}`. Owner only, with
+  the same SQL ownership join and the same `INF_PREDICTION_NOT_FOUND` as
+  `/results` and `/explainability`.
+- **M3** `urls.py`: `storage_url()` (which turned a path into a `/static`
+  URL, §3.4) is replaced by `image_file_url(image_id)` and
+  `explainability_file_url(prediction_id, branch)`. URLs now carry ids, never
+  filesystem paths. `router_results.py` and `router_history.py` use them
+  (`original_image_url`, `visualization_url`, `thumbnail_url`). The response
+  field names and types are unchanged.
+- New `app/shared/files.py` (`stored_file_response`): both endpoints serve
+  through it. It also refuses any reference that does not resolve inside the
+  directory it should come from, or is not a PNG/JPEG, with the caller's
+  not-found error - defence in depth, since references are server-written.
+  Responses carry `Cache-Control: private, no-store`.
+- **M3** dashboard `index.html`: `<img src>` cannot send the Bearer header,
+  so result panels and history thumbnails are fetched with it and shown via
+  blob URLs (`setAuthImage`).
+
+**Tests.** `backend/tests/test_storage_access.py`: owner gets the file,
+another user and a missing id get identical 404s, no session gets 401,
+Admin may view an original, references outside the storage tree are refused,
+`/results` and `/history` link to the new endpoints, and `/static/...`
+(including the weights) answers 404.
+

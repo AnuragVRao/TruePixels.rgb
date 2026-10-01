@@ -4,6 +4,7 @@ Conforms to PRD Section 5.2 / 6.3 and SRS F.5, F.6, F.7.
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.m1_access.models import Image as DBImage
 from app.m1_access.preprocess import prepare_model_input
@@ -11,7 +12,9 @@ from app.m1_access.schemas import ImageMetadataResponse, ImageUploadResponse
 from app.m1_access.security import current_session
 from app.m1_access.storage import sanitize_and_persist_image
 from app.m1_access.validation import validate_and_read_image_stream
+from app.shared import config as shared_config
 from app.shared.db import get_db
+from app.shared.files import stored_file_response
 from app.shared.errors import (
     AppException,
     ImgNotFoundException,
@@ -109,3 +112,29 @@ def get_image_metadata(
         raise ImgNotFoundException(f"Image with id {image_id} not found.")
 
     return image
+
+
+@router.get(
+    "/{image_id}/file",
+    status_code=status.HTTP_200_OK,
+    summary="Download an uploaded image (owner or Admin only)",
+    response_class=FileResponse,
+)
+def get_image_file(
+    image_id: int,
+    session: SessionContext = Depends(current_session),
+    db: Session = Depends(get_db),
+):
+    """INTEGRATION: replaces the unauthenticated /static mount (changes.md).
+
+    Same visibility rule and same IMG_NOT_FOUND as the metadata endpoint
+    above, so "not yours" and "does not exist" are indistinguishable.
+    """
+    image = db.query(DBImage).filter(DBImage.image_id == image_id).first()
+    if not image or (image.user_id != session.user_id and session.role != "Admin"):
+        raise ImgNotFoundException(f"Image with id {image_id} not found.")
+    return stored_file_response(
+        image.file_reference,
+        shared_config.UPLOADS_DIR,
+        ImgNotFoundException(f"Image with id {image_id} not found."),
+    )
