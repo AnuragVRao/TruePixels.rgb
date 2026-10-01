@@ -43,3 +43,23 @@ Per PRD2 §13.5 and NF.3, against a public labelled test set:
 - Touch the test set once. There are no hyperparameters to tune here, because
   tuning them on results is how a test set silently becomes a validation set.
 - Report what was measured, including results that are worse than hoped.
+
+## Regression check (NF.5): `regression_check.py`
+
+Not an accuracy measurement — a tripwire. It sends a fixed list of images
+(`regression_images.json`, committed: 21 files from the local Synthbuster /
+RAISE sets plus 3 seeded synthetic images, one below SPAI's 224 px minimum)
+through the real HTTP path — M1 upload, `POST /api/v1/predictions` — against a
+scratch database, and stores every score as `float.hex`, so the comparison is
+bit-exact rather than rounded.
+
+```bash
+python ml/evaluation/regression_check.py --record --out pre-phaseN   # before a change
+python ml/evaluation/regression_check.py --compare                   # after it
+```
+
+Run `--record` before any change that could touch the scoring path and
+`--compare` after; a mismatch prints every differing field. Baselines are
+written to `ml/outputs/regression/` (gitignored) together with the device
+they were recorded on — GPU and CPU differ in the last bits, so only
+same-device comparisons are expected to be identical.

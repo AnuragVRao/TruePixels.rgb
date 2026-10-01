@@ -1,0 +1,26 @@
+{
+  "datasets_root": "ml/datasets",
+  "images": [
+    "synthbuster_raise/1_fake/dalle2/r000da54ft.png",
+    "synthbuster_raise/1_fake/dalle3/r00869422t.png",
+    "synthbuster_raise/1_fake/firefly/r01058910t.png",
+    "synthbuster_raise/1_fake/glide/r0150031ft.png",
+    "synthbuster_raise/1_fake/midjourney-v5/r01a5f38at.png",
+    "synthbuster_raise/1_fake/stable-diffusion-1-3/r0207a52ct.png",
+    "synthbuster_raise/1_fake/stable-diffusion-1-4/r026b5360t.png",
+    "synthbuster_raise/1_fake/stable-diffusion-2/r029afdb0t.png",
+    "synthbuster_raise/1_fake/stable-diffusion-xl/r031917act.png",
+    "synthbuster_raise__crop1024/0_real/r000da54ft.png",
+    "synthbuster_raise__crop1024/0_real/r001d260dt.png",
+    "synthbuster_raise__crop1024/0_real/r002fc3e2t.png",
+    "synthbuster_raise__crop1024/0_real/r00444b95t.png",
+    "synthbuster_raise__crop1024/0_real/r005f3e70t.png",
+    "synthbuster_raise__crop1024/0_real/r00617aa1t.png",
+    "synthbuster_raise__jpeg90/0_real/r000da54ft.jpg",
+    "synthbuster_raise__jpeg90/0_real/r001d260dt.jpg",
+    "synthbuster_raise__jpeg90/0_real/r002fc3e2t.jpg",
+    "synthbuster_raise__jpeg90/1_fake/dalle2/r000da54ft.jpg",
+    "synthbuster_raise__jpeg90/1_fake/dalle2/r001d260dt.jpg",
+    "synthbuster_raise__jpeg90/1_fake/dalle2/r002fc3e2t.jpg"
+  ]
+}
