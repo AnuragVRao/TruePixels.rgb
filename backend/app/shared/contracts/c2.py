@@ -59,18 +59,31 @@ class ActivationBundle(BaseModel):
     which Pydantic cannot validate structurally. The bundle never leaves the
     process, so this is a deliberate trade rather than a gap.
 
-    Populated only when ``xai_requested=True``. Left as None throughout
-    Step 1; the capture hooks arrive in Step 6 (PRD milestone M2.5).
+    Populated only when ``xai_requested=True`` (Phase 3, milestone M2.5).
+
+    NOTICE TO M3 (2026-10-03, changes.md 6.7) - fields changed, as PRD2 7.3
+    allows for this unstable structure:
+    - ``backbone`` admits ``"siglip_b16"`` - the semantic model is SigLIP
+      (patch 16, 224 px, 14x14 grid), not CLIP.
+    - ``pooling`` is new: ``"mean"`` for SigLIP, whose classifier mean-pools
+      all patch tokens and has NO CLS token, so rollout must aggregate over
+      every query token; ``"cls"`` keeps the original CLS-row behaviour.
+    - ``spectrum`` is now the mean log-magnitude spectrum of the 224x224
+      patches the frequency detector (SPAI) actually analyses, and
+      ``spectrum_meta`` says so (patch size, patch count, SPAI's mask radius).
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    backbone: Literal["clip_vit_b32", "clip_vit_l14"]
+    backbone: Literal["clip_vit_b32", "clip_vit_l14", "siglip_b16"]
     patch_grid: tuple[int, int]  # e.g. (7, 7) for ViT-B/32 at 224px
     attention: Any | None = None  # (layers, heads, tokens, tokens)
     patch_embeddings: Any | None = None  # (tokens, dim)
     head_gradients: Any | None = None  # only when xai_requested=True
-    spectrum: Any | None = None  # log-magnitude FFT, native resolution
+    spectrum: Any | None = None  # mean log-magnitude FFT of SPAI's 224x224 patches
+    pooling: Literal["cls", "mean"] = "cls"
+    spectrum_meta: dict | None = None  # {"patch_size", "patches", "mask_radius", ...}
+    timings_ms: dict | None = None  # capture costs, for the XAI cost measurement
 
 
 class InferenceOutput(BaseModel):

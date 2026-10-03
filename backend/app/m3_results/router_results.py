@@ -16,6 +16,7 @@ from app.shared.schemas import SessionContext
 from app.shared.errors import AppException
 from app.m3_results.models import Prediction, Image, Explainability
 from app.m3_results.schemas import PredictionResultView, ExplainabilityItem
+from app.m3_results.explain import caption_for
 from app.m3_results.reporting import compute_confidence_band
 from app.m3_results.urls import explainability_file_url, image_file_url
 
@@ -66,6 +67,7 @@ def get_prediction_result(
             technique=x.technique,
             visualization_url=explainability_file_url(x.prediction_id, x.branch),
             generated_at=x.generated_at,
+            caption=caption_for(x.technique),
         )
         for x in xai_rows
     ]
@@ -143,6 +145,7 @@ def get_explainability(
             technique=x.technique,
             visualization_url=explainability_file_url(x.prediction_id, x.branch),
             generated_at=x.generated_at,
+            caption=caption_for(x.technique),
         )
         for x in xai_rows
     ]

@@ -12,7 +12,9 @@ temporary intake shim, with no authentication. Both are gone.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import time
+
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -37,9 +39,10 @@ class PredictionRequest(BaseModel):
     xai: bool = Field(
         default=False,
         description=(
-            "Request explainability. Accepted and plumbed through the "
-            "pipeline; the ActivationBundle is populated in Step 6 (M2.5) and "
-            "is never included in this response - it is in-process only."
+            "Request explainability: an attention-rollout overlay (semantic "
+            "branch) and the spectrum of the patches the frequency branch "
+            "analyses, stored and linked to the prediction (D5). The outcome "
+            "is reported in xai_status; a failure never fails the prediction."
         ),
     )
 
@@ -59,6 +62,7 @@ class PredictionRequest(BaseModel):
 )
 async def create_prediction(
     body: PredictionRequest,
+    response: Response,
     session: SessionContext = Depends(current_session),
     db: Session = Depends(get_db),
 ) -> PredictionResponse:
@@ -103,4 +107,38 @@ async def create_prediction(
         severity="info",
         user_id=session.user_id,
     )
-    return PredictionResponse.from_contract(result)
+
+    xai_status, xai_reasons = "not_requested", []
+    if body.xai:
+        xai_status, xai_reasons = _explainability(result, image, db, session, response)
+    return PredictionResponse.from_contract(result, xai_status=xai_status, xai_reasons=xai_reasons)
+
+
+def _explainability(result, image, db: Session, session: SessionContext, response: Response):
+    """Draw and store the panels (M3), AFTER D4 is committed - never fatal.
+
+    SRS C.3: if anything here fails, the already-committed prediction is
+    returned with xai_status "unavailable" and the reason, and a D6 warning
+    is written. Only the D5 work is rolled back. The time spent is reported
+    in X-XAI-Time-Ms (capture + spectrum + rendering + D5 write), separate
+    from latency_ms, which stays inference-only.
+    """
+    from app.m3_results.overlay import persist_explainability
+
+    started = time.perf_counter()
+    capture_ms = sum((result.activations.timings_ms or {}).values()) if result.activations else 0.0
+    if result.activations is None:
+        status, reasons = "unavailable", ["capture_failed"]
+    else:
+        try:
+            outcome = persist_explainability(result.prediction_id, image, result.activations, db)
+            status, reasons = outcome.status, outcome.reasons
+        except Exception as exc:  # noqa: BLE001 - never fail a committed prediction
+            db.rollback()
+            status, reasons = "unavailable", [f"render_failed:{type(exc).__name__}"]
+    if status != "generated":
+        emit("error", f"Explainability {status} for prediction {result.prediction_id}: "
+             f"{', '.join(reasons) or 'no reason recorded'}", severity="warning",
+             user_id=session.user_id)
+    response.headers["X-XAI-Time-Ms"] = f"{capture_ms + (time.perf_counter() - started) * 1000:.0f}"
+    return status, reasons

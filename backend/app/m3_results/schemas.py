@@ -12,6 +12,8 @@ class ExplainabilityItem(BaseModel):
     technique: str
     visualization_url: str
     generated_at: datetime
+    # INTEGRATION (changes.md 6.7): what the panel shows and what it does not (NF.13).
+    caption: str = ""
 
 
 class PredictionResultView(BaseModel):

@@ -54,8 +54,8 @@ _REAL_LABELS = frozenset(
 class BranchResult:
     """One branch's verdict, plus whatever internal state was captured.
 
-    ``activations`` stays None until Step 6 (PRD milestone M2.5) wires up the
-    hooks that populate the ActivationBundle for M3.
+    ``activations`` is None unless the caller asked for ``capture=True``
+    (explainability); see ``HFImageDetector.score``.
     """
 
     score: float
@@ -182,14 +182,84 @@ class PretrainedDetector:
 
         inputs = {key: value.to(config.DEVICE) for key, value in inputs.items()}
 
-        with torch.inference_mode():
-            logits = self._model(**inputs).logits
-            probabilities = torch.softmax(logits, dim=-1)
+        captured: list[torch.Tensor] = []
+        handles = self._attach_attention_capture(captured) if capture else []
+        try:
+            with torch.inference_mode():
+                logits = self._model(**inputs).logits
+                probabilities = torch.softmax(logits, dim=-1)
+                # Only the raw inputs are kept here; the weights are recomputed
+                # later by attention_maps(), outside the pipeline's timed
+                # region, so latency_ms stays inference-only with xai on.
+                activations = {"hidden_states": captured} if capture else None
+        finally:
+            for handle in handles:
+                handle.remove()
 
         return BranchResult(
             score=float(probabilities[0, self._ai_index].item()),
-            activations=None,
+            activations=activations,
         )
+
+    # ------------------------------------------------------------------
+    # Explainability capture (Phase 3)
+    # ------------------------------------------------------------------
+    #
+    # The scoring forward pass is left exactly as it is (SDPA attention, which
+    # does not return weights). Instead, a forward PRE-hook on every encoder
+    # layer's self_attn records that module's input - layer_norm1(h), shape
+    # (1, 196, 768) - and the attention weights are recomputed from it with
+    # the module's own q_proj / k_proj, exactly as transformers'
+    # eager_attention_forward computes them (no mask for vision):
+    #
+    #     softmax(q @ k^T * head_dim**-0.5, dim=-1, dtype=float32)
+    #
+    # The hooks only read; the forward pass and so the score are unchanged
+    # bit for bit (asserted by test and by regression_check --xai). Hooks are
+    # attached for one call and always removed.
+
+    def _encoder_layers(self):
+        return self._model.vision_model.encoder.layers
+
+    def _attach_attention_capture(self, captured: list) -> list:
+        def record(_module, args, kwargs):
+            hidden = args[0] if args else kwargs["hidden_states"]
+            captured.append(hidden.detach())
+
+        return [layer.self_attn.register_forward_pre_hook(record, with_kwargs=True)
+                for layer in self._encoder_layers()]
+
+    def attention_maps(self, activations: dict) -> dict:
+        """Attention weights + bundle fields from what ``score(capture=True)`` kept."""
+        captured: list[torch.Tensor] = activations["hidden_states"]
+        layers = self._encoder_layers()
+        if len(captured) != len(layers):
+            raise InferenceError(
+                f"attention capture saw {len(captured)} of {len(layers)} layers"
+            )
+        maps = []
+        with torch.inference_mode():
+            for layer, hidden in zip(layers, captured):
+                attention = layer.self_attn
+                batch, tokens, _ = hidden.shape
+                q = attention.q_proj(hidden).view(batch, tokens, attention.num_heads, attention.head_dim).transpose(1, 2)
+                k = attention.k_proj(hidden).view(batch, tokens, attention.num_heads, attention.head_dim).transpose(1, 2)
+                weights = torch.softmax(torch.matmul(q, k.transpose(-1, -2)) * attention.scale,
+                                        dim=-1, dtype=torch.float32)
+                maps.append(weights[0])
+        stacked = torch.stack(maps).cpu().numpy()  # (layers, heads, tokens, tokens)
+        side = int(round(stacked.shape[-1] ** 0.5))
+        if side * side != stacked.shape[-1]:
+            raise InferenceError(f"{stacked.shape[-1]} tokens do not form a square patch grid")
+        return {
+            "attention": stacked,
+            "patch_grid": (side, side),
+            # SiglipForImageClassification mean-pools ALL patch tokens before its
+            # classifier (no CLS token exists), so rollout must aggregate over all
+            # query tokens rather than read a CLS row.
+            "pooling": "mean",
+            "backbone": "siglip_b16",
+        }
 
     def reset_cache(self) -> None:
         """Drop the cached model. For tests and Step 5 reactivation."""

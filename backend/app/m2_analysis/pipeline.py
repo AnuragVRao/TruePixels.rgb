@@ -12,7 +12,7 @@ persistence.
        |                                                                   \\
        +--> 2.2 frequency branch (SPAI, spectral)     -> frequency_score ---+--> 2.3 fusion
        |                                                                          |
-       +--> [xai only, Phase 3] FFT features -> ActivationBundle.spectrum         v
+       +--> [xai only] attention + SPAI-patch spectrum -> ActivationBundle         v
                                                                   2.4 prediction & confidence
                                                                                   |
                                                                                   v
@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session
 from app.m2_analysis import detectors, frequency_detector, fusion, registry
 from app.m2_analysis.models import Prediction
 from app.shared.contracts.c1 import PreprocessedImage
-from app.shared.contracts.c2 import InferenceOutput
+from app.shared.contracts.c2 import ActivationBundle, InferenceOutput
 from app.shared.contracts.errors import InferenceError
 from app.shared.db import SessionLocal
 
@@ -59,9 +59,12 @@ async def run_detection(
         db: session to write D3/D4 through. Optional so that PRD4's
             ``run_detection(prepared)`` call form still works; a private
             session is opened and closed when it is omitted.
-        xai_requested: capture internal model state for M3's explainability.
-            Currently a no-op: the ActivationBundle is assembled in Phase 3
-            (milestone M2.5), and until then ``activations`` is None.
+        xai_requested: also return the ActivationBundle for M3's
+            explainability: SigLIP attention (recomputed from passively
+            captured inputs; the score is unchanged) and the mean spectrum of
+            SPAI's own 224x224 patches. Assembled after the timed region;
+            on any failure ``activations`` is None and a D6 warning is
+            written - the prediction itself is never affected (SRS C.3).
 
     ``latency_ms`` is inference time only - both branches and fusion. It
     excludes one-time model loading (done at startup by the warm-up, or before
@@ -91,10 +94,10 @@ async def run_detection(
 
         started = time.perf_counter()
 
-        # Semantic branch: the SigLIP 2 fine-tune.
-        semantic_score = detectors.primary.score(
-            prepared.source_reference, capture=xai_requested
-        ).score
+        # Semantic branch: the SigLIP 2 fine-tune. With xai on, passive hooks
+        # also record each attention layer's input (the score is unchanged).
+        semantic = detectors.primary.score(prepared.source_reference, capture=xai_requested)
+        semantic_score = semantic.score
 
         # Frequency branch: SPAI, a different kind of evidence entirely.
         # Two ways it can yield nothing, both ending in the same documented
@@ -107,7 +110,7 @@ async def run_detection(
         if models.frequency_detector is not None:
             try:
                 frequency_score = frequency_detector.frequency.score(
-                    prepared.source_reference, capture=xai_requested
+                    prepared.source_reference
                 ).score
             except frequency_detector.SpectralBranchUnavailable:
                 frequency_score = None
@@ -116,9 +119,6 @@ async def run_detection(
         fusion_score, predicted_class, confidence_score = fusion.combine(
             semantic_score, frequency_score, models.fusion
         )
-        # (The xai path used to run frequency.extract_features() here and
-        # throw the spectrum away - pure cost, counted in latency_ms. Removed
-        # in Phase 1b; Phase 3 brings it back with its result actually used.)
     except InferenceError:
         raise
     except Exception as exc:  # noqa: BLE001 - deliberately broad, see PRD2 11.1
@@ -126,6 +126,13 @@ async def run_detection(
 
     latency_ms = int((time.perf_counter() - started) * 1000)
     timestamp = datetime.now(timezone.utc)
+
+    # Explainability data, OUTSIDE the timed region (latency_ms stays
+    # inference-only). Never fails the prediction (SRS C.3): any problem
+    # leaves activations None and is reported, not raised.
+    bundle = None
+    if xai_requested:
+        bundle = _activation_bundle(prepared, semantic, models)
 
     # D4 write and commit BEFORE the return, so prediction_id is a valid
     # foreign key the instant M3 receives this structure (FR-05, AC-08,
@@ -171,5 +178,41 @@ async def run_detection(
         fusion_score=fusion_score,
         prediction_timestamp=timestamp,
         latency_ms=latency_ms,
-        activations=None,  # Step 6
+        activations=bundle,
     )
+
+
+def _activation_bundle(prepared: PreprocessedImage, semantic, models) -> ActivationBundle | None:
+    """Assemble the C2 ActivationBundle; None (and a D6 warning) on any failure."""
+    from app.m2_analysis import xai
+    from app.shared.logging import emit
+
+    started = time.perf_counter()
+    try:
+        maps = detectors.primary.attention_maps(semantic.activations)
+        attention_ms = (time.perf_counter() - started) * 1000
+
+        spectrum, meta = None, None
+        spectrum_started = time.perf_counter()
+        if models.frequency_detector is not None:
+            try:
+                spectrum, meta = xai.spai_patch_spectrum(
+                    prepared.source_reference, resize_to=models.frequency_detector.resize_to
+                )
+            except frequency_detector.SpectralBranchUnavailable:
+                spectrum, meta = None, None  # below one SPAI patch: no frequency evidence to show
+        spectrum_ms = (time.perf_counter() - spectrum_started) * 1000
+
+        return ActivationBundle(
+            backbone=maps["backbone"],
+            patch_grid=maps["patch_grid"],
+            attention=maps["attention"],
+            pooling=maps["pooling"],
+            spectrum=spectrum,
+            spectrum_meta=meta,
+            timings_ms={"attention": round(attention_ms, 1), "spectrum": round(spectrum_ms, 1)},
+        )
+    except Exception as exc:  # noqa: BLE001 - explainability never fails a prediction
+        emit("error", f"Explainability capture failed for image_id={prepared.image_id}: "
+             f"{type(exc).__name__}: {exc}", severity="warning", user_id=prepared.user_id)
+        return None

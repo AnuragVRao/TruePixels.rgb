@@ -57,12 +57,25 @@ class PredictionResponse(BaseModel):
         description="P(AI Generated) after fusing the two branch scores."
     )
     prediction_timestamp: datetime
-    latency_ms: int
+    latency_ms: int = Field(
+        description="Inference time only (both branches + fusion); excludes model "
+                    "loading and explainability (see the X-XAI-Time-Ms header)."
+    )
+    xai_status: Literal["not_requested", "generated", "partial", "unavailable"] = Field(
+        default="not_requested",
+        description=(
+            "Explainability outcome (SRS C.3). 'partial': one panel was produced "
+            "(e.g. no frequency panel for an image under SPAI's 224px patch). "
+            "'unavailable': none - the prediction itself is still valid."
+        ),
+    )
+    xai_reasons: list[str] = Field(default_factory=list,
+                                   description="Reason codes when xai_status is not 'generated'.")
 
     @classmethod
-    def from_contract(cls, output: InferenceOutput) -> "PredictionResponse":
+    def from_contract(cls, output: InferenceOutput, **extra) -> "PredictionResponse":
         """Project an InferenceOutput onto its public half."""
-        return cls(**output.model_dump(exclude={"activations"}))
+        return cls(**output.model_dump(exclude={"activations"}), **extra)
 
 
 class ErrorResponse(BaseModel):

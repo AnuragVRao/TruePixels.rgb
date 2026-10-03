@@ -20,7 +20,10 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+from PIL import Image as PILImage
+from app.m3_results.explain import caption_for
 from app.m3_results.models import Prediction, Explainability
+from app.m3_results.overlay import explainability_path
 from app.shared.errors import AppException
 
 
@@ -141,39 +144,32 @@ def build_pdf_report(
     story.append(Spacer(1, 16))
 
     # 3. Visual Evidence (Original, Semantic Saliency, Frequency Spectrum)
+    # INTEGRATION (Phase 3, changes.md 6.7): all three panels in every case,
+    # each with what it shows and what it does not; aspect ratio preserved;
+    # stored references resolved through the explainability folder (they are
+    # stored relative now). It used to drop the frequency panel whenever the
+    # original existed.
     story.append(Paragraph("Forensic Visualisations & Evidence", section_title))
     story.append(Spacer(1, 8))
 
-    sem_ref = None
-    freq_ref = None
+    caption_style = ParagraphStyle("PanelCaption", parent=body_style, fontSize=7.5, leading=9.5,
+                                   textColor=colors.HexColor("#4b5563"))
+    panels: dict[str, tuple[str, str]] = {}
     for item in explainabilities:
-        if item.branch == "semantic" and os.path.exists(item.visualization_reference):
-            sem_ref = item.visualization_reference
-        elif item.branch == "frequency" and os.path.exists(item.visualization_reference):
-            freq_ref = item.visualization_reference
+        path = explainability_path(item.visualization_reference)
+        if os.path.exists(path):
+            panels[item.branch] = (path, item.technique)
 
-    img_elements = []
-    # Original Image
-    if prediction.image and os.path.exists(prediction.image.file_reference):
-        img_elements.append([
-            Paragraph("<b>Original Subject</b>", body_style),
-            Paragraph("<b>Semantic Attention Overlay</b>", body_style),
-        ])
-        img1 = RLImage(prediction.image.file_reference, width=2.4*inch, height=2.4*inch)
-        img2 = RLImage(sem_ref, width=2.4*inch, height=2.4*inch) if sem_ref else Paragraph("Visualisation not available", body_style)
-        img_elements.append([img1, img2])
-    elif sem_ref:
-        img_elements.append([
-            Paragraph("<b>Semantic Attention Overlay</b>", body_style),
-            Paragraph("<b>FFT Radial Spectrum</b>", body_style),
-        ])
-        img1 = RLImage(sem_ref, width=2.4*inch, height=2.4*inch)
-        img2 = RLImage(freq_ref, width=2.4*inch, height=2.4*inch) if freq_ref else Paragraph("Spectrum not available", body_style)
-        img_elements.append([img1, img2])
+    def fitted(path: str, box: float = 2.4 * inch) -> RLImage:
+        with PILImage.open(path) as handle:
+            w, h = handle.size
+        scale = box / max(w, h)
+        return RLImage(path, width=w * scale, height=h * scale)
 
-    # INTEGRATION (changes.md 6.6): say so when the original is gone, rather
-    # than silently leaving it out of the report.
-    if not (prediction.image and os.path.exists(prediction.image.file_reference or "")):
+    original_path = prediction.image.file_reference if prediction.image else None
+    original_ok = bool(original_path and os.path.exists(original_path))
+    if not original_ok:
+        # INTEGRATION (changes.md 6.6): say so when the original is gone.
         story.append(Paragraph(
             "<i>The original image file is no longer stored on the server. The outcome and "
             "scores above are the recorded result of the analysis made when it was.</i>",
@@ -181,14 +177,40 @@ def build_pdf_report(
         ))
         story.append(Spacer(1, 8))
 
-    if img_elements:
-        vis_table = Table(img_elements, colWidths=[265, 265])
-        vis_table.setStyle(TableStyle([
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("PADDING", (0, 0), (-1, -1), 4),
-        ]))
-        story.append(vis_table)
+    def cell(title: str, path: str | None, missing_text: str, caption: str | None) -> list:
+        parts = [Paragraph(f"<b>{title}</b>", body_style), Spacer(1, 3)]
+        parts.append(fitted(path) if path else Paragraph(f"<i>{missing_text}</i>", caption_style))
+        if caption:
+            parts += [Spacer(1, 3), Paragraph(caption, caption_style)]
+        return parts
+
+    semantic = panels.get("semantic")
+    frequency = panels.get("frequency")
+    grid = [
+        [
+            cell("Original image", original_path if original_ok else None,
+                 "Original no longer stored.", None),
+            cell("Semantic attention (SigLIP 2)", semantic[0] if semantic else None,
+                 "Not generated for this prediction.", caption_for(semantic[1]) if semantic else None),
+        ],
+        [
+            cell("Frequency content (SPAI patches)", frequency[0] if frequency else None,
+                 "Not generated for this prediction (for example, the image is smaller than "
+                 "the frequency detector's 224 px patch).",
+                 caption_for(frequency[1]) if frequency else None),
+            [Paragraph(
+                "<b>Reading these panels.</b> They describe the models' internal behaviour on "
+                "this image. They are not evidence of where, or whether, the image was "
+                "manipulated, and they do not change the verdict above.", caption_style)],
+        ],
+    ]
+    vis_table = Table(grid, colWidths=[265, 265])
+    vis_table.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("PADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(vis_table)
 
     story.append(Spacer(1, 14))
 

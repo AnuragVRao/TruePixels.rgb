@@ -248,8 +248,13 @@ def test_prediction_is_persisted_and_readable_through_m3(sample_png, auth):
 
 
 def test_explainability_is_reported_unavailable_not_fabricated(sample_png, auth):
-    """Step 6 is not built: M3 must say so rather than draw a synthetic map."""
-    body = predict(upload(sample_png, auth), auth, xai=True).json()
+    """Without xai, no panel exists - and M3 says so rather than draw a synthetic one.
+
+    (Until Phase 3 this asserted the same for xai=true, because nothing
+    produced panels yet; test_xai_api.py now covers the xai=true path.)
+    """
+    body = predict(upload(sample_png, auth), auth, xai=False).json()
+    assert body["xai_status"] == "not_requested"
 
     view = client.get(f"/api/v1/results/{body['prediction_id']}", headers=auth).json()
     assert view["visualizations"] == []

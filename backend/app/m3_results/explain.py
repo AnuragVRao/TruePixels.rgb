@@ -12,11 +12,20 @@ def compute_attention_rollout(
     attention_matrices: np.ndarray,
     discard_ratio: float = 0.0,
     head_fusion: str = "mean",
+    pooling: str = "cls",
 ) -> np.ndarray:
     """
     Computes Attention Rollout across transformer layers according to Abnar & Zuidema (2020).
     attention_matrices shape: (num_layers, num_heads, num_tokens, num_tokens)
-    Returns: 1D token relevance vector of length (num_tokens - 1) for the patches.
+
+    ``pooling`` (INTEGRATION, changes.md 6.7) - how the classifier reads the
+    final tokens, which decides which row(s) of the rolled-out matrix matter:
+    - ``"cls"``: a CLS token at index 0 feeds the classifier; returns its row
+      over the patch tokens, length num_tokens - 1 (M3's original behaviour).
+    - ``"mean"``: the classifier averages ALL tokens and there is no CLS token
+      (SigLIP). Every token's row contributes equally to that average, so the
+      relevance of each input patch is the mean of the rolled-out rows;
+      returns length num_tokens.
     """
     if attention_matrices is None or len(attention_matrices.shape) < 3:
         raise ValueError("Invalid attention matrices provided.")
@@ -45,6 +54,8 @@ def compute_attention_rollout(
         layer_with_res = np.divide(layer_with_res, row_sums, out=np.zeros_like(layer_with_res), where=row_sums != 0)
         result = np.matmul(layer_with_res, result)
 
+    if pooling == "mean":
+        return result.mean(axis=0)
     # CLS token attention to patch tokens (exclude index 0 which is CLS itself)
     cls_attention_to_patches = result[0, 1:]
     return cls_attention_to_patches
@@ -62,7 +73,7 @@ def build_relevance_map(
 
     if bundle.attention is not None:
         attention_arr = np.asarray(bundle.attention, dtype=np.float32)
-        raw_relevance = compute_attention_rollout(attention_arr)
+        raw_relevance = compute_attention_rollout(attention_arr, pooling=bundle.pooling)
         technique = "attention-rollout"
     elif bundle.patch_embeddings is not None and bundle.head_gradients is not None:
         # Gradient-weighted patch attribution
@@ -82,13 +93,17 @@ def build_relevance_map(
             status_code=501,
         )
 
-    # Slice or pad if patch count deviates
-    if len(raw_relevance) > expected_patches:
-        raw_relevance = raw_relevance[:expected_patches]
-    elif len(raw_relevance) < expected_patches:
-        padded = np.zeros(expected_patches, dtype=np.float32)
-        padded[:len(raw_relevance)] = raw_relevance
-        raw_relevance = padded
+    # INTEGRATION (changes.md 6.7): this used to truncate or zero-pad a vector
+    # of the wrong length to fit the grid. Zero-padding invents relevance and
+    # truncation shifts every patch; both draw a wrong map. A mismatch means
+    # the bundle does not describe this model - refuse.
+    if len(raw_relevance) != expected_patches:
+        raise AppException(
+            code="XAI_UNAVAILABLE",
+            message=(f"relevance has {len(raw_relevance)} entries but the patch grid "
+                     f"{grid_h}x{grid_w} needs {expected_patches}"),
+            status_code=501,
+        )
 
     relevance_2d = raw_relevance.reshape((grid_h, grid_w))
 
@@ -101,3 +116,27 @@ def build_relevance_map(
         relevance_2d = np.zeros_like(relevance_2d)
 
     return relevance_2d.astype(np.float32), technique
+
+
+# --------------------------------------------------------------------------
+# What each panel means - shown wherever a panel is shown (results, PDF).
+# NF.13: interpretability without overclaiming. (changes.md 6.7)
+# --------------------------------------------------------------------------
+
+CAPTIONS: dict[str, str] = {
+    "attention-rollout": (
+        "Attention rollout of the SigLIP 2 classifier: where its attention concentrated, "
+        "averaged over every image patch as its classifier does. It shows where the model "
+        "looked - not where an image was edited or generated, and not whether a region "
+        "pushed the verdict towards Real or towards AI Generated."
+    ),
+    "spai-patch-spectrum": (
+        "Average frequency content of the 224x224 patches the frequency detector (SPAI) "
+        "analysed, with SPAI's low/high split marked (r = 16). It shows which frequencies "
+        "are present in what SPAI saw - not which of them drove its score."
+    ),
+}
+
+
+def caption_for(technique: str) -> str:
+    return CAPTIONS.get(technique, "Explainability visualisation; see the report notes.")
