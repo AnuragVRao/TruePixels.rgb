@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { Suspense, lazy, useCallback } from 'react';
 import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Layout, RequireAuth } from './components/Layout';
@@ -6,6 +6,14 @@ import { LoginPage, RegisterPage, VerifyOtpPage } from './pages/AuthPages';
 import { UploadPage } from './pages/UploadPage';
 import { ResultsPage } from './pages/ResultsPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { AdminLayout } from './pages/admin/AdminLayout';
+
+// Admin screens (and recharts) load only when an admin opens them.
+const OverviewPage = lazy(() => import('./pages/admin/OverviewPage').then((m) => ({ default: m.OverviewPage })));
+const LogsPage = lazy(() => import('./pages/admin/LogsPage').then((m) => ({ default: m.LogsPage })));
+const UsersPage = lazy(() => import('./pages/admin/UsersPage').then((m) => ({ default: m.UsersPage })));
+const ModelsPage = lazy(() => import('./pages/admin/ModelsPage').then((m) => ({ default: m.ModelsPage })));
+const loadingAdmin = <p className="text-slate-400 text-sm">Loading…</p>;
 
 const NotFound: React.FC = () => (
   <div className="text-center space-y-3 py-16">
@@ -33,6 +41,12 @@ const Routed: React.FC = () => {
             <Route path="/" element={<UploadPage />} />
             <Route path="/results/:id" element={<ResultsPage />} />
             <Route path="/history" element={<HistoryPage />} />
+          </Route>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<Suspense fallback={loadingAdmin}><OverviewPage /></Suspense>} />
+            <Route path="logs" element={<Suspense fallback={loadingAdmin}><LogsPage /></Suspense>} />
+            <Route path="users" element={<Suspense fallback={loadingAdmin}><UsersPage /></Suspense>} />
+            <Route path="models" element={<Suspense fallback={loadingAdmin}><ModelsPage /></Suspense>} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Route>

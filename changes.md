@@ -944,3 +944,49 @@ swapping is the feature demonstrated end to end.
 - **JWT lifetime is 8 hours.** Tokens that appeared in `?token=` URLs before
   that was removed have expired; rotating `JWT_SECRET_KEY` once at the end
   of the project is noted for Phase 8.
+
+### 6.11 Phase 5b: admin screens, account policy, legacy dashboard
+
+- **New M1 module, `account_policy.py`.** It is shared by M1's
+  `PATCH /users/{id}/status` and M3's `PATCH /admin/users/{id}/status`, so
+  the two cannot drift. It refuses:
+  - an administrator changing their own status (M3 previously allowed a
+    self-"enable");
+  - any change that would leave no active administrator. The active admins
+    are locked FOR UPDATE on Postgres.
+
+  It also records in its docstring what "remove" does. It is a soft status
+  change, identical in effect to "disable":
+  - sign-in and open sessions are refused;
+  - D2, D4, D5 and D6 rows and stored files are kept, so no files are
+    orphaned;
+  - "enable" restores everything.
+- **M3 `router_admin.py`:**
+  - a missing user is now `404 USER_NOT_FOUND`; it was
+    `AUTH_INVALID_CREDENTIALS`;
+  - refused status changes are audited.
+- **M3 `analytics.py` and `schemas.py`: `/admin/analytics` gains `days`,
+  `latency` and `latency_over_time`.**
+  - The figures are warm-only inference latency: p50 and p95 by linear
+    interpolation, overall and per UTC day.
+  - Cold-start rows, and rows written before `cold_start` was recorded, are
+    counted but excluded from the percentiles.
+  - The percentiles are null when there are no warm rows.
+  - The new fields are additive, so existing clients are unaffected.
+- **M2: `POST /api/v1/models/{id}/gate-preview`** returns the canary and
+  gate verdict that activation would reach, without switching or writing
+  anything. The admin screen shows each candidate's metrics before anyone
+  decides. A test confirms the preview agrees with activation and changes
+  nothing.
+- **React admin screens** (`src/pages/admin/`): overview (recharts), logs,
+  users and models.
+  - They show metadata only and never fetch a user's images.
+  - They are lazy-loaded, so recharts never reaches non-admin users.
+- **M3's legacy dashboard is demoted** (README notes in both places):
+  - the XSS sink (log `event_detail` in `innerHTML`) is fixed, and the
+    other server-text sinks too;
+  - the CLIP labels are renamed;
+  - the hard-coded health tile is replaced by the API's error count and
+    active-model count;
+  - `api_tester.html` "Run All" no longer passes every status, and three
+    false descriptions are corrected.

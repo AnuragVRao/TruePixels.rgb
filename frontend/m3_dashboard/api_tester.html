@@ -100,7 +100,7 @@
         </div>
         <ul class="space-y-1 text-[11px] list-disc pl-4 text-slate-400">
           <li><strong class="text-slate-300">Contract C2:</strong> Dual-branch inference outputs + inverted confidence for Real ($1.0 - \text{score}$).</li>
-          <li><strong class="text-slate-300">Contract C3:</strong> Explainability payload (ViT rollout overlay + FFT spectrum URLs).</li>
+          <li><strong class="text-slate-300">Contract C3:</strong> Session context from M1's JWT (user, role, account status).</li>
           <li><strong class="text-slate-300">Contract C5:</strong> System audit logging (`emit()`) with secret redaction.</li>
           <li><strong class="text-slate-300">Security F.13:</strong> Return `404` (never `403`) on cross-user prediction access.</li>
         </ul>
@@ -220,7 +220,7 @@
         method: "GET",
         url: "/api/v1/explainability/33",
         body: null,
-        desc: "Returns ViT Attention Rollout & Radial FFT spectrum visualization paths."
+        desc: "Returns the stored panels (SigLIP 2 attention rollout, SPAI patch spectrum) for your own prediction, or XAI_UNAVAILABLE."
       },
       {
         id: "history",
@@ -238,6 +238,7 @@
         method: "GET",
         url: "/api/v1/results/23",
         body: null,
+        expect: 404,
         desc: "Probes User B's scan as User A. Must return 404 INF_PREDICTION_NOT_FOUND."
       },
       {
@@ -247,7 +248,7 @@
         method: "GET",
         url: "/api/v1/reports/33",
         body: null,
-        desc: "Streams official ReportLab PDF with SHA-256 hash & NF.13 disclaimer."
+        desc: "Streams the ReportLab PDF report with the result, panels and the NF.13 interpretability notice."
       },
       {
         id: "simulate_scan",
@@ -342,13 +343,20 @@
         
         const methodColor = ep.method === "POST" ? "text-emerald-400 bg-emerald-950 border-emerald-800" : (ep.method === "PATCH" ? "text-amber-400 bg-amber-950 border-amber-800" : "text-blue-400 bg-blue-950 border-blue-800");
         
-        btn.innerHTML = `
-          <div class="min-w-0 flex-1 pr-2">
-            <div class="font-semibold text-slate-200 truncate">${ep.name}</div>
-            <div class="text-[10px] text-slate-500 font-mono truncate">${ep.url}</div>
-          </div>
-          <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${methodColor}">${ep.method}</span>
-        `;
+        // Phase 5b: built with textContent - urls can be edited by the user.
+        const textBox = document.createElement("div");
+        textBox.className = "min-w-0 flex-1 pr-2";
+        const nameEl = document.createElement("div");
+        nameEl.className = "font-semibold text-slate-200 truncate";
+        nameEl.textContent = ep.name;
+        const urlEl = document.createElement("div");
+        urlEl.className = "text-[10px] text-slate-500 font-mono truncate";
+        urlEl.textContent = ep.url;
+        textBox.append(nameEl, urlEl);
+        const methodEl = document.createElement("span");
+        methodEl.className = `px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${methodColor}`;
+        methodEl.textContent = ep.method;
+        btn.append(textBox, methodEl);
 
         btn.onclick = () => selectEndpoint(ep);
         listEl.appendChild(btn);
@@ -475,6 +483,8 @@
       document.getElementById("binaryPreview").classList.add("hidden");
       outputEl.textContent = "=== STARTING AUTOMATED BATCH RUN FOR ALL CONTRACTS ===\n\n";
 
+      let passed = 0;
+      let failed = 0;
       for (const ep of ENDPOINTS) {
         outputEl.textContent += `Testing ${ep.method} ${ep.url}... `;
         const token = getAuthToken();
@@ -485,13 +495,21 @@
         try {
           const res = await fetch(ep.url, { method: ep.method, headers, body: ep.body || undefined });
           const elapsed = (performance.now() - start).toFixed(1);
-          outputEl.textContent += `[STATUS ${res.status}] (${elapsed}ms) PASS\n`;
+          // Phase 5b: this used to print PASS for every status, 500s included.
+          // A request passes only with its expected status (2xx unless the
+          // endpoint declares `expect`, e.g. the isolation probe's 404).
+          const ok = ep.expect ? res.status === ep.expect : res.status >= 200 && res.status < 300;
+          const wanted = ep.expect ? String(ep.expect) : "2xx";
+          if (ok) passed += 1; else failed += 1;
+          outputEl.textContent += `[STATUS ${res.status}] (${elapsed}ms) ${ok ? "PASS" : `FAIL (expected ${wanted})`}\n`;
         } catch (e) {
-          outputEl.textContent += `[ERROR] ${e.message}\n`;
+          failed += 1;
+          outputEl.textContent += `[ERROR] ${e.message} FAIL\n`;
         }
       }
 
-      outputEl.textContent += "\n=== BATCH RUN COMPLETED (ALL SEAMS OPERATIONAL) ===";
+      outputEl.textContent += `\n=== BATCH RUN COMPLETED: ${passed} passed, ${failed} failed ===`
+        + (failed ? "\n(Ids such as 33 and 23 are examples - edit them to ids that exist for your account.)" : "");
       btn.innerHTML = "<i data-lucide='play' class='w-3 h-3'></i> Run All";
       lucide.createIcons();
     }

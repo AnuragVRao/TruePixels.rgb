@@ -555,7 +555,36 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-03 (latest) — Phase 5a (React user flows)
+### 2026-10-03 (latest) — Phase 5b (admin UI) and pre-5b security fixes
+- Pre-5b:
+  - console OTP codes no longer reach D6;
+  - `dev_otp` removed;
+  - hard size ceilings on every file endpoint;
+  - the gate's reference cache is content-keyed, and a stale cache is
+    refused;
+  - the post-login redirect is same-origin only.
+- React admin screens: overview, logs, users and models.
+  - Every figure comes from the API.
+  - Latency is warm-only p50/p95.
+  - Metadata only; admins never see user images.
+- One account policy for M1 and M3: no self-change, never zero active
+  admins, `USER_NOT_FOUND`. "Remove" is a soft status change; nothing is
+  deleted.
+- `POST /models/{id}/gate-preview`: gate metrics per candidate before any
+  decision. The UI frames them as a coarse safety net. Override needs a
+  reason and an explicit acknowledgement.
+- Legacy dashboard demoted:
+  - the XSS sink, CLIP labels and fake health tile are fixed;
+  - `api_tester` "Run All" no longer always passes.
+- Browser (headless Chromium): admin flows A1–A8 and the legacy-dashboard
+  checks all pass. The 5a user flows were re-run after the routing change.
+- **Phase 6 note:** test the CSP against the real build (recharts inline
+  SVG styles, `blob:` images, lazy admin chunks). The legacy dashboard
+  needs CDN sources or should not be served in production.
+- **Next:** delete the superseded M1 components (separate commit, after
+  the M1 owner is told), then Phase 6.
+
+### 2026-10-03 — Phase 5a (React user flows)
 - React app: routes for sign-in / register / OTP, upload + analyse, results
   (panels with backend captions, model rows, PDF via blob), history. Token in
   sessionStorage; all files via Authorization header + blob URLs. `?token=`

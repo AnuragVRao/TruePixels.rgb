@@ -205,7 +205,7 @@
             <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80 space-y-3">
               <div class="flex items-center justify-between text-xs">
                 <span class="font-bold text-slate-200">1. Semantic Attention Map (ViT)</span>
-                <span class="text-blue-400 text-[11px] font-semibold">CLIP Attention Rollout</span>
+                <span class="text-blue-400 text-[11px] font-semibold">SigLIP 2 attention rollout</span>
               </div>
               <div class="w-full h-64 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-center overflow-hidden">
                 <img id="imgSemantic" src="" alt="Semantic attention map" class="hidden max-h-full max-w-full object-contain" />
@@ -238,7 +238,7 @@
           <div class="text-xs font-bold text-slate-300 uppercase tracking-wider">How the Two Models Were Combined (Decision Fusion)</div>
           <div class="grid grid-cols-3 gap-3 text-center">
             <div class="bg-slate-900 p-3 rounded-lg border border-slate-800">
-              <div class="text-[11px] text-slate-400">Semantic CLIP Score</div>
+              <div class="text-[11px] text-slate-400">Semantic score (SigLIP 2)</div>
               <div id="scoreSem" class="text-base font-bold text-blue-400 mt-0.5">—</div>
               <div class="text-[10px] text-slate-500 mt-0.5">Visual Scene Consistency</div>
             </div>
@@ -356,10 +356,9 @@
           <div id="tileClassDist" class="text-xs font-bold text-slate-200 mt-1">Real: 0 | AI: 0</div>
         </div>
         <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
-          <span class="text-xs text-slate-400 font-medium">System Health</span>
-          <div class="text-xs font-bold text-emerald-400 mt-1 flex items-center gap-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span> 100% Operational
-          </div>
+          <!-- Phase 5b: was a hard-coded, always-green System Health tile. Now the API's own figures. -->
+          <span class="text-xs text-slate-400 font-medium">Error log entries (24h) · active models</span>
+          <div id="tileErrors" class="text-xs font-bold text-slate-200 mt-1">n/a</div>
         </div>
       </div>
 
@@ -703,7 +702,9 @@
       if (res.status === 404 && data.error?.code === "INF_PREDICTION_NOT_FOUND") {
         resBox.innerHTML = `<span class="text-emerald-400 font-bold">✓ SECURITY BARRIER ACTIVE:</span> Server returned <span class="text-white font-mono">404 INF_PREDICTION_NOT_FOUND</span>. The system successfully prevented cross-user inspection.`;
       } else {
-        resBox.innerHTML = `<span class="text-red-400 font-bold">✗ LEAK:</span> Status ${res.status}: ${JSON.stringify(data)}`;
+        // Phase 5b: server data as text, never HTML.
+        resBox.innerHTML = `<span class="text-red-400 font-bold">✗ LEAK:</span> `;
+        resBox.appendChild(document.createTextNode(`Status ${res.status}: ${JSON.stringify(data)}`));
       }
     }
 
@@ -720,6 +721,8 @@
         document.getElementById("tileTotalPreds").textContent = summary.total_predictions;
         document.getElementById("tilePreds24h").textContent = summary.predictions_last_24h;
         document.getElementById("tileClassDist").textContent = `Real: ${summary.class_distribution["Real"] || 0} | AI: ${summary.class_distribution["AI Generated"] || 0}`;
+        document.getElementById("tileErrors").textContent =
+          `${summary.error_count_last_24h} errors · ${summary.active_models.length} active models`;
 
         // Analytics Charts
         const anaRes = await fetch("/api/v1/admin/analytics?days=30", { headers: getAuthHeaders() });
@@ -804,13 +807,21 @@
         data.items.forEach(log => {
           const tr = document.createElement("tr");
           const sevColor = log.severity === "error" ? "text-red-400" : (log.severity === "warning" ? "text-amber-400" : "text-blue-300");
-          tr.innerHTML = `
-            <td class="py-2.5 px-3 text-slate-400">#${log.log_id}</td>
-            <td class="py-2.5 px-3 text-slate-200">${log.event_type}</td>
-            <td class="py-2.5 px-3 font-bold ${sevColor}">${log.severity}</td>
-            <td class="py-2.5 px-3 text-slate-300">${log.event_detail}</td>
-            <td class="py-2.5 px-3 text-slate-400 text-[10px]">${new Date(log.log_timestamp).toLocaleTimeString()}</td>
-          `;
+          // Phase 5b: was tr.innerHTML with event_detail interpolated - an XSS
+          // sink (details quote user-supplied text such as e-mail addresses).
+          // Every cell is now set with textContent.
+          [
+            ["py-2.5 px-3 text-slate-400", `#${log.log_id}`],
+            ["py-2.5 px-3 text-slate-200", log.event_type],
+            [`py-2.5 px-3 font-bold ${sevColor}`, log.severity],
+            ["py-2.5 px-3 text-slate-300", log.event_detail],
+            ["py-2.5 px-3 text-slate-400 text-[10px]", new Date(log.log_timestamp).toLocaleTimeString()],
+          ].forEach(([cls, text]) => {
+            const td = document.createElement("td");
+            td.className = cls;
+            td.textContent = text;
+            tr.appendChild(td);
+          });
           tbody.appendChild(tr);
         });
       }
@@ -888,7 +899,18 @@
         const start = performance.now();
         const row = document.createElement("div");
         row.className = "flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs";
-        row.innerHTML = `<span>${t.name}</span><span class="text-slate-400">Testing...</span>`;
+        // Phase 5b: text nodes only (names carry server ids, errors carry server text).
+        const setRow = (cls, text) => {
+          row.replaceChildren();
+          const name = document.createElement("span");
+          name.className = "font-medium text-slate-200";
+          name.textContent = t.name;
+          const verdict = document.createElement("span");
+          verdict.className = cls;
+          verdict.textContent = text;
+          row.append(name, verdict);
+        };
+        setRow("text-slate-400", "Testing...");
         container.appendChild(row);
 
         try {
@@ -896,12 +918,12 @@
           const latency = (performance.now() - start).toFixed(1);
           const expected = t.expectStatus || 200;
           if (res.status === expected) {
-            row.innerHTML = `<span class="font-medium text-slate-200">${t.name}</span><span class="text-emerald-400 font-bold flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i> PASS (${latency}ms)</span>`;
+            setRow("text-emerald-400 font-bold", `PASS (${latency}ms)`);
           } else {
-            row.innerHTML = `<span class="font-medium text-slate-200">${t.name}</span><span class="text-rose-400 font-bold">FAIL (Status ${res.status})</span>`;
+            setRow("text-rose-400 font-bold", `FAIL (status ${res.status}, expected ${expected})`);
           }
         } catch (e) {
-          row.innerHTML = `<span class="font-medium text-slate-200">${t.name}</span><span class="text-rose-400 font-bold">ERROR: ${e.message}</span>`;
+          setRow("text-rose-400 font-bold", `ERROR: ${e.message}`);
         }
         lucide.createIcons();
       }

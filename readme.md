@@ -58,7 +58,13 @@ python seed_admin.py            # creates the first admin account
 python -m uvicorn app.main:app --reload
 ```
 
-Then open <http://127.0.0.1:8000/> for the dashboard, or `/docs` for the API.
+The primary interface is the React app in `frontend/` (`npm install && npm run dev`,
+then <http://localhost:3000>): analysis, results, history, PDF reports, and
+the admin screens (overview, logs, users, models).
+<http://127.0.0.1:8000/> still serves M3's original static dashboard. It is
+**legacy**, kept for reference and quick checks only: it has no user or
+model management, and new features land only in the React app. `/docs`
+lists the API.
 `GET /health` reports the device, both checkpoints and whether each is loaded.
 
 ```bash
@@ -113,7 +119,7 @@ backend/app/
   m3_results/    M3 — results, history, PDF reports, administration, logging
   shared/        config, database, and the C1–C5 contracts between modules
 backend/tests/   M2's suite plus M1's and M3's, unchanged
-frontend/        M1's React app; m3_dashboard/ is M3's static dashboard
+frontend/        the React app (primary UI); m3_dashboard/ is M3's legacy static dashboard
 ml/evaluation/   evaluate.py, select_threshold.py, and RESULTS.md
 ml/datasets/     fetch scripts for the evaluation sets (no images committed)
 storage/         local artefacts: uploads, model weights (all gitignored)

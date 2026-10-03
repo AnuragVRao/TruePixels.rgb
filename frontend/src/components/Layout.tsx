@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { History, LogOut, ScanSearch, ShieldCheck } from 'lucide-react';
+import { History, LogOut, ScanSearch, Settings, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -28,6 +28,11 @@ export const Layout: React.FC = () => {
               <NavLink to="/history" className={linkClass}>
                 <History className="w-4 h-4" /> <span className="hidden sm:inline">History</span>
               </NavLink>
+              {user.role === 'Admin' && (
+                <NavLink to="/admin" className={linkClass}>
+                  <Settings className="w-4 h-4" /> <span className="hidden sm:inline">Admin</span>
+                </NavLink>
+              )}
               <span className="hidden md:inline text-xs text-slate-500 px-2 truncate max-w-[14rem]">
                 {user.email}
                 {user.role === 'Admin' ? ' (Admin)' : ''}

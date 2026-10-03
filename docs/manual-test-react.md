@@ -56,3 +56,48 @@ Last run: 2026-10-03, all automated checks passing.
 | 17 | partly | 375 px emulation, **login page only** - results/history at 375 px were not checked |
 | 18 | yes | the three external forms above |
 | not in this table | no | admin flows (Phase 5b), real e-mail delivery, real phones, browsers other than Chromium |
+
+## Admin flows (Phase 5b)
+
+Sign in with "Sign in as administrator" ticked. Every number on these
+screens comes from the API; none is hard-coded.
+
+| # | Flow | Steps | Expected |
+|---|---|---|---|
+| A1 | Non-admin | Sign in as a normal user, open `/admin/users` | No "Admin" link; "Administrators only."; the API answers 403 `AUTH_FORBIDDEN` to `/admin/*` and `/models*` with that token |
+| A2 | Overview | `/admin` | Tiles show `/admin/summary` and `/admin/analytics`: errors in the last 24 h, active models, warm-only p50/p95 latency with the count of excluded cold starts; empty states when there is no data |
+| A3 | Logs | `/admin/logs`; Next/Previous; Severity = error | 25 per page; filters narrow the list; log text that contains HTML is shown literally and never runs |
+| A4 | Users | `/admin/users`; Disable / Enable / Remove another account | A confirmation explains that nothing is deleted (images, results and files are kept); your own row has no actions; the API refuses self-changes and leaving no active admin (409 `ADM_ACTION_NOT_PERMITTED`) |
+| A5 | Models | Register a fusion JSON with tau 0.05; Check quality gate; Activate; Override the gate…; Roll back | Gate metrics framed as "a coarse safety net, not a verification"; plain activation refused, nothing changes; override needs a reason of 10+ characters plus a tick box, and is recorded as forced; rollback is offered only where an earlier activation exists; a passing candidate shows "Running canary and quality gate… Ns", then activates |
+| A6 | Narrow screen | 375 px | No page-level horizontal scroll on the four admin screens (wide tables scroll inside their own box) |
+| A7 | Expired admin session | Corrupt `tp_token`, open Logs | `/login?expired=1&next=/admin/logs` |
+| A8 | Metadata only | Throughout | Admin screens never request a user's image, thumbnail or panel |
+
+### What ran in a browser (2026-10-03)
+
+The following ran in **headless Chromium only**, against a scratch Postgres
+database (`truepixels_regression`), with all 8 checks passing:
+
+- `frontend/e2e/seed_admin_scratch.py`, then
+  `frontend/e2e/run_admin_flows.py`, automate A1 to A8 as written above.
+  - A2 also compares each tile with the JSON the API returns.
+  - A5 restores the original fusion configuration by rollback before it
+    ends.
+  - A4 re-enables every account it changed.
+- `frontend/e2e/check_legacy_dashboard.py` checks the legacy dashboard
+  (`/`, `/api-tester`), with all 9 checks passing:
+  - a seeded `<img onerror>`/`<script>` log row is shown as text and does
+    not execute;
+  - there are no CLIP labels and no hard-coded health tile;
+  - the error tile equals `/admin/summary`;
+  - "Run All" reports `8 passed, 4 failed`. The 4 are example ids that do
+    not belong to this admin, so they are reported, not hidden.
+
+**Not exercised in a browser:**
+- uploading semantic or SPAI head files through the form (the backend
+  tests cover those uploads);
+- refusal of the last active administrator (it cannot be reached over HTTP;
+  it is covered by `test_admin_policy.py`);
+- a naturally expired 8-hour token;
+- browsers other than Chromium;
+- real phones.
