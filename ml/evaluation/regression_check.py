@@ -107,10 +107,21 @@ def payloads() -> list[tuple[str, bytes, str]]:
     return out
 
 
-def run() -> dict:
-    """Score every payload through the HTTP path; return {name: {field: value}}."""
+def run(database_url: str | None = None) -> dict:
+    """Score every payload through the HTTP path; return {name: {field: value}}.
+
+    ``database_url``: run against this database instead of a scratch SQLite
+    file - e.g. PostgreSQL, to check the scores survive the whole path through
+    it. Its schema is dropped and rebuilt with the migrations, so the name
+    must end in ``_test`` or ``_regression``.
+    """
     scratch = Path(tempfile.mkdtemp(prefix="truepixels-regression-"))
-    os.environ["DATABASE_URL"] = f"sqlite:///{(scratch / 'regression.db').as_posix()}"
+    if database_url is None:
+        database_url = f"sqlite:///{(scratch / 'regression.db').as_posix()}"
+    elif not database_url.rsplit("/", 1)[-1].split("?")[0].endswith(("_test", "_regression")):
+        raise SystemExit("--database-url must name a scratch database ending in _test or "
+                         "_regression: its schema is dropped and rebuilt")
+    os.environ["DATABASE_URL"] = database_url
     os.environ["STORAGE_DIR"] = str(scratch / "storage")
     os.environ.setdefault("EMAIL_BACKEND", "console")
     os.environ["REQUIRE_2FA"] = "False"
@@ -124,9 +135,17 @@ def run() -> dict:
     from app.m1_access.security import create_session_token, hash_password
     from app.main import app
     from app.shared import config
-    from app.shared.db import SessionLocal, init_db
+    from sqlalchemy import inspect, text
 
-    init_db()
+    from app.shared import db as database
+    from app.shared.db import SessionLocal
+
+    database.import_all_models()
+    with database.engine.begin() as connection:
+        database.Base.metadata.drop_all(bind=connection)
+        if inspect(connection).has_table("alembic_version"):
+            connection.execute(text("DROP TABLE alembic_version"))
+    database.migrate_to_head()
     db = SessionLocal()
     user = User(full_name="Regression", email="regression@example.com",
                 password_hash=hash_password("Regression12345"), role="User",
@@ -155,7 +174,8 @@ def run() -> dict:
                 for f in FIELDS
             }
             print(f"  {body['predicted_class']:<13} fusion={body['fusion_score']:.6f}  {name}")
-    return {"device": str(config.DEVICE), "results": results}
+    return {"device": str(config.DEVICE), "database": database.engine.dialect.name,
+            "results": results}
 
 
 def latest() -> Path:
@@ -173,13 +193,15 @@ def main() -> int:
     mode.add_argument("--compare", action="store_true")
     parser.add_argument("--out", help="baseline name for --record (default: timestamp)")
     parser.add_argument("--against", help="baseline file name for --compare (default: newest)")
+    parser.add_argument("--database-url", help="run through this database (scratch, *_test or "
+                        "*_regression) instead of a temporary SQLite file")
     args = parser.parse_args()
 
     if args.make_list:
         make_list()
         return 0
 
-    current = run()
+    current = run(args.database_url)
     if args.record:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -204,7 +226,9 @@ def main() -> int:
             print(f"  {name}\n    baseline {old}\n    current  {new}")
         return 1
     print(f"IDENTICAL: all {len(current['results'])} images bit-identical to {path.name} "
-          f"({len(FIELDS)} fields each, device {current['device']})")
+          f"({len(FIELDS)} fields each, device {current['device']}, "
+          f"database {current.get('database', '?')}; baseline database "
+          f"{baseline.get('database', 'sqlite')})")
     return 0
 
 

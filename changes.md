@@ -601,3 +601,64 @@ called, so D6 grows without bound. Scheduling it turns on automatic
 deletion of audit data, which is a policy decision; it is flagged for Phase 8
 as an operational task (a CLI entry point run by cron), with retention to be
 confirmed by the M3 owner.
+
+### 6.5 PostgreSQL + Alembic: edits to M1 and M3 (phase 2)
+
+The app now targets PostgreSQL (SQLite still works) and the schema is owned
+by Alembic (`backend/migrations/`, revision `0001`). Edits that cross into
+M1's and M3's code:
+
+**M1**
+- `models.py`:
+  - `users.registered_at`, `users.otp_expires_at` and
+    `images.upload_timestamp` are now `DateTime(timezone=True)`, like every
+    other timestamp.
+  - Email uniqueness moved from the raw column to a unique index on
+    `lower(email)` (`uq_users_email_lower`), so `A@x.com` and `a@x.com` can no
+    longer both register.
+  - The duplicate single-column index on `content_sha256` is dropped
+    (`idx_images_sha` already covered it).
+- `router_auth.py`: every lookup by email (register, login, admin login, OTP
+  send and verify) filters on `func.lower(User.email)`, which is both
+  case-insensitive and the predicate the new index serves (checked with
+  `EXPLAIN` on PostgreSQL). The app already lowercased emails before
+  storing them, so behaviour is unchanged for existing data.
+- `seed_admin.py`: the same `lower(email)` lookup; refuses to run on a
+  database that has not been migrated.
+- `tests/m1/conftest.py`: no private in-memory SQLite per test. The root
+  conftest builds one test database with the migrations (SQLite, or
+  PostgreSQL via `TEST_DATABASE_URL`), points the whole app at it, and
+  empties every table after each test. Fixtures and test files are
+  unchanged.
+
+**M3**
+- `analytics.py`: `is_active.is_(True)` instead of `== True`; the active
+  models are ordered by type. The `func.date()` grouping is unchanged:
+  PostgreSQL sessions are pinned to UTC (`app/shared/db.py`), so day
+  boundaries are UTC on both backends.
+- `router_admin.py`, `router_history.py`: deterministic ordering, with id as
+  tie-breaker after timestamps, so paging cannot repeat or skip rows when two
+  share a timestamp. `is_(True)` in activation.
+- `router_results.py`, `router_reports.py`: explainability rows are ordered
+  by branch (SQLite happened to return them in insertion order).
+- `tests/m3/conftest.py`: the same move to the shared, migrated test
+  database. M3's `test_emit_log_is_non_throwing_under_failure` writes an
+  invalid log row on purpose, so the now-global strict audit check exempts
+  that one test by name.
+- `tests/m3/test_contracts.py` (**first edit to an M3 test file**):
+  `test_contract_c5_logging_emission` inserted a log row for `user_id=1`
+  without creating that user. SQLite never enforced the D6 -> D1 foreign key;
+  PostgreSQL does, and SQLite now does too (`PRAGMA foreign_keys=ON`). The
+  test now creates the user first; its assertions are unchanged.
+
+**Shared / M2** (ours, for completeness)
+- `app/shared/db.py`:
+  - one engine factory and `configure_database()`, so requests, the D6
+    logger and the pipeline can never use different databases;
+  - explicit `.env` loading;
+  - connection pool settings;
+  - SQLite foreign keys on;
+  - startup refuses a database that is not at Alembic head, instead of
+    calling `create_all()`.
+- D4 gains `cold_start`. D3 gains the partial unique index
+  `uq_models_one_active_per_type`.

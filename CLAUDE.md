@@ -194,6 +194,13 @@ python -m pytest backend/tests -q                    # everything: M1 + M2 + M3
 python -m pytest backend/tests -q -m "not slow"      # skip the model-backed API tests
 python -m pytest backend/tests/m1 -q                 # M1's own suite (36)
 python -m pytest backend/tests/m3 -q                 # M3's own suite (27)
+# Same suite on PostgreSQL (database name MUST end in _test; it is emptied):
+TEST_DATABASE_URL=postgresql+psycopg://truepixels:<pw>@127.0.0.1:5433/truepixels_test python -m pytest backend/tests -q
+
+# Database (once): PostgreSQL in Docker, schema from the migrations
+cp backend/.env.example backend/.env                 # choose POSTGRES_PASSWORD, same value in DATABASE_URL
+docker compose up -d db                              # repo root; 127.0.0.1:5433, data in a named volume
+cd backend && alembic upgrade head                   # the ONLY way the schema is created or changed
 
 # Server (from backend/, so that `app` is the top-level package)
 cd backend
@@ -202,15 +209,25 @@ python -m uvicorn app.main:app --reload
 ```
 
 Tests never touch the real database or `storage/`:
-[backend/tests/conftest.py](backend/tests/conftest.py) points
-`DATABASE_URL` and `STORAGE_DIR` at a scratch directory before `app` is
-imported. SPAI weights are unaffected (`config.MODELS_DIR` ignores
+[backend/tests/conftest.py](backend/tests/conftest.py) builds one test
+database with `alembic upgrade head` (scratch SQLite, or `TEST_DATABASE_URL`),
+points the whole app at it - requests, D6 logging and the pipeline share one
+engine - and empties every table after each test. `STORAGE_DIR` points at a
+scratch directory. SPAI weights are unaffected (`config.MODELS_DIR` ignores
 `STORAGE_DIR`).
 
-The server keeps its SQLite database at `backend/truepixels.db` (M1/M3's
-default, `DATABASE_URL` overrides). Copy
-[backend/.env.example](backend/.env.example) to `backend/.env` for SMTP and
-2FA settings. With no SMTP password, OTP codes go to the console.
+**Database.** PostgreSQL is the target (since 2026-10-03, Phase 2):
+`compose.yaml` runs `postgres:16` on 127.0.0.1:5433 with credentials only from
+`backend/.env`. SQLite still works (`DATABASE_URL=sqlite:///./truepixels.db`).
+Either way the schema comes **only** from Alembic
+([backend/migrations/](backend/migrations/)): the server refuses to start on
+a database that is not at head and names the command to run. The old dev
+SQLite data was copied into PostgreSQL with
+`backend/scripts/migrate_sqlite_to_pg.py` (read-only on the source; the
+`.db` file is kept). Copy [backend/.env.example](backend/.env.example) to
+`backend/.env` for database, SMTP and 2FA settings. With no SMTP password,
+OTP codes go to the console. `GET /ready` answers 503 until the model
+warm-up has succeeded; `/health` is liveness only.
 
 Two UIs talk to the same API: **M3's dashboard** at
 http://127.0.0.1:8000/ (sign in, scan, results, history, reports, admin) and
