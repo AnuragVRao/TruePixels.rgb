@@ -52,10 +52,12 @@ async def lifespan(_: FastAPI):
     init_db()
     # Both detectors load here, before the first request is accepted, so no
     # user's latency_ms includes a model load (Phase 1b).
-    if config.WARMUP_ON_STARTUP:
-        from app.m2_analysis.warmup import warm_up
+    from app.m2_analysis import warmup
 
-        warm_up()
+    if config.WARMUP_ON_STARTUP:
+        warmup.warm_up()
+    else:
+        warmup.mark_disabled()
     yield
 
 
@@ -172,6 +174,26 @@ def api_health_check():
     return {"status": "ok", "service": "TruePixels.rgb API", "version": "1.0.0"}
 
 
+@app.get("/ready", tags=["Health"])
+def ready():
+    """Readiness: 200 only once both detectors are loaded and exercised.
+
+    503 while the warm-up has not finished or after it failed (a failure is
+    also logged at ERROR and in D6). With WARMUP_ON_STARTUP off, the server
+    is ready by configuration - models load on first use - and says so.
+    ``/health`` stays a liveness check and always answers 200.
+    """
+    from fastapi.responses import JSONResponse
+
+    from app.m2_analysis.warmup import STATE
+
+    is_ready = STATE["status"] in ("ok", "disabled")
+    return JSONResponse(
+        status_code=200 if is_ready else 503,
+        content={"ready": is_ready, "warmup": STATE["status"], "branches": STATE["branches"]},
+    )
+
+
 @app.get("/health", tags=["Health"])
 def health() -> dict:
     """Liveness check: device, and which pretrained models are in use.
@@ -183,6 +205,7 @@ def health() -> dict:
     is the documented sign convention it is running under.
     """
     from app.m2_analysis import detectors, frequency_detector
+    from app.m2_analysis.warmup import STATE as warmup_state
 
     spectral = frequency_detector.frequency
     return {
@@ -191,6 +214,8 @@ def health() -> dict:
         "version": "1.0.0",
         "device": config.DEVICE,
         "trains_models": False,
+        "ready": warmup_state["status"] in ("ok", "disabled"),
+        "warmup": warmup_state["status"],
         "detectors": {
             "primary": {
                 "checkpoint": detectors.primary.checkpoint,

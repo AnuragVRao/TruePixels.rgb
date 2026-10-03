@@ -203,7 +203,7 @@ def test_results_and_history_link_to_the_authenticated_endpoint():
     assert result["visualizations"][0]["visualization_url"] == \
         f"/api/v1/explainability/{prediction_id}/semantic"
     history = client.get("/api/v1/history", headers=owner).json()["items"]
-    assert history[0]["thumbnail_url"] == f"/api/v1/images/{image_id}/file"
+    assert history[0]["thumbnail_url"] == f"/api/v1/images/{image_id}/thumbnail"
     assert not any("/static" in str(v) for v in [result, history])
 
 
@@ -365,3 +365,46 @@ def test_traversal_guard_is_what_refuses(tmp_path):
         if not path.is_absolute():
             path = config.UPLOADS_DIR / path
         assert path.resolve(strict=True).read_bytes().startswith(PNG_MAGIC), reference
+
+
+# --------------------------------------------------------------------------
+# Thumbnails: GET /api/v1/images/{id}/thumbnail
+# --------------------------------------------------------------------------
+
+def test_owner_gets_a_small_jpeg_thumbnail():
+    import io
+
+    from PIL import Image as PILImage
+
+    _, owner = make_user()
+    payload = png_bytes(make_image(width=900, height=600, seed=70))
+    image_id = client.post("/api/v1/images", headers=owner,
+                           files={"file": ("x.png", payload, "image/png")}).json()["image_id"]
+    response = client.get(f"/api/v1/images/{image_id}/thumbnail", headers=owner)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers["cache-control"] == "private, no-store"
+    with PILImage.open(io.BytesIO(response.content)) as thumb:
+        assert max(thumb.size) == 256 and thumb.size == (256, 171)
+
+
+def test_thumbnail_follows_the_same_access_rules_as_the_original():
+    _, owner = make_user()
+    _, stranger = make_user()
+    _, admin = make_user(role="Admin")
+    image_id, _ = upload(owner, seed=71)
+    url = f"/api/v1/images/{image_id}/thumbnail"
+    assert_not_found(client.get(url, headers=stranger), "IMG_NOT_FOUND")
+    assert_not_found(client.get(url, headers=admin), "IMG_NOT_FOUND")
+    assert_not_found(client.get("/api/v1/images/999999/thumbnail", headers=owner), "IMG_NOT_FOUND")
+    assert client.get(url).status_code == 401
+
+
+@pytest.mark.parametrize("variant", [0, 1, 2])
+def test_thumbnail_reference_with_dotdot_is_refused(variant):
+    target = _outside_png(config.STORAGE_ROOT / "escape")
+    _, owner = make_user()
+    image_id, _ = upload(owner, seed=80 + variant)
+    _set_image_reference(image_id, _traversal_references(config.UPLOADS_DIR, target)[variant])
+    assert_not_found(client.get(f"/api/v1/images/{image_id}/thumbnail", headers=owner),
+                     "IMG_NOT_FOUND")

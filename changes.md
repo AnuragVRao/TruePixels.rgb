@@ -571,3 +571,33 @@ not CLIP's; SPAI at native resolution). Recorded as known issue in §5.
 **Evidence.** Predictions are bit-identical to the pre-phase-1 baseline
 (`regression_check.py`, 24 images). `test_api_predict.py` asserts no `.npy`
 is written at upload or prediction.
+
+### 6.4 Thumbnails get their own endpoint; file-serve audit policy (proposal for the M3 owner)
+
+**Change.**
+- **M1** `router_images.py`: new `GET /api/v1/images/{image_id}/thumbnail`,
+  owner only with the same `IMG_NOT_FOUND` as `/file`. It returns a JPEG of
+  at most 256 px on the longer side, made on the fly from the stored original
+  and never written to disk (`app/shared/files.py`, which also gained
+  `resolve_stored_file`, the shared containment check).
+- **M3** `urls.py` / `router_history.py`: `thumbnail_url` in `/history` now
+  points at the thumbnail endpoint instead of the full original.
+
+**Audit policy (implemented; proposed to the M3 owner, who owns D6):**
+
+| Serve | Success logged? | Refusal logged? |
+|---|---|---|
+| Full original, `/images/{id}/file` | yes, `prediction-request`/info | yes, `error`/warning |
+| Explainability panel, `/explainability/{id}/{branch}` | yes | yes |
+| PDF report, `/reports/{id}` (M3, unchanged) | yes | yes |
+| Thumbnail, `/images/{id}/thumbnail` | **no** - routine, one per history row | yes |
+
+Thumbnails are a separate endpoint rather than a flag on `/file` so that a
+client cannot opt a full-resolution download out of the audit trail.
+
+**Not changed, flagged:** `logging_service.purge_expired_logs` (M3's
+retention: info rows after 90 days, warning/error after 365) is still never
+called, so D6 grows without bound. Scheduling it turns on automatic
+deletion of audit data, which is a policy decision; it is flagged for Phase 8
+as an operational task (a CLI entry point run by cron), with retention to be
+confirmed by the M3 owner.

@@ -4,7 +4,7 @@ Conforms to PRD Section 5.2 / 6.3 and SRS F.5, F.6, F.7.
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, File, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from app.m1_access.models import Image as DBImage
 from app.m1_access.schemas import ImageMetadataResponse, ImageUploadResponse
@@ -13,7 +13,7 @@ from app.m1_access.storage import sanitize_and_persist_image
 from app.m1_access.validation import validate_and_read_image_stream
 from app.shared import config as shared_config
 from app.shared.db import get_db
-from app.shared.files import stored_file_response
+from app.shared.files import stored_file_response, thumbnail_response
 from app.shared.errors import (
     AppException,
     ImgNotFoundException,
@@ -150,3 +150,39 @@ def get_image_file(
     emit("prediction-request", f"Image file served: image_id={image_id}",
          severity="info", user_id=session.user_id)
     return response
+
+
+@router.get(
+    "/{image_id}/thumbnail",
+    status_code=status.HTTP_200_OK,
+    summary="A small JPEG preview of an uploaded image (owner only)",
+    response_class=Response,
+)
+def get_image_thumbnail(
+    image_id: int,
+    session: SessionContext = Depends(current_session),
+    db: Session = Depends(get_db),
+):
+    """INTEGRATION: history-table previews (changes.md 6.4).
+
+    Same owner-only rule and same IMG_NOT_FOUND as ``/file``. Refusals are
+    audited exactly like ``/file``; routine successful serves are NOT, because
+    one history page would otherwise write a D6 row per thumbnail. Full
+    originals (``/file``) and PDF reports keep logging every serve - that is
+    the audit trail for the actual image. This is a separate endpoint rather
+    than a flag on ``/file`` so a client cannot opt a full download out of
+    the audit log.
+    """
+    image = db.query(DBImage).filter(DBImage.image_id == image_id).first()
+    try:
+        if not image or image.user_id != session.user_id:
+            raise ImgNotFoundException(f"Image with id {image_id} not found.")
+        return thumbnail_response(
+            image.file_reference,
+            shared_config.UPLOADS_DIR,
+            ImgNotFoundException(f"Image with id {image_id} not found."),
+        )
+    except ImgNotFoundException:
+        emit("error", f"Image thumbnail refused: image_id={image_id}",
+             severity="warning", user_id=session.user_id)
+        raise

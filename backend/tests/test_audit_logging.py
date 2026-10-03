@@ -114,6 +114,8 @@ def test_login_upload_and_file_access_write_d6_rows(sessions, strict_audit_log):
         "file": ("x.png", png_bytes(make_image(seed=3)), "image/png")}).json()["image_id"]
     assert client.get(f"/api/v1/images/{image_id}/file", headers=owner).status_code == 200
     assert client.get(f"/api/v1/images/{image_id}/file", headers=stranger).status_code == 404
+    assert client.get(f"/api/v1/images/{image_id}/thumbnail", headers=owner).status_code == 200
+    assert client.get(f"/api/v1/images/{image_id}/thumbnail", headers=stranger).status_code == 404
 
     prediction_id = add_panel(sessions, image_id)
     url = f"/api/v1/explainability/{prediction_id}/semantic"
@@ -131,6 +133,9 @@ def test_login_upload_and_file_access_write_d6_rows(sessions, strict_audit_log):
     assert has(theirs, "error", "warning", f"Image file refused: image_id={image_id}")
     assert has(theirs, "error", "warning",
                f"Explainability file refused: prediction_id={prediction_id} branch=semantic")
+    # Thumbnails: refusals audited, routine successful serves deliberately not.
+    assert has(theirs, "error", "warning", f"Image thumbnail refused: image_id={image_id}")
+    assert not any("thumbnail" in d for t, _, d in mine)
     # Redaction: nothing that looks like a credential reached D6.
     for _, _, detail in mine + theirs:
         assert PASSWORD not in detail and "eyJ" not in detail
