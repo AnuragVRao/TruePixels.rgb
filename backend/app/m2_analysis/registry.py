@@ -416,6 +416,12 @@ def activate(db: Session, model_id: int, *, actor_id: int | None, force: bool = 
                             "backbone or has an invalid configuration", 422)
     if force and not (reason and reason.strip()):
         raise RegistryError("MDL_FORCE_NEEDS_REASON", "a forced activation must give a reason", 422)
+    if action == "rollback" and db.query(ModelActivation).filter(
+            ModelActivation.model_id == model_id).first() is None:
+        # The advisory gate is only for returning to a model that already ran
+        # in production; a never-activated row must take the gated path.
+        raise RegistryError("MDL_ROLLBACK_NOT_PREVIOUS", f"model #{model_id} was never active; "
+                            "rollback can only return to a previously active model", 409)
 
     canary_result = canary(target)
     current_set = active(db)
@@ -459,6 +465,25 @@ def activate(db: Session, model_id: int, *, actor_id: int | None, force: bool = 
                             previous_model_id=previous, action=action,
                             forced=bool(force and not gate_result["passed"] and action != "rollback"),
                             canary=canary_result, gate=gate_result)
+
+
+def config_drift(db: Session) -> list[str]:
+    """Where config's baseline differs from what is ACTIVE in D3.
+
+    Config is only a seed since Phase 4: editing it changes nothing until a
+    row is registered and activated. Reported at startup so an operator who
+    edited config.py is not misled into thinking the edit took effect.
+    """
+    current = _active_rows(db)
+    drift = []
+    for model_type, spec in baseline_rows().items():
+        row = current.get(model_type)
+        if row is None:
+            continue
+        if (row.model_name, row.model_version) != (spec["model_name"], spec["model_version"]):
+            drift.append(f"{model_type}: ACTIVE is #{row.model_id} {row.model_name} {row.model_version}; "
+                         f"config.py describes {spec['model_name']} {spec['model_version']}")
+    return drift
 
 
 def rollback(db: Session, model_type: str, *, actor_id: int | None, force: bool = False,

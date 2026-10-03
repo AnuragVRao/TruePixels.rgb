@@ -409,3 +409,115 @@ def test_concurrent_activations_leave_exactly_one_active_row():
     # The history is a consistent chain: each switch names the row that was active before it.
     for prev, nxt in zip(chain, chain[1:]):
         assert nxt.previous_model_id == prev.model_id
+
+
+# --------------------------------------------------------------------------
+# Phase 4 review follow-ups
+# --------------------------------------------------------------------------
+
+def test_baseline_anchor_stops_a_ratchet_of_small_steps():
+    """Each step is within 0.05 of the last, but the third drifts more than
+    0.08 below the published baseline: refused by the anchor alone."""
+    _, admin = _user("Admin")
+    for tau in (0.85, 0.88):
+        reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"ratchet-{tau}", _fusion(tau))
+        act = _activate(admin, reg.json()["model_id"])
+        assert act.status_code == 200, act.text
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "ratchet-0.94", _fusion(0.94))
+    act = _activate(admin, reg.json()["model_id"])
+    assert act.status_code == 409, act.text
+    reasons = act.json()["gate"]["reasons"]
+    assert reasons and all("published baseline" in r for r in reasons), reasons  # per-step alone passed
+
+
+def test_rollback_path_refuses_a_never_activated_row():
+    _, admin = _user("Admin")
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "never-active", _fusion(0.7))
+    db = SessionLocal()
+    try:
+        with pytest.raises(registry.RegistryError) as raised:
+            registry.activate(db, reg.json()["model_id"], actor_id=None, action="rollback")
+        assert raised.value.code == "MDL_ROLLBACK_NOT_PREVIOUS"
+    finally:
+        db.close()
+
+
+def test_rollback_canary_stays_blocking(monkeypatch):
+    _, admin = _user("Admin")
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "rb-canary", _fusion(0.65))
+    assert _activate(admin, reg.json()["model_id"]).status_code == 200
+    current = _active_id(registry.TYPE_FUSION)
+
+    def failing(_row):
+        raise registry.RegistryError("MDL_CANARY_FAILED", "canary failed (test)", 422)
+
+    monkeypatch.setattr(registry, "canary", failing)
+    rb = client.post("/api/v1/models/rollback", headers=admin, json={"model_type": registry.TYPE_FUSION})
+    assert rb.status_code == 422 and rb.json()["error"]["code"] == "MDL_CANARY_FAILED"
+    assert _active_id(registry.TYPE_FUSION) == current  # nothing changed
+
+
+def test_rollback_is_audited_as_rollback_with_metrics():
+    admin_id, admin = _user("Admin")
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "rb-audit", _fusion(0.65))
+    assert _activate(admin, reg.json()["model_id"]).status_code == 200
+    assert client.post("/api/v1/models/rollback", headers=admin,
+                       json={"model_type": registry.TYPE_FUSION}).status_code == 200
+    db = SessionLocal()
+    try:
+        logs = [entry.event_detail for entry in db.query(LogEntry).filter(LogEntry.user_id == admin_id)]
+    finally:
+        db.close()
+    entry = [line for line in logs if line.startswith("Model ROLLBACK (gate advisory)")]
+    assert entry and "candidate={" in entry[0] and "baseline={" in entry[0], logs
+
+
+def test_startup_warns_when_config_differs_from_the_active_rows(monkeypatch, caplog):
+    import logging
+
+    db = SessionLocal()
+    try:
+        registry.active(db)
+        assert registry.config_drift(db) == []
+        monkeypatch.setattr(config, "FUSION_TAU", 0.5)  # edit config after the fact
+        drift = registry.config_drift(db)
+    finally:
+        db.close()
+    assert len(drift) == 1 and drift[0].startswith(registry.TYPE_FUSION)
+    with caplog.at_level(logging.WARNING, logger="uvicorn.error"):
+        with TestClient(app):  # runs the lifespan: warm-up off in tests, registry check on
+            pass
+    assert any("config.py is NOT what runs" in r.getMessage() for r in caplog.records)
+
+
+def test_an_in_flight_request_keeps_the_model_set_it_started_with(monkeypatch):
+    """Activation lands while a prediction is mid-inference: that prediction
+    runs and records the set it resolved at its start; the next one uses the new set."""
+    _, admin = _user("Admin")
+    _, user = _user()
+    payload = _flip_image()  # fused score between 0.62 and the baseline tau
+    before_fusion = _active_id(registry.TYPE_FUSION)
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "midflight-0.60", _fusion(0.60))
+    new_fusion = reg.json()["model_id"]
+
+    real_score = detectors.primary.score
+    fired = {}
+
+    def score_and_activate(*args, **kwargs):
+        result = real_score(*args, **kwargs)
+        if not fired:
+            fired["done"] = True
+            db = SessionLocal()
+            try:
+                registry.activate(db, new_fusion, actor_id=None)
+            finally:
+                db.close()
+        return result
+
+    monkeypatch.setattr(detectors.primary, "score", score_and_activate)
+    in_flight = _predict(user, payload)
+    assert fired and _active_id(registry.TYPE_FUSION) == new_fusion
+    assert in_flight["model_id"] == before_fusion and in_flight["predicted_class"] == "Real"
+    monkeypatch.setattr(detectors.primary, "score", real_score)
+    after = _predict(user, payload)
+    assert after["model_id"] == new_fusion and after["predicted_class"] == "AI Generated"

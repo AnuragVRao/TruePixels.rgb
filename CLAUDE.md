@@ -459,6 +459,22 @@ Four things it established:
     reports itself unavailable and `frequency_score` is null — so the
     two-kinds-of-evidence argument in §1 does not apply to them at all. Say so
     wherever such a result is shown.
+11. **The model-activation quality gate is a coarse safety net.** It scores a
+    candidate on 100 validation images (50 per class); accuracy there has a
+    standard error of about 0.04. It catches gross breakage (inverted labels,
+    a threshold that calls everything AI, a corrupted head) and stops small
+    steps ratcheting away from the published baseline (wider floors: accuracy
+    −0.08, AUC −0.04). It cannot detect subtle degradation and cannot certify
+    a candidate as good. Activation takes ~40 ms (fusion) to ~0.5 s (SPAI head)
+    warm; a cold canary adds ~9 s of model loading.
+12. **The gate's reference is not tuning data.** On it, τ 0.65 scored accuracy
+    0.83 against the baseline τ 0.7558's 0.77 at the same FPR (0.14). That is
+    **not** acted on: the difference is within the noise of 100 images
+    (SE ≈ 0.04); the baseline's 0.77 there versus 0.864 on the 198-image
+    held-out test is itself a gap to explain (different scenes and a smaller
+    sample — not yet investigated); and choosing τ on the data that guards
+    activations would make the gate grade its own homework. Revisiting τ, if
+    ever, means a larger *fresh* validation split. Future work.
 
 ---
 
@@ -548,7 +564,8 @@ The public field set is now exactly PRD2 §7.3's again.
   before any candidate was scored. τ 0.60 passes and flips labels
   (asserted by test); τ 0.05 is refused (FPR). Finding: on this reference, τ 0.65 scores
   accuracy 0.83 vs the baseline τ 0.7558's 0.77 at the same FPR 0.14 —
-  a hint, on 100 images, that the operating point could be revisited.
+  **not acted on** — within the noise of 100 images, and the gate's data is
+  not tuning data (limitation 12).
 - Rollback made the gate advisory (it is a return to a previously active
   model); decided by default, reversible.
 - **Next:** Phase 5 (React front end).

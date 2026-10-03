@@ -829,3 +829,35 @@ before the fix. There was no way to upload anything.
 copies of the published heads. This project trains nothing (CLAUDE.md §0),
 and a new head would have to come from a third party. Fusion-configuration
 swapping is the feature demonstrated end to end.
+
+**Phase 4 review follow-ups (2026-10-03).**
+- **Gate anchored to the baseline:** the gate now also refuses a candidate
+  more than 0.08 accuracy or 0.04 AUC below the ORIGINAL published baseline,
+  so small per-step drops cannot ratchet. The thresholds were fixed before
+  scoring. A test walks τ 0.85 → 0.88 → 0.94: each step is allowed by the
+  per-step check, and the anchor alone refuses the last.
+- **Rollback is restricted to previously active rows.** The canary stays
+  blocking and the gate is advisory. The audit entry reads
+  `ROLLBACK (gate advisory)` with the metrics. A never-activated row is
+  refused on the rollback path (`MDL_ROLLBACK_NOT_PREVIOUS`).
+- **Immutability is enforced on BOTH SQLite and PostgreSQL** by a trigger
+  (UPDATE of anything but `is_active` refused), plus ON DELETE RESTRICT for
+  referenced rows. Tests assert the trigger exists and refuses an UPDATE, and
+  that downgrading 0002 drops the trigger, the PostgreSQL function and the
+  table cleanly.
+- **The scratch-database reset refuses non-scratch names itself**
+  (`db.refuse_unless_scratch`: `*_test`/`*_regression` on PostgreSQL, never
+  the dev SQLite file), checked before connecting; tested against the dev
+  names.
+- **Startup warns when config.py differs from the active D3 rows.** Config
+  is only a seed now. A test also shows an in-flight prediction keeps the
+  model set it resolved at its start when an activation lands mid-request.
+- **Activation time** (`ml/evaluation/activation_cost.py`, warm, real API):
+  - fusion config ~40 ms (96 ms the first time);
+  - SigLIP head 175 ms;
+  - SPAI head (55 MB): 378 ms to register, 456 ms to activate;
+  - rollback 41 ms.
+
+  With models not yet loaded, the canary adds the ~9 s model load per
+  branch. The admin UI should show a long-running state for that case.
+

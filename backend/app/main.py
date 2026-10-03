@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import time
 import uuid
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -58,6 +59,10 @@ async def lifespan(_: FastAPI):
 
     with SessionLocal() as session:
         registry.ensure_registry(session)
+        # Config is only a seed now: say so loudly if it disagrees with D3.
+        for line in registry.config_drift(session):
+            logging.getLogger("uvicorn.error").warning(
+                "config.py is NOT what runs (D3 decides; activate a row to change it): %s", line)
     # Both detectors load here, before the first request is accepted, so no
     # user's latency_ms includes a model load (Phase 1b).
     from app.m2_analysis import warmup

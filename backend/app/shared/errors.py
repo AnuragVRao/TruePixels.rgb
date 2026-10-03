@@ -50,6 +50,7 @@ ERROR_REGISTRY: dict[str, tuple[int, str]] = {
     "MDL_FORCE_NEEDS_REASON": (422, "A forced activation must give a reason."),
     "MDL_CONFLICT": (409, "A concurrent activation committed first; nothing changed."),
     "MDL_NOTHING_TO_ROLL_BACK": (409, "There is no previous model of this type."),
+    "MDL_ROLLBACK_NOT_PREVIOUS": (409, "Rollback can only return to a previously active model."),
     # M3 Errors
     "XAI_UNAVAILABLE": (501, "Explainability not supported for the active model."),
     "XAI_FILE_MISSING": (410, "The visualisation record exists but its stored file is no longer available."),

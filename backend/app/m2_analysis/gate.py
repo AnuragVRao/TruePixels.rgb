@@ -16,7 +16,14 @@ the phase plan). A candidate is REFUSED if, versus the current configuration:
     false-positive rate on real images exceeds   MAX_FPR           = 0.20
     ROC-AUC of the fused score drops by more than MAX_AUC_DROP      = 0.02
 
-MAX_FPR is twice MM2.6's 0.10. An admin may force past a refusal only with a
+MAX_FPR is twice MM2.6's 0.10. A candidate must ALSO stay within wider
+floors of the ORIGINAL published baseline (accuracy -0.08, AUC -0.04), so
+small per-step drops cannot ratchet.
+
+THIS IS A COARSE SAFETY NET. 100 images (50 per class) have a standard error
+of about 0.04 on accuracy: the gate catches gross breakage - inverted labels,
+a threshold that calls everything AI, a corrupted head - not subtle
+degradation, and it cannot certify a candidate as good. An admin may force past a refusal only with a
 reason; that is recorded and audit-logged by the registry.
 
 Integrity check: before evaluating anything, the published heads applied to
@@ -36,6 +43,13 @@ from app.shared import config
 MAX_ACCURACY_DROP = 0.05
 MAX_FPR = 0.20
 MAX_AUC_DROP = 0.02
+
+# Anchored to the ORIGINAL published baseline (added after the Phase 4 review,
+# fixed before scoring): the per-step check alone lets small drops ratchet -
+# each step within 0.05 of the last - so a candidate must also stay within
+# these wider floors of the baseline itself.
+BASELINE_MAX_ACCURACY_DROP = 0.08
+BASELINE_MAX_AUC_DROP = 0.04
 REPRODUCTION_TOLERANCE = 1e-4
 
 
@@ -145,6 +159,9 @@ def evaluate(current_set, candidate_row) -> dict:
     cand = _metrics(*_branch_probs(candidate_set, reference), candidate_set.fusion, labels)
     flipped = int((cur.pop("_predicted") != cand.pop("_predicted")).sum())
 
+    base = _metrics(sem_pub, freq_pub, published.fusion, labels)
+    base.pop("_predicted")
+
     reasons = []
     if cand["accuracy"] < cur["accuracy"] - MAX_ACCURACY_DROP:
         reasons.append(f"accuracy {cand['accuracy']:.3f} vs {cur['accuracy']:.3f} "
@@ -153,13 +170,22 @@ def evaluate(current_set, candidate_row) -> dict:
         reasons.append(f"false-positive rate {cand['fpr']:.3f} > {MAX_FPR}")
     if cand["auc"] < cur["auc"] - MAX_AUC_DROP:
         reasons.append(f"AUC {cand['auc']:.3f} vs {cur['auc']:.3f} (drop > {MAX_AUC_DROP})")
+    if cand["accuracy"] < base["accuracy"] - BASELINE_MAX_ACCURACY_DROP:
+        reasons.append(f"accuracy {cand['accuracy']:.3f} vs published baseline {base['accuracy']:.3f} "
+                       f"(drop > {BASELINE_MAX_ACCURACY_DROP})")
+    if cand["auc"] < base["auc"] - BASELINE_MAX_AUC_DROP:
+        reasons.append(f"AUC {cand['auc']:.3f} vs published baseline {base['auc']:.3f} "
+                       f"(drop > {BASELINE_MAX_AUC_DROP})")
     return {
         "passed": not reasons, "available": True, "reasons": reasons,
         "reference": {"file": reference_path().name, "images": int(len(labels)),
                       "real": int((labels == 0).sum()), "generated": int((labels == 1).sum()),
                       "split": "sbr_val (validation, scenes 99-296)"},
         "thresholds": {"max_accuracy_drop": MAX_ACCURACY_DROP, "max_fpr": MAX_FPR,
-                       "max_auc_drop": MAX_AUC_DROP},
+                       "max_auc_drop": MAX_AUC_DROP,
+                       "baseline_max_accuracy_drop": BASELINE_MAX_ACCURACY_DROP,
+                       "baseline_max_auc_drop": BASELINE_MAX_AUC_DROP},
+        "baseline": {k: round(v, 4) if isinstance(v, float) else v for k, v in base.items()},
         "current": {k: round(v, 4) if isinstance(v, float) else v for k, v in cur.items()},
         "candidate": {k: round(v, 4) if isinstance(v, float) else v for k, v in cand.items()},
         "labels_changed": flipped,

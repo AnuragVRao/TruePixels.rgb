@@ -150,3 +150,82 @@ def test_server_refuses_to_start_on_a_database_behind_head(tmp_path, monkeypatch
     with pytest.raises(db.SchemaNotCurrentError, match="alembic upgrade head"):
         db.init_db()
     empty.dispose()
+
+
+# --------------------------------------------------------------------------
+# Migration 0002: the immutability trigger (invisible to compare_metadata)
+# --------------------------------------------------------------------------
+
+def _trigger_present() -> bool:
+    with db.engine.connect() as c:
+        if db.engine.dialect.name == "postgresql":
+            sql = "SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_models_immutable'"
+        else:
+            sql = ("SELECT count(*) FROM sqlite_master WHERE type = 'trigger' "
+                   "AND name = 'trg_models_immutable'")
+        return c.execute(text(sql)).scalar() == 1
+
+
+def _function_present() -> bool:
+    if db.engine.dialect.name != "postgresql":
+        return False
+    with db.engine.connect() as c:
+        return c.execute(text("SELECT count(*) FROM pg_proc WHERE proname = 'models_immutable'")).scalar() == 1
+
+
+def test_immutability_trigger_exists_and_refuses_update_and_referenced_delete():
+    from sqlalchemy.exc import DBAPIError
+
+    from app.m2_analysis.models import ModelActivation
+
+    assert _trigger_present()
+    session = db.SessionLocal()
+    try:
+        row = ModelRegistry(model_name="imm", model_version="1", model_type="fusion-configuration",
+                            artifact_ref="t", is_active=False)
+        session.add(row)
+        session.flush()
+        session.add(ModelActivation(model_type="fusion-configuration", model_id=row.model_id,
+                                    action="activate", forced=False))
+        session.commit()
+        model_id = row.model_id
+    finally:
+        session.close()
+    with pytest.raises(DBAPIError, match="immutable"):
+        with db.engine.begin() as c:
+            c.execute(text("UPDATE models SET artifact_ref = 'x' WHERE model_id = :i"), {"i": model_id})
+    with pytest.raises((DBAPIError, IntegrityError)):  # referenced by an activation: RESTRICT
+        with db.engine.begin() as c:
+            c.execute(text("DELETE FROM models WHERE model_id = :i"), {"i": model_id})
+    with db.engine.begin() as c:  # is_active alone may change
+        c.execute(text("UPDATE models SET is_active = :a WHERE model_id = :i"), {"a": False, "i": model_id})
+
+
+def test_downgrade_of_0002_drops_trigger_and_function_cleanly():
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(db.BACKEND_DIR / "alembic.ini"))
+    cfg.attributes["configure_logger"] = False
+    with db.engine.begin() as connection:
+        cfg.attributes["connection"] = connection
+        command.downgrade(cfg, "0001")
+    assert not _trigger_present() and not _function_present()
+    assert "model_activations" not in inspect(db.engine).get_table_names()
+    db.migrate_to_head()
+    assert _trigger_present() and (_function_present() or db.engine.dialect.name != "postgresql")
+    assert _schema_diff() == []
+
+
+def test_scratch_reset_refuses_the_development_databases():
+    from sqlalchemy.engine import make_url
+
+    for url in ("postgresql+psycopg://u:p@127.0.0.1:5433/truepixels",
+                "postgresql+psycopg://u:p@127.0.0.1:5433/truepixels_prod",
+                f"sqlite:///{(db.BACKEND_DIR / 'truepixels.db').as_posix()}"):
+        with pytest.raises(RuntimeError, match="refusing to reset"):
+            db.refuse_unless_scratch(make_url(url))
+    for url in ("postgresql+psycopg://u:p@127.0.0.1:5433/truepixels_test",
+                "postgresql+psycopg://u:p@127.0.0.1:5433/truepixels_regression",
+                "sqlite:///C:/tmp/scratch.db"):
+        db.refuse_unless_scratch(make_url(url))  # does not raise

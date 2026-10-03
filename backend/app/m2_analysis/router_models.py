@@ -113,8 +113,13 @@ def _audit(session, verb: str, result=None, exc: RegistryError | None = None, ta
         return
     gate = result.gate or {}
     summary = (f"gate passed={gate.get('passed')} candidate={gate.get('candidate')} "
-               f"labels_changed={gate.get('labels_changed')}")
-    if result.forced:
+               f"baseline={gate.get('baseline')} labels_changed={gate.get('labels_changed')}")
+    if result.action == "rollback":
+        emit("administrative-action", f"Model ROLLBACK (gate advisory): #{result.model_id} "
+             f"({result.model_type}), replacing #{result.previous_model_id}; {summary}; "
+             f"reasons={gate.get('reasons')}", severity="warning" if not gate.get("passed") else "info",
+             user_id=session.user_id)
+    elif result.forced:
         emit("administrative-action", f"Model {verb} FORCED past a refusing gate: #{result.model_id} "
              f"({result.model_type}), previous #{result.previous_model_id}; {summary}",
              severity="warning", user_id=session.user_id)

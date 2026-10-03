@@ -158,6 +158,27 @@ def check_schema_current() -> None:
         )
 
 
+SCRATCH_SUFFIXES = ("_test", "_regression")
+
+
+def refuse_unless_scratch(url) -> None:
+    """Raise unless ``url`` names a scratch database. Checked BEFORE connecting.
+
+    PostgreSQL: the database name must end in _test or _regression.
+    SQLite: anything but the default development file (backend/truepixels.db).
+    """
+    name = url.database or ""
+    if url.get_backend_name() == "postgresql":
+        if not name.endswith(SCRATCH_SUFFIXES):
+            raise RuntimeError(f"refusing to reset {url.render_as_string(hide_password=True)}: "
+                               f"not a scratch database (name must end in {SCRATCH_SUFFIXES})")
+        return
+    if name in ("", ":memory:"):
+        return
+    if Path(name).resolve() == (BACKEND_DIR / "truepixels.db").resolve():
+        raise RuntimeError(f"refusing to reset the development SQLite database {name}")
+
+
 def reset_scratch_database() -> None:
     """Drop EVERYTHING in the configured database, then migrate to head.
 
@@ -169,6 +190,7 @@ def reset_scratch_database() -> None:
     """
     from sqlalchemy import inspect, text
 
+    refuse_unless_scratch(engine.url)
     import_all_models()
     with engine.begin() as connection:
         if connection.dialect.name == "postgresql":
