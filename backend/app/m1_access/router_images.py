@@ -113,6 +113,15 @@ def get_image_metadata(
     return image
 
 
+def _file_missing(image_id: int) -> AppException:
+    """Owner-only: the D2 row is theirs, the stored file is gone (changes.md 6.6)."""
+    return AppException(
+        code="IMG_FILE_MISSING",
+        message=f"Image {image_id} is recorded, but its stored file is no longer available.",
+        status_code=410,
+    )
+
+
 @router.get(
     "/{image_id}/file",
     status_code=status.HTTP_200_OK,
@@ -140,8 +149,13 @@ def get_image_file(
             image.file_reference,
             shared_config.UPLOADS_DIR,
             ImgNotFoundException(f"Image with id {image_id} not found."),
+            _file_missing(image_id),
         )
-    except ImgNotFoundException:
+    except AppException as exc:
+        if exc.code == "IMG_FILE_MISSING":
+            emit("error", f"Image file missing on disk: image_id={image_id}",
+                 severity="warning", user_id=session.user_id)
+            raise
         # F.4: refused access is logged. The caller sees one 404 whatever the
         # reason; D6 records only the attempt, which is what an admin needs.
         emit("error", f"Image file refused: image_id={image_id}",
@@ -181,8 +195,13 @@ def get_image_thumbnail(
             image.file_reference,
             shared_config.UPLOADS_DIR,
             ImgNotFoundException(f"Image with id {image_id} not found."),
+            _file_missing(image_id),
         )
-    except ImgNotFoundException:
+    except AppException as exc:
+        if exc.code == "IMG_FILE_MISSING":
+            emit("error", f"Image file missing on disk: image_id={image_id}",
+                 severity="warning", user_id=session.user_id)
+            raise
         emit("error", f"Image thumbnail refused: image_id={image_id}",
              severity="warning", user_id=session.user_id)
         raise

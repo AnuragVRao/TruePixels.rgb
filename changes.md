@@ -662,3 +662,40 @@ M1's and M3's code:
     calling `create_all()`.
 - D4 gains `cold_start`. D3 gains the partial unique index
   `uq_models_one_active_per_type`.
+
+### 6.6 Records whose stored files are gone degrade gracefully (pre-phase 3)
+
+**Problem.** The SQLite -> PostgreSQL migration carried two D2 rows whose
+upload files no longer exist (they were already absent from
+`storage/uploads/`). For such a record:
+- the owner's `/images/{id}/file` and `/thumbnail` answered `IMG_NOT_FOUND`,
+  telling them their own image does not exist;
+- the PDF silently left the original out;
+- the overlay generator would have painted a heat map on a grey placeholder
+  canvas.
+
+**Change.**
+- New error codes in `app/shared/errors.py`:
+  `IMG_FILE_MISSING` (410) and `XAI_FILE_MISSING` (410).
+- `app/shared/files.py`: `resolve_stored_file` distinguishes "safely inside
+  the storage tree but gone" (the caller's `missing` error) from "unsafe or
+  wrong type" (still the caller's not-found error). Containment is checked
+  before existence, so a missing path outside the tree is still not-found.
+- **M1** `router_images.py`: the owner gets `410 IMG_FILE_MISSING` from
+  `/file` and `/thumbnail`, and a D6 warning is written. Everyone else still
+  gets the same `404 IMG_NOT_FOUND`, because ownership is checked first, so
+  no existence is leaked.
+- **M3** `router_results.py`:
+  - the same for panels (`410 XAI_FILE_MISSING`);
+  - `/results` gains `original_available: bool` (**additive change to M3's
+    `PredictionResultView`**, default `true`), so a UI can say the file is
+    gone instead of showing a broken image.
+- **M3** `reporting.py`: the PDF states that the original is no longer
+  stored and that the outcome shown is the recorded result. Before, it left
+  the original out without saying so.
+- **M3** `overlay.py`: no substitute grey canvas. A missing original raises
+  `XAI_UNAVAILABLE`; the prediction is unaffected.
+
+**Tests.** `test_missing_files.py`, on a fixture shaped like the migrated
+rows: result view, both image endpoints and the panel endpoint (owner 410,
+stranger 404), the PDF text (via pypdf), and the overlay refusal.

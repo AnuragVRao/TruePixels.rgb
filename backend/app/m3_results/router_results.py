@@ -2,6 +2,7 @@
 Module M3 Prediction Results and Explainability endpoints (F.10, F.11, C.3).
 """
 from __future__ import annotations
+import os
 from typing import Literal
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
@@ -85,6 +86,7 @@ def get_prediction_result(
         frequency_score=pred.frequency_score,
         fusion_score=pred.fusion_score,
         original_image_url=image_file_url(img.image_id),
+        original_available=os.path.isfile(img.file_reference or ""),
         visualizations=vis_items,
         model_name=model_name,
         model_version=model_version,
@@ -193,9 +195,19 @@ def get_explainability_file(
         if row is None:
             raise _not_found(prediction_id)
         response = stored_file_response(
-            row.visualization_reference, config.EXPLAINABILITY_DIR, _not_found(prediction_id)
+            row.visualization_reference, config.EXPLAINABILITY_DIR, _not_found(prediction_id),
+            AppException(
+                code="XAI_FILE_MISSING",
+                message=f"The {branch} visualisation for prediction #{prediction_id} is recorded, "
+                        "but its stored file is no longer available.",
+                status_code=410,
+            ),
         )
-    except AppException:
+    except AppException as exc:
+        if exc.code == "XAI_FILE_MISSING":
+            emit("error", f"Explainability file missing on disk: prediction_id={prediction_id} "
+                 f"branch={branch}", severity="warning", user_id=session.user_id)
+            raise
         # F.4: refused access is logged; the caller sees one 404 whatever the reason.
         emit("error", f"Explainability file refused: prediction_id={prediction_id} branch={branch}",
              severity="warning", user_id=session.user_id)

@@ -32,13 +32,19 @@ def generate_semantic_overlay(
     """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    # Load original image or create synthetic canvas if missing
-    if os.path.exists(original_image_path):
-        orig_img = Image.open(original_image_path).convert("RGB")
-        # Ensure display orientation
-        orig_img = ImageOps.exif_transpose(orig_img)
-    else:
-        orig_img = Image.new("RGB", (target_width, target_height), color=(200, 200, 200))
+    # INTEGRATION (changes.md 6.6): no substitute canvas when the original is
+    # missing - an overlay drawn on a grey placeholder would present a heat map
+    # over an image that is not there. Refuse; the caller reports
+    # XAI_UNAVAILABLE and the prediction itself is unaffected.
+    if not os.path.exists(original_image_path):
+        raise AppException(
+            code="XAI_UNAVAILABLE",
+            message="The original image file is missing, so no overlay can be drawn on it.",
+            status_code=501,
+        )
+    orig_img = Image.open(original_image_path).convert("RGB")
+    # Ensure display orientation
+    orig_img = ImageOps.exif_transpose(orig_img)
 
     # Match target dimensions
     if orig_img.size != (target_width, target_height):

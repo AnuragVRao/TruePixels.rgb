@@ -31,6 +31,9 @@ ERROR_REGISTRY: dict[str, tuple[int, str]] = {
     "IMG_TOO_LARGE": (413, "File exceeds the configured maximum upload size."),
     "IMG_CORRUPTED": (422, "Decoder could not open the file, or the file is truncated."),
     "IMG_NOT_FOUND": (404, "Image not found or not owned by the caller."),
+    # Owner only: the record exists and is theirs, but the stored file is gone
+    # (e.g. data migrated without its storage tree). Never shown to others.
+    "IMG_FILE_MISSING": (410, "The image record exists but its stored file is no longer available."),
     # M2 Errors
     "INF_MODEL_UNAVAILABLE": (503, "No active model of a required type, or artefact failed to load."),
     "INF_TIMEOUT": (504, "Inference exceeded the configured wall-clock budget."),
@@ -38,6 +41,7 @@ ERROR_REGISTRY: dict[str, tuple[int, str]] = {
     "INF_PREDICTION_NOT_FOUND": (404, "Prediction not found or not visible to the caller."),
     # M3 Errors
     "XAI_UNAVAILABLE": (501, "Explainability not supported for the active model."),
+    "XAI_FILE_MISSING": (410, "The visualisation record exists but its stored file is no longer available."),
     "RPT_GENERATION_FAILED": (500, "PDF assembly failed."),
     "ADM_ACTION_NOT_PERMITTED": (409, "Administrative action rejected by policy."),
 }

@@ -24,22 +24,42 @@ _HEADERS = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nos
 THUMBNAIL_MAX_SIDE = 256
 
 
-def resolve_stored_file(reference: str | None, root: Path, not_found: AppException) -> Path:
+def resolve_stored_file(
+    reference: str | None,
+    root: Path,
+    not_found: AppException,
+    missing: AppException | None = None,
+) -> Path:
     """The resolved path of ``reference`` if it is an image file inside ``root``.
 
     Raises ``not_found`` - the same error the caller uses for "not yours" -
-    for a missing reference, a missing file, a path outside ``root`` (after
-    resolving ``..`` and links) or an unexpected file type, so the response
-    never reveals which of those it was.
+    for an empty reference, a path outside ``root`` (after resolving ``..``
+    and links) or an unexpected file type, so the response never reveals
+    which of those it was.
+
+    Raises ``missing`` instead (when given) for a reference that is safely
+    inside ``root`` but whose file no longer exists. Callers only pass it
+    after the ownership check, so it tells the OWNER something true ("your
+    record survives, its file does not") without telling anyone else that
+    the record exists.
     """
     if not reference:
         raise not_found
     path = Path(reference)
     if not path.is_absolute():
         path = root / path
+    root = root.resolve()
+    try:
+        # Lexical containment first (".." collapsed, links followed where they
+        # exist), so a missing file outside root is still "not found".
+        path.resolve(strict=False).relative_to(root)
+    except (OSError, ValueError):
+        raise not_found from None
+    if not path.exists():
+        raise missing if missing is not None else not_found
     try:
         path = path.resolve(strict=True)
-        path.relative_to(root.resolve())
+        path.relative_to(root)  # again, now that every link is resolved
     except (OSError, ValueError):
         raise not_found from None
     if path.suffix.lower() not in _MEDIA_TYPES or not path.is_file():
@@ -47,13 +67,17 @@ def resolve_stored_file(reference: str | None, root: Path, not_found: AppExcepti
     return path
 
 
-def stored_file_response(reference: str | None, root: Path, not_found: AppException) -> FileResponse:
+def stored_file_response(
+    reference: str | None, root: Path, not_found: AppException, missing: AppException | None = None
+) -> FileResponse:
     """A ``FileResponse`` for a stored image, after :func:`resolve_stored_file`."""
-    path = resolve_stored_file(reference, root, not_found)
+    path = resolve_stored_file(reference, root, not_found, missing)
     return FileResponse(path, media_type=_MEDIA_TYPES[path.suffix.lower()], headers=_HEADERS)
 
 
-def thumbnail_response(reference: str | None, root: Path, not_found: AppException) -> Response:
+def thumbnail_response(
+    reference: str | None, root: Path, not_found: AppException, missing: AppException | None = None
+) -> Response:
     """A JPEG at most ``THUMBNAIL_MAX_SIDE`` px on its longer side.
 
     Made on the fly from the stored original (already EXIF-transposed and
@@ -61,7 +85,7 @@ def thumbnail_response(reference: str | None, root: Path, not_found: AppExceptio
     """
     from PIL import Image
 
-    path = resolve_stored_file(reference, root, not_found)
+    path = resolve_stored_file(reference, root, not_found, missing)
     try:
         with Image.open(path) as image:
             image = image.convert("RGB")

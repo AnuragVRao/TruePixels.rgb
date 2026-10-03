@@ -25,6 +25,11 @@ class PredictionResultView(BaseModel):
     frequency_score: float | None  # null when the frequency branch had no evidence
     fusion_score: float
     original_image_url: str
+    # INTEGRATION (changes.md 6.6): false when the D2 row survives but its file
+    # does not (e.g. data migrated without the storage tree), so a UI can say
+    # so instead of showing a broken image; original_image_url then answers
+    # 410 IMG_FILE_MISSING.
+    original_available: bool = True
     visualizations: list[ExplainabilityItem]
     model_name: str
     model_version: str

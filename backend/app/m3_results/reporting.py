@@ -171,6 +171,16 @@ def build_pdf_report(
         img2 = RLImage(freq_ref, width=2.4*inch, height=2.4*inch) if freq_ref else Paragraph("Spectrum not available", body_style)
         img_elements.append([img1, img2])
 
+    # INTEGRATION (changes.md 6.6): say so when the original is gone, rather
+    # than silently leaving it out of the report.
+    if not (prediction.image and os.path.exists(prediction.image.file_reference or "")):
+        story.append(Paragraph(
+            "<i>The original image file is no longer stored on the server. The outcome and "
+            "scores above are the recorded result of the analysis made when it was.</i>",
+            body_style,
+        ))
+        story.append(Spacer(1, 8))
+
     if img_elements:
         vis_table = Table(img_elements, colWidths=[265, 265])
         vis_table.setStyle(TableStyle([
