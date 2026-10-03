@@ -136,3 +136,39 @@ def test_a_swallowed_log_write_is_caught(monkeypatch):
     with pytest.raises(pytest.fail.Exception, match="database unavailable"):
         assert_no_swallowed_log_writes()
     logging_service.WRITE_FAILURES.clear()
+
+
+def test_console_otp_code_never_reaches_d6(sessions, monkeypatch, caplog):
+    """Console-mode OTP: the code is printed for the developer, NEVER stored in D6."""
+    import logging
+    import re
+
+    from app.m1_access import email_service, router_auth
+
+    monkeypatch.setattr(router_auth, "REQUIRE_2FA", True, raising=False)
+    monkeypatch.setenv("EMAIL_BACKEND", "console")
+    issued = []
+    real_send = email_service.EmailService.send_otp_email
+
+    def capture(recipient_email, otp_code, user_name=None):
+        issued.append(otp_code)
+        return real_send(recipient_email, otp_code, user_name)
+
+    monkeypatch.setattr(email_service.EmailService, "send_otp_email", staticmethod(capture))
+    email = f"otp-{next(_n)}@example.com"
+    with caplog.at_level(logging.INFO, logger="truepixels.audit"):
+        r = client.post("/api/v1/auth/register",
+                        json={"full_name": "Otp Test", "email": email, "password": PASSWORD})
+        assert r.status_code in (200, 201), r.text
+        client.post("/api/v1/auth/otp/send", json={"email": email})
+    assert issued, "no OTP was issued - is 2FA enabled for this test?"
+    db = sessions()
+    try:
+        details = [row.event_detail for row in db.query(LogEntry)]
+    finally:
+        db.close()
+    for code in issued:
+        assert not any(code in d for d in details), "an OTP code was written to D6"
+    assert not any(re.search(r"code=\d{6}", d) for d in details)
+    assert any("OTP issued (console delivery, code not logged)" in d for d in details)
+    assert any(issued[-1] in r.getMessage() for r in caplog.records)  # still on the dev console

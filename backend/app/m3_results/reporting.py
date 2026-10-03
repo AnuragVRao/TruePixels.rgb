@@ -161,10 +161,18 @@ def build_pdf_report(
             panels[item.branch] = (path, item.technique)
 
     def fitted(path: str, box: float = 2.4 * inch) -> RLImage:
+        # A downscaled in-memory copy (<= 1600 px): the PDF's size and the
+        # memory it takes no longer scale with the original's resolution, and
+        # no file handle outlives this call.
         with PILImage.open(path) as handle:
-            w, h = handle.size
+            copy = handle.convert("RGB")
+        copy.thumbnail((1600, 1600))
+        data = io.BytesIO()
+        copy.save(data, format="PNG")
+        data.seek(0)
+        w, h = copy.size
         scale = box / max(w, h)
-        return RLImage(path, width=w * scale, height=h * scale)
+        return RLImage(data, width=w * scale, height=h * scale)
 
     original_path = prediction.image.file_reference if prediction.image else None
     original_ok = bool(original_path and os.path.exists(original_path))

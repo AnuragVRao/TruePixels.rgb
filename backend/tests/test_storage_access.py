@@ -408,3 +408,19 @@ def test_results_name_the_models_that_produced_the_prediction():
     prediction_id = add_prediction(image_id, "unused.png")
     models = client.get(f"/api/v1/results/{prediction_id}", headers=owner).json()["models"]
     assert models["fusion"]["model_name"] == "test fusion" and models["semantic"] is None
+
+
+def test_every_file_endpoint_has_a_hard_size_bound(monkeypatch, panel):
+    """Files are read fully into memory, so each endpoint refuses a stored file
+    above its ceiling with a structured 413 instead of reading it."""
+    from app.shared import files
+
+    _, owner = make_user()
+    image_id, _ = upload(owner, seed=95)
+    prediction_id = add_prediction(image_id, panel)
+    monkeypatch.setattr(files, "MAX_STORED_ORIGINAL_BYTES", 100)
+    monkeypatch.setattr(files, "MAX_STORED_PANEL_BYTES", 100)
+    for url in (f"/api/v1/images/{image_id}/file", f"/api/v1/images/{image_id}/thumbnail",
+                f"/api/v1/explainability/{prediction_id}/semantic"):
+        r = client.get(url, headers=owner)
+        assert r.status_code == 413 and r.json()["error"]["code"] == "FILE_TOO_LARGE", (url, r.text)

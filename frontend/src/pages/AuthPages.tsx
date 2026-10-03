@@ -20,10 +20,27 @@ const Card: React.FC<{ title: string; children: React.ReactNode }> = ({ title, c
   </div>
 );
 
+/**
+ * Where to go after signing in: a same-origin relative path, or '/'.
+ *
+ * Rejects absolute URLs ("https://evil.example"), protocol-relative ones
+ * ("//evil.example") and backslash variants ("/\evil.example", which browsers
+ * treat like "//"), then confirms the resolved URL stays on this origin.
+ */
+export function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return '/';
+  try {
+    const resolved = new URL(raw, window.location.origin);
+    if (resolved.origin !== window.location.origin) return '/';
+    return resolved.pathname + resolved.search + resolved.hash;
+  } catch {
+    return '/';
+  }
+}
+
 function useNext(): string {
   const [params] = useSearchParams();
-  const next = params.get('next');
-  return next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  return safeNext(params.get('next'));
 }
 
 export const LoginPage: React.FC = () => {

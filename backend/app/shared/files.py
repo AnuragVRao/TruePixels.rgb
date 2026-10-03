@@ -23,6 +23,19 @@ _HEADERS = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nos
 
 THUMBNAIL_MAX_SIDE = 256
 
+# Hard ceilings on what any file endpoint will read into memory (Phase 5a
+# review). Uploads are capped at 10 MB on the way in, but M1 re-encodes the
+# stored copy (JPEG q95), which can be larger; 64 MB is far above any
+# realistic stored image and still bounds memory. Explainability PNGs are
+# themselves bounded (overlay <= 1600 px, spectrum <= 768 px).
+MAX_STORED_ORIGINAL_BYTES = 64 * 1024 * 1024
+MAX_STORED_PANEL_BYTES = 16 * 1024 * 1024
+
+
+def _too_large(size: int, limit: int) -> AppException:
+    return AppException(code="FILE_TOO_LARGE", status_code=413,
+                        message=f"The stored file is {size} bytes, above the {limit}-byte serving limit.")
+
 
 def resolve_stored_file(
     reference: str | None,
@@ -79,9 +92,23 @@ def stored_file_response(
     open by the server, which blocks deleting them (Phase 5a).
     """
     path = resolve_stored_file(reference, root, not_found, missing)
+    limit = max_bytes_for(root)
+    size = path.stat().st_size
+    if size > limit:
+        raise _too_large(size, limit)
     with open(path, "rb") as handle:
-        data = handle.read()
+        data = handle.read(limit + 1)
+    if len(data) > limit:  # grew between stat and read
+        raise _too_large(len(data), limit)
     return Response(data, media_type=_MEDIA_TYPES[path.suffix.lower()], headers=_HEADERS)
+
+
+def max_bytes_for(root: Path) -> int:
+    from app.shared import config
+
+    if root.resolve() == config.EXPLAINABILITY_DIR.resolve():
+        return MAX_STORED_PANEL_BYTES
+    return MAX_STORED_ORIGINAL_BYTES
 
 
 def thumbnail_response(
@@ -95,8 +122,10 @@ def thumbnail_response(
     from PIL import Image
 
     path = resolve_stored_file(reference, root, not_found, missing)
+    if path.stat().st_size > MAX_STORED_ORIGINAL_BYTES:
+        raise _too_large(path.stat().st_size, MAX_STORED_ORIGINAL_BYTES)
     try:
-        with Image.open(path) as image:
+        with Image.open(path) as image:  # PIL's decompression-bomb guard applies
             image = image.convert("RGB")
             image.thumbnail((THUMBNAIL_MAX_SIDE, THUMBNAIL_MAX_SIDE), Image.Resampling.LANCZOS)
             buffer = io.BytesIO()

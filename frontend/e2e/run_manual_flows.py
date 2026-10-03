@@ -8,6 +8,7 @@ its console to <backend_log>) and `npm run dev` on :3000. Uses a scratch
 database and storage: step 16 DELETES the uploads under <backend_STORAGE_DIR>.
 """
 import io
+from urllib.parse import quote
 import re
 import sys
 import time
@@ -166,14 +167,34 @@ with sync_playwright() as p:
     step(11, "xai off: no panels, message shown", s11)
 
     def s12():
+        # Seed 25 more results through the API (same session token) so the
+        # history has 28 rows and pagination is exercised in the browser.
+        token = page.evaluate("sessionStorage.getItem('tp_token')")
+        auth = {"Authorization": f"Bearer {token}"}
+        for i in range(25):
+            buf = io.BytesIO()
+            Image.fromarray(np.random.default_rng(100 + i).integers(0, 256, (240, 240, 3), dtype=np.uint8)).save(buf, "PNG")
+            up = page.request.post(f"{BASE}/api/v1/images", headers=auth,
+                                   multipart={"file": {"name": f"seed{i}.png", "mimeType": "image/png", "buffer": buf.getvalue()}})
+            assert up.ok, up.text()
+            pr = page.request.post(f"{BASE}/api/v1/predictions", headers=auth,
+                                   data={"image_id": up.json()["image_id"], "xai": False}, timeout=120000)
+            assert pr.ok, pr.text()
         page.goto(f"{BASE}/history")
         expect(page.get_by_role("heading", name="Your results")).to_be_visible()
-        page.wait_for_function("document.querySelectorAll('img[src^=\"blob:\"]').length >= 3", timeout=30000)
-        assert page.locator("li").count() == 3, page.locator("li").count()
+        expect(page.get_by_text("Page 1 of 3 · 28 results")).to_be_visible(timeout=30000)
+        assert page.locator("li").count() == 10, page.locator("li").count()
+        page.wait_for_function("document.querySelectorAll('img[src^=\"blob:\"]').length >= 10", timeout=30000)
         page.screenshot(path=str(OUT / "12-history.png"), full_page=True)
-        page.locator("li a").first.click()
+        page.get_by_role("button", name="Next").click()
+        expect(page.get_by_text("Page 2 of 3 · 28 results")).to_be_visible()
+        page.get_by_role("button", name="Next").click()
+        expect(page.get_by_text("Page 3 of 3 · 28 results")).to_be_visible()
+        assert page.locator("li").count() == 8, page.locator("li").count()
+        expect(page.get_by_role("button", name="Next")).to_be_disabled()
+        page.locator("li a").last.click()  # the oldest: the step-7 xai result
         page.wait_for_url(re.compile(r"/results/\d+"))
-    step(12, "history list with thumbnails; row opens result", s12)
+    step(12, "history: 28 rows, 3 pages (10/10/8), thumbnails, row opens result", s12)
 
     my_result = {"id": None}
 
@@ -232,6 +253,24 @@ with sync_playwright() as p:
         page.goto(f"{BASE}/history")
         page.wait_for_url(re.compile(r"/login\?next="))
     step(15, "sign in again (OTP, returns to next), sign out", s15)
+
+    def s18():
+        # After signing in, ?next= must never leave this origin.
+        for target in ("https://evil.example/steal", "//evil.example/steal", "/" + chr(92) + "evil.example/steal"):
+            fresh = browser.new_context()
+            fp = fresh.new_page()
+            fp.goto(f"{BASE}/login?next={quote(target, safe='')}")
+            fp.get_by_label("Email").fill(email)
+            fp.get_by_label("Password", exact=True).fill(password)
+            pos = len(LOG.read_text(encoding="utf-8", errors="ignore"))
+            fp.get_by_role("button", name="Sign in").click()
+            fp.wait_for_url(re.compile(r"/verify"))
+            fp.get_by_label("Verification code").fill(otp_for(email, pos))
+            fp.get_by_role("button", name="Verify").click()
+            fp.wait_for_url(f"{BASE}/", timeout=15000)  # landed on our start page, not the target
+            assert fp.url.startswith(BASE), fp.url
+            fresh.close()
+    step(18, "post-login redirect ignores external next= targets (3 forms)", s18)
 
     def s17():
         mobile = browser.new_context(viewport={"width": 375, "height": 800})

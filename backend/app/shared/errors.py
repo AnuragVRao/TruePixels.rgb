@@ -33,6 +33,7 @@ ERROR_REGISTRY: dict[str, tuple[int, str]] = {
     "IMG_NOT_FOUND": (404, "Image not found or not owned by the caller."),
     # Owner only: the record exists and is theirs, but the stored file is gone
     # (e.g. data migrated without its storage tree). Never shown to others.
+    "FILE_TOO_LARGE": (413, "A stored file exceeds the size the server will serve."),
     "IMG_FILE_MISSING": (410, "The image record exists but its stored file is no longer available."),
     # M2 Errors
     "INF_MODEL_UNAVAILABLE": (503, "No active model of a required type, or artefact failed to load."),

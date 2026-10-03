@@ -27,7 +27,6 @@ class UserRegisterResponse(BaseModel):
     user_id: int
     message: str = "Account created successfully."
     requires_2fa: bool = False
-    dev_otp: Optional[str] = None
 
 
 class UserLoginRequest(BaseModel):
@@ -46,7 +45,6 @@ class UserLoginResponse(BaseModel):
     expires_at: datetime
     user_id: int
     requires_otp: bool = False
-    dev_otp: Optional[str] = None
 
 
 class OTPRequest(BaseModel):
@@ -64,7 +62,6 @@ class OTPVerifyResponse(BaseModel):
     role: Optional[Literal["User", "Admin"]] = None
     expires_at: Optional[datetime] = None
     user_id: Optional[int] = None
-    dev_otp: Optional[str] = None
 
 
 class UserStatusUpdateRequest(BaseModel):

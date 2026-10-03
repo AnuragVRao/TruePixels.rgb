@@ -110,6 +110,15 @@ TruePixels.rgb Security Team
             except Exception as e:
                 emit("error", f"Gmail SMTP delivery failed to {clean_recipient}: {e}", severity="error")
 
-        # Fallback to Console / Development mode
-        emit("authentication", f"2FA OTP simulated in console for {clean_recipient}: code={otp_code}", severity="info")
+        # Fallback to Console / Development mode.
+        # INTEGRATION (changes.md 6.10): the code goes to the developer's
+        # console ONLY (stdout logger, never persisted). It used to go through
+        # emit(), which also writes D6 - so every console-mode OTP was readable
+        # by admins in the log viewer. D6 records only that a code was issued.
+        from app.shared.logging import logger as console_only
+
+        console_only.info(f"2FA OTP simulated in console for {clean_recipient}: code={otp_code} "
+                          "[development console only - not stored]")
+        emit("authentication", f"2FA OTP issued (console delivery, code not logged) for {clean_recipient}",
+             severity="info")
         return True

@@ -95,7 +95,7 @@ def _flip_image() -> bytes:
     """A validation-split image whose fused score lies between tau 0.60 and the
     baseline tau, so moving tau to 0.60 must change its label."""
     ref = gate.load_reference()
-    names = json.loads(gate.reference_path().with_suffix(".json").read_text())["images"]
+    names = [item[0] for item in json.loads(gate.reference_path().with_suffix(".json").read_text())["images"]]
     fused = config.FUSION_WEIGHT * ref["semantic_scores"] + (1 - config.FUSION_WEIGHT) * ref["frequency_scores"]
     candidates = [i for i, f in enumerate(fused) if 0.62 <= f < config.FUSION_TAU - 0.01]
     assert candidates, "no reference image between the two thresholds"
@@ -521,3 +521,15 @@ def test_an_in_flight_request_keeps_the_model_set_it_started_with(monkeypatch):
     monkeypatch.setattr(detectors.primary, "score", real_score)
     after = _predict(user, payload)
     assert after["model_id"] == new_fusion and after["predicted_class"] == "AI Generated"
+
+
+def test_gate_refuses_a_stale_or_unkeyed_reference_cache(monkeypatch):
+    """Changing anything the cached features depend on - here the SPAI
+    preprocessing (resize_to) - makes the cache stale, and the gate refuses."""
+    ref = gate.load_reference()
+    assert gate.stale_reason(ref) is None  # the real cache matches the current setup
+    monkeypatch.setattr(config, "DETECTOR_FREQUENCY_RESIZE_TO", 1024)
+    reason = gate.stale_reason(ref)
+    assert reason and "stale" in reason
+    unkeyed = {k: v for k, v in ref.items() if k != "cache_key"}
+    assert "no content key" in gate.stale_reason(unkeyed)

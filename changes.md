@@ -907,3 +907,40 @@ swapping is the feature demonstrated end to end.
 - ESLint added, with `react/no-danger` as an error; no
   `dangerouslySetInnerHTML` anywhere.
 - `docs/manual-test-react.md`: the manual test script.
+
+### 6.10 Security follow-ups before phase 5b
+
+- **M1 `email_service.py`: console-mode OTP codes no longer reach D6.**
+  - The code is printed only to the developer console (stdout logger, never
+    persisted). D6 records "2FA OTP issued (console delivery, code not
+    logged)".
+  - Before this, every console-mode code was readable by admins in the log
+    viewer.
+  - Existing rows: **0** in the development database. **18** in the scratch
+    `truepixels_regression` database, all from automated browser runs.
+    None were edited or deleted (the owner decides).
+  - Test: `test_console_otp_code_never_reaches_d6`. It fails if the code is
+    put back into the audited line.
+- **M1 `schemas.py`: the dead `dev_otp` field is removed** from the
+  register, login and OTP-verify responses. It was never populated.
+- **File endpoints have hard size ceilings now that files are read into
+  memory:**
+  - originals and thumbnails: 64 MB;
+  - explainability PNGs: 16 MB;
+  - over the limit: a structured `413 FILE_TOO_LARGE`;
+  - PIL's 25 MP decompression guard still applies to decoding;
+  - the PDF embeds a 1600 px in-memory copy instead of the full original.
+- **The gate's reference cache is content-keyed.** The key is a SHA-256
+  over:
+  - the SigLIP checkpoint, revision and processor configuration;
+  - the SPAI weights digest and patching parameters;
+  - the reference image list with each file's SHA-256.
+
+  The gate refuses a cache whose key no longer matches, or that has no key.
+  The cache was rebuilt with the key.
+- **The React post-login redirect accepts same-origin relative paths only**
+  (`safeNext`): absolute, protocol-relative and backslash forms all go to
+  `/`. Exercised in the browser with three external targets.
+- **JWT lifetime is 8 hours.** Tokens that appeared in `?token=` URLs before
+  that was removed have expired; rotating `JWT_SECRET_KEY` once at the end
+  of the project is noted for Phase 8.

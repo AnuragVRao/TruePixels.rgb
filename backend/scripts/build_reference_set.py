@@ -56,13 +56,23 @@ def main() -> int:
         frequency_detector.frequency._model.cls_head.register_forward_pre_hook(
             lambda _m, inputs: grabbed.__setitem__("frequency", inputs[0].detach().float().cpu())),
     ]
-    names, labels, sem_f, freq_f, sem_s, freq_s = [], [], [], [], [], []
+    import hashlib
+
+    def file_sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+        return digest.hexdigest()
+
+    names, labels, sem_f, freq_f, sem_s, freq_s, hashes = [], [], [], [], [], [], []
     try:
         for n, (path, label) in enumerate(items, 1):
             grabbed.clear()
             s = detectors.primary.score(str(path)).score
             f = frequency_detector.frequency.score(str(path)).score
             names.append(str(path.relative_to(REPO)))
+            hashes.append(file_sha256(path))
             labels.append(label)
             sem_f.append(grabbed["semantic"][0].numpy())
             freq_f.append(grabbed["frequency"][0].numpy())
@@ -73,15 +83,21 @@ def main() -> int:
         for hook in hooks:
             hook.remove()
 
+    # Content key (Phase 5a review): the gate refuses a cache whose key no
+    # longer matches the current revision, weights, preprocessing or image list.
+    images = [[n, h] for n, h in zip(names, hashes)]
+    key = gate.reference_key(images)
     out = gate.reference_path()
     out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(out, labels=np.array(labels, dtype=np.int64),
+    np.savez(out, cache_key=np.array(key), labels=np.array(labels, dtype=np.int64),
              semantic_features=np.stack(sem_f), frequency_features=np.stack(freq_f),
              semantic_scores=np.array(sem_s, dtype=np.float64),
              frequency_scores=np.array(freq_s, dtype=np.float64))
     out.with_suffix(".json").write_text(json.dumps(
         {"split": "sbr_val (validation, scenes 99-296)", "per_class": args.per_class,
-         "images": names}, indent=2) + "\n")
+         "cache_key": key, "images": images,
+         "key_inputs": {k: v for k, v in gate.key_inputs(images).items() if k != "images"}},
+        indent=2, default=str) + "\n")
     print(f"-> {out} ({len(names)} images)")
     return 0
 

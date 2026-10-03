@@ -53,6 +53,38 @@ BASELINE_MAX_AUC_DROP = 0.04
 REPRODUCTION_TOLERANCE = 1e-4
 
 
+def key_inputs(images: list) -> dict:
+    """Everything the cached features depend on. Any change => a different key.
+
+    ``images`` is the manifest's list of [relative path, file SHA-256]: the
+    files are not re-hashed at activation time (they may not even be present);
+    their hashes were recorded when the cache was built.
+    """
+    from app.m2_analysis import detectors, xai
+
+    detectors.primary.load()
+    processor = detectors.primary._processor.to_dict()
+    return {
+        "semantic_checkpoint": config.DETECTOR_PRIMARY,
+        "semantic_revision": config.DETECTOR_PRIMARY_REVISION,
+        "semantic_processor": processor,
+        "spai_weights_digest": config.DETECTOR_FREQUENCY_WEIGHTS_DIGEST,
+        "spai_preprocess": {"resize_to": config.DETECTOR_FREQUENCY_RESIZE_TO,
+                            "patch_size": xai.PATCH_SIZE, "patch_stride": xai.PATCH_STRIDE,
+                            "minimum_patches": xai.MINIMUM_PATCHES, "mask_radius": xai.MASK_RADIUS,
+                            "input": "RGB [0,1], even-trimmed (frequency_detector.prepare_image)"},
+        "images": [list(item) for item in images],
+    }
+
+
+def reference_key(images: list) -> str:
+    import hashlib
+    import json
+
+    blob = json.dumps(key_inputs(images), sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def reference_path():
     rev = config.DETECTOR_PRIMARY_REVISION[:12]
     digest = config.DETECTOR_FREQUENCY_WEIGHTS_DIGEST[:12]
@@ -65,6 +97,21 @@ def load_reference() -> dict | None:
         return None
     with np.load(path, allow_pickle=False) as data:
         return {key: data[key] for key in data.files}
+
+
+def stale_reason(reference: dict) -> str | None:
+    """Why the cache cannot be trusted for the CURRENT models/preprocessing, or None."""
+    import json
+
+    manifest_path = reference_path().with_suffix(".json")
+    if "cache_key" not in reference or not manifest_path.is_file():
+        return "reference cache has no content key (built before keying); rebuild it"
+    manifest = json.loads(manifest_path.read_text())
+    expected = reference_key(manifest.get("images", []))
+    if str(reference["cache_key"]) != expected:
+        return ("reference cache is stale: backbone revision, weights, preprocessing or the "
+                "reference image list changed since it was built; rebuild it")
+    return None
 
 
 def _semantic_probs(features: np.ndarray, head_spec: dict | None, model_id: int | None) -> np.ndarray:
@@ -132,6 +179,9 @@ def evaluate(current_set, candidate_row) -> dict:
         return {"passed": False, "available": False,
                 "reasons": [f"reference set not built ({reference_path().name}); run "
                             "backend/scripts/build_reference_set.py"]}
+    stale = stale_reason(reference)
+    if stale:
+        return {"passed": False, "available": False, "reasons": [stale]}
     labels = reference["labels"].astype(int)
 
     # Integrity: published heads on cached inputs must reproduce the cached live scores.
