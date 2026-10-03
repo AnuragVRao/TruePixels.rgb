@@ -4,8 +4,8 @@ Regression tests for the unauthenticated ``/static`` mount, which served the
 whole storage tree - every user's uploads, and the model weights - to anyone
 who had the URL. Now:
 
-* ``GET /api/v1/images/{id}/file`` (M1) serves an original to its owner, or
-  to an Admin (M1's existing visibility rule for image metadata);
+* ``GET /api/v1/images/{id}/file`` (M1) serves an original to its owner
+  only - not to Admins either (least privilege);
 * ``GET /api/v1/explainability/{prediction_id}/{branch}`` (M3) serves a panel
   to the owner of the prediction only (M3's existing rule for results);
 * everything else - another user, no session, a missing id, a reference
@@ -37,6 +37,7 @@ from conftest import make_image, png_bytes
 
 client = TestClient(app)
 _emails = itertools.count()
+PNG_MAGIC = bytes([0x89]) + b"PNG"
 _sessions: sessionmaker | None = None
 
 
@@ -172,12 +173,12 @@ def test_no_session_is_rejected():
     assert client.get(f"/api/v1/images/{image_id}/file").status_code == 401
 
 
-def test_admin_can_view_an_original():
-    """Mirrors M1's metadata rule (owner or Admin), on purpose."""
+def test_admin_cannot_view_another_users_original():
+    """Owner only (least privilege): an Admin gets the same 404 as anyone else."""
     _, owner = make_user()
     _, admin = make_user(role="Admin")
     image_id, _ = upload(owner, seed=15)
-    assert client.get(f"/api/v1/images/{image_id}/file", headers=admin).status_code == 200
+    assert_not_found(client.get(f"/api/v1/images/{image_id}/file", headers=admin), "IMG_NOT_FOUND")
 
 
 def test_reference_outside_uploads_is_refused(tmp_path):
@@ -251,3 +252,116 @@ def test_panel_reference_outside_explainability_dir_is_refused():
     prediction_id = add_prediction(image_id, upload_path)
     assert_not_found(client.get(f"/api/v1/explainability/{prediction_id}/semantic", headers=owner),
                      "INF_PREDICTION_NOT_FOUND")
+
+
+# --------------------------------------------------------------------------
+# Path traversal: references are checked after full resolution
+# --------------------------------------------------------------------------
+
+def _outside_png(directory) -> str:
+    """A real PNG that exists but lies outside the directory being served."""
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"outside_{next(_emails)}.png"
+    path.write_bytes(png_bytes(make_image(width=64, height=64, seed=77)))
+    return str(path.resolve())
+
+
+def _set_image_reference(image_id: int, reference: str) -> None:
+    db = _sessions()
+    db.get(Image, image_id).file_reference = reference
+    db.commit()
+    db.close()
+
+
+def _traversal_references(served_root, target: str) -> list[str]:
+    """Ways of naming ``target`` that start inside ``served_root``."""
+    from pathlib import Path
+    up = "/".join([".."] * len(served_root.resolve().parts))
+    # Strip the anchor ("C:\" or "/") so the climb lands on the same drive.
+    below_anchor = Path(target).relative_to(Path(target).anchor).as_posix()
+    return [
+        str(served_root / ".." / "escape" / target.split("\\")[-1].split("/")[-1]),  # absolute, with ../
+        f"../escape/{target.split(chr(92))[-1].split('/')[-1]}",                       # relative, with ../
+        f"{up}/{below_anchor}",                                                         # relative, climbs to root
+    ]
+
+
+@pytest.mark.parametrize("variant", [0, 1, 2])
+def test_image_reference_with_dotdot_is_refused(variant):
+    target = _outside_png(config.STORAGE_ROOT / "escape")  # a sibling of uploads/
+    _, owner = make_user()
+    image_id, _ = upload(owner, seed=40 + variant)
+    reference = _traversal_references(config.UPLOADS_DIR, target)[variant]
+    _set_image_reference(image_id, reference)
+    assert_not_found(client.get(f"/api/v1/images/{image_id}/file", headers=owner), "IMG_NOT_FOUND")
+
+
+@pytest.mark.parametrize("variant", [0, 1, 2])
+def test_panel_reference_with_dotdot_is_refused(variant):
+    target = _outside_png(config.STORAGE_ROOT / "escape")  # a sibling of explainability/
+    _, owner = make_user()
+    image_id, _ = upload(owner, seed=50 + variant)
+    reference = _traversal_references(config.EXPLAINABILITY_DIR, target)[variant]
+    prediction_id = add_prediction(image_id, reference)
+    assert_not_found(client.get(f"/api/v1/explainability/{prediction_id}/semantic", headers=owner),
+                     "INF_PREDICTION_NOT_FOUND")
+
+
+def _link_dir_or_skip(link, target_dir) -> str:
+    """Make ``link`` a directory link to ``target_dir``; return its kind.
+
+    A symlink where the OS allows it. Windows refuses symlinks to
+    unprivileged processes (WinError 1314), but not NTFS junctions - the
+    same escape (a reparse point inside the served tree pointing outside it),
+    so the test still runs on the development machine.
+    """
+    try:
+        link.symlink_to(target_dir, target_is_directory=True)
+        return "symlink"
+    except (OSError, NotImplementedError):
+        pass
+    try:
+        import _winapi
+        _winapi.CreateJunction(str(target_dir), str(link))
+        return "junction"
+    except (ImportError, OSError) as exc:
+        pytest.skip(f"cannot create a symlink or junction here: {exc}")
+
+
+def test_image_link_escaping_uploads_is_refused(tmp_path):
+    target = _outside_png(tmp_path / "outside")
+    _, owner = make_user()
+    image_id, _ = upload(owner, seed=60)
+    config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    link = config.UPLOADS_DIR / f"link_{next(_emails)}"
+    _link_dir_or_skip(link, tmp_path / "outside")
+    via_link = link / target.replace("\\", "/").split("/")[-1]
+    assert via_link.read_bytes().startswith(PNG_MAGIC)  # the link really leads out
+    _set_image_reference(image_id, str(via_link))
+    assert_not_found(client.get(f"/api/v1/images/{image_id}/file", headers=owner), "IMG_NOT_FOUND")
+
+
+def test_panel_link_escaping_explainability_dir_is_refused(tmp_path):
+    target = _outside_png(tmp_path / "outside")
+    _, owner = make_user()
+    image_id, _ = upload(owner, seed=61)
+    config.EXPLAINABILITY_DIR.mkdir(parents=True, exist_ok=True)
+    link = config.EXPLAINABILITY_DIR / f"link_{next(_emails)}"
+    _link_dir_or_skip(link, tmp_path / "outside")
+    via_link = link / target.replace("\\", "/").split("/")[-1]
+    assert via_link.read_bytes().startswith(PNG_MAGIC)
+    prediction_id = add_prediction(image_id, str(via_link))
+    assert_not_found(client.get(f"/api/v1/explainability/{prediction_id}/semantic", headers=owner),
+                     "INF_PREDICTION_NOT_FOUND")
+
+
+def test_traversal_guard_is_what_refuses(tmp_path):
+    """Guard the guard: the same escaping reference IS readable on disk, so the
+    404s above come from the resolved-path check, not from a missing file."""
+    from pathlib import Path
+    target = _outside_png(config.STORAGE_ROOT / "escape")
+    for reference in _traversal_references(config.UPLOADS_DIR, target):
+        path = Path(reference)
+        if not path.is_absolute():
+            path = config.UPLOADS_DIR / path
+        assert path.resolve(strict=True).read_bytes().startswith(PNG_MAGIC), reference

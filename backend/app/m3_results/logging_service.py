@@ -5,6 +5,7 @@ Implements synchronous, non-throwing emit(), secret redaction filter, and retent
 from __future__ import annotations
 import re
 import sys
+from collections import deque
 from datetime import datetime, timezone, timedelta
 from typing import Literal
 from sqlalchemy.orm import Session
@@ -19,6 +20,12 @@ REDACTION_PATTERNS = [
     (re.compile(r'authorization["\']?\s*[:=]\s*["\']?([^"\'\s,]+)["\']?', re.IGNORECASE), r'authorization=[REDACTED]'),
     (re.compile(r'data:image\/[a-zA-Z]+;base64,[A-Za-z0-9+/=]{40,}', re.IGNORECASE), r'[IMAGE_BYTES_REDACTED]'),
 ]
+
+
+# Every write failure emit_log swallows is also recorded here (bounded), so a
+# test can assert that logging actually happened instead of trusting silence.
+# Production behaviour is unchanged: still non-throwing, still on stderr.
+WRITE_FAILURES: deque[str] = deque(maxlen=100)
 
 
 def redact_secrets(detail: str) -> str:
@@ -65,6 +72,7 @@ def emit_log(
                 db.close()
     except Exception as e:
         # Non-throwing by design (G4): logging failure must never fail the underlying request
+        WRITE_FAILURES.append(f"{event_type}: {type(e).__name__}: {e}")
         sys.stderr.write(f"[TruePixels Logging Error]: Failed to emit log: {e}\n")
 
 

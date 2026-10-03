@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.shared import config
 from app.shared.db import get_db
 from app.shared.files import stored_file_response
+from app.shared.logging import emit
 from app.shared.deps import current_session
 from app.shared.schemas import SessionContext
 from app.shared.errors import AppException
@@ -186,8 +187,18 @@ def get_explainability_file(
         )
         .first()
     )
-    if row is None:
-        raise _not_found(prediction_id)
-    return stored_file_response(
-        row.visualization_reference, config.EXPLAINABILITY_DIR, _not_found(prediction_id)
-    )
+    try:
+        if row is None:
+            raise _not_found(prediction_id)
+        response = stored_file_response(
+            row.visualization_reference, config.EXPLAINABILITY_DIR, _not_found(prediction_id)
+        )
+    except AppException:
+        # F.4: refused access is logged; the caller sees one 404 whatever the reason.
+        emit("error", f"Explainability file refused: prediction_id={prediction_id} branch={branch}",
+             severity="warning", user_id=session.user_id)
+        raise
+    emit("prediction-request",
+         f"Explainability file served: prediction_id={prediction_id} branch={branch}",
+         severity="info", user_id=session.user_id)
+    return response

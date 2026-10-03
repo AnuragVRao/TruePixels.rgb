@@ -57,3 +57,38 @@ def image_file(tmp_path: Path) -> str:
     path = tmp_path / "sample.png"
     make_image().save(path)
     return str(path)
+
+
+def assert_no_swallowed_log_writes() -> None:
+    """Fail loudly if any D6 write was swallowed since the list was cleared.
+
+    emit_log is non-throwing by design (a logging fault must never fail the
+    request being logged), so in production a broken write only reaches
+    stderr. In a test that silence would hide exactly the bug being tested
+    for, so the failures emit_log records are turned into a test failure here.
+    """
+    from app.m3_results import logging_service
+
+    failures = list(logging_service.WRITE_FAILURES)
+    if failures:
+        pytest.fail(
+            f"{len(failures)} audit-log write(s) failed and were swallowed by emit_log:\n  "
+            + "\n  ".join(failures),
+            pytrace=False,
+        )
+
+
+@pytest.fixture
+def strict_audit_log():
+    """Opt-in: the test fails if any D6 write raised during it.
+
+    Opt-in for now because several suites still point the logger at a
+    database without a ``logs`` table (M1's conftest sets an in-memory
+    DATABASE_URL); Phase 2 fixes the test database wiring and can make this
+    autouse.
+    """
+    from app.m3_results import logging_service
+
+    logging_service.WRITE_FAILURES.clear()
+    yield
+    assert_no_swallowed_log_writes()

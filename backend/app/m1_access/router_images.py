@@ -117,7 +117,7 @@ def get_image_metadata(
 @router.get(
     "/{image_id}/file",
     status_code=status.HTTP_200_OK,
-    summary="Download an uploaded image (owner or Admin only)",
+    summary="Download an uploaded image (owner only)",
     response_class=FileResponse,
 )
 def get_image_file(
@@ -127,14 +127,27 @@ def get_image_file(
 ):
     """INTEGRATION: replaces the unauthenticated /static mount (changes.md).
 
-    Same visibility rule and same IMG_NOT_FOUND as the metadata endpoint
-    above, so "not yours" and "does not exist" are indistinguishable.
+    Owner only - stricter than the metadata endpoint above, which also admits
+    Admins. The file is the user's photograph itself, so least privilege
+    applies (SRS F.4, NF.7), consistent with the explainability panels. Admin
+    access, if it is ever needed, should come with a D6 audit entry. Same
+    IMG_NOT_FOUND for "not yours" and "does not exist".
     """
     image = db.query(DBImage).filter(DBImage.image_id == image_id).first()
-    if not image or (image.user_id != session.user_id and session.role != "Admin"):
-        raise ImgNotFoundException(f"Image with id {image_id} not found.")
-    return stored_file_response(
-        image.file_reference,
-        shared_config.UPLOADS_DIR,
-        ImgNotFoundException(f"Image with id {image_id} not found."),
-    )
+    try:
+        if not image or image.user_id != session.user_id:
+            raise ImgNotFoundException(f"Image with id {image_id} not found.")
+        response = stored_file_response(
+            image.file_reference,
+            shared_config.UPLOADS_DIR,
+            ImgNotFoundException(f"Image with id {image_id} not found."),
+        )
+    except ImgNotFoundException:
+        # F.4: refused access is logged. The caller sees one 404 whatever the
+        # reason; D6 records only the attempt, which is what an admin needs.
+        emit("error", f"Image file refused: image_id={image_id}",
+             severity="warning", user_id=session.user_id)
+        raise
+    emit("prediction-request", f"Image file served: image_id={image_id}",
+         severity="info", user_id=session.user_id)
+    return response

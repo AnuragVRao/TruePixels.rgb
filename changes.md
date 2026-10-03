@@ -481,9 +481,12 @@ themselves were handed out in `/results` and `/history` responses.
 **Change.**
 - `app/main.py`: the `StaticFiles` mount is gone. Nothing under
   `storage/` is web-served directly.
-- **M1** `router_images.py`: new `GET /api/v1/images/{image_id}/file`. It
-  uses M1's existing rule for image metadata - owner or Admin - and the same
-  `IMG_NOT_FOUND` for "not yours" and "does not exist".
+- **M1** `router_images.py`: new `GET /api/v1/images/{image_id}/file`,
+  **owner only** - deliberately stricter than M1's metadata endpoint, which
+  also admits Admins, because this returns the photograph itself (least
+  privilege, SRS F.4 / NF.7). Admin access, if ever needed, should arrive
+  with a D6 audit entry. Same `IMG_NOT_FOUND` for "not yours" and "does not
+  exist". (First committed as owner-or-Admin; tightened 2026-10-03.)
 - **M3** `router_results.py`: new
   `GET /api/v1/explainability/{prediction_id}/{branch}`. Owner only, with
   the same SQL ownership join and the same `INF_PREDICTION_NOT_FOUND` as
@@ -504,8 +507,36 @@ themselves were handed out in `/results` and `/history` responses.
   blob URLs (`setAuthImage`).
 
 **Tests.** `backend/tests/test_storage_access.py`: owner gets the file,
-another user and a missing id get identical 404s, no session gets 401,
-Admin may view an original, references outside the storage tree are refused,
+another user, an Admin and a missing id get identical 404s, no session
+gets 401, references outside the storage tree are refused,
 `/results` and `/history` link to the new endpoints, and `/static/...`
 (including the weights) answers 404.
 
+
+### 6.2 Audit entries for file access; swallowed log writes are now visible to tests (phase 1a follow-up)
+
+**Problem.** The two file endpoints from §6.1 wrote nothing to D6, so neither
+served files nor refused attempts were auditable (SRS F.4, F.15). Separately,
+`emit_log` (M3, `logging_service.py`) swallows every write error by design -
+correct for production, but it meant a broken log write could pass every
+test: the model-backed suite had been writing **no** D6 rows at all, because
+its logger pointed at a database with no `logs` table, and nothing noticed.
+
+**Change.**
+- **M1** `router_images.py` and **M3** `router_results.py`: a served file is
+  logged as `prediction-request` / `info`; a refused request (not yours,
+  missing, or an unsafe stored path) as `error` / `warning`. The log line
+  names only the requested id, never the reason, mirroring the single 404.
+- **M3** `logging_service.py`: `emit_log` still never raises and still writes
+  to stderr, but each swallowed failure is also appended to a bounded
+  in-process list, `WRITE_FAILURES`. Production behaviour is unchanged.
+- Tests: the `strict_audit_log` fixture (`backend/tests/conftest.py`) fails
+  a test if any write was swallowed during it. It is opt-in until Phase 2
+  fixes the test database wiring. `test_audit_logging.py` asserts the D6 rows
+  for register, login, upload and both file endpoints (served and refused),
+  and that a raising write is caught; `test_api_predict.py` asserts the rows
+  for a real prediction.
+
+A history page with N rows now writes N `Image file served` entries, one per
+thumbnail. That is the honest cost of logging file access; if it proves too
+noisy, thumbnails could be exempted from logging - a decision for the M3 owner.

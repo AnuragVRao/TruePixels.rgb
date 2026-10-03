@@ -304,3 +304,26 @@ def test_another_users_image_is_indistinguishable_from_a_missing_one(sample_png,
 
     assert theirs.status_code == missing.status_code == 404
     assert theirs.json()["error"]["code"] == missing.json()["error"]["code"] == "IMG_NOT_FOUND"
+
+
+def test_prediction_writes_its_d6_audit_rows(sample_png, auth, monkeypatch, strict_audit_log):
+    """F.15: upload and prediction each leave a D6 row - and a swallowed write fails.
+
+    The logger is pointed at this module's database for the test; elsewhere in
+    this module it still writes to the global engine (fixed in Phase 2).
+    """
+    from app.m3_results import logging_service
+    from app.m3_results.models import LogEntry
+
+    monkeypatch.setattr(logging_service, "SessionLocal", _sessions)
+    image_id = upload(sample_png, auth)
+    prediction_id = predict(image_id, auth).json()["prediction_id"]
+
+    db = _sessions()
+    try:
+        details = [r.event_detail for r in db.query(LogEntry)
+                   .filter(LogEntry.event_type == "prediction-request")]
+    finally:
+        db.close()
+    assert any(f"image_id={image_id}" in d and "preprocessed" in d for d in details)
+    assert any(d.startswith(f"Prediction {prediction_id} for image_id={image_id}:") for d in details)
