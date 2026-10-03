@@ -50,6 +50,12 @@ async def lifespan(_: FastAPI):
     # Startup: storage layout (M2) and database tables D1-D6 (M1, M3)
     config.ensure_storage_dirs()
     init_db()
+    # Both detectors load here, before the first request is accepted, so no
+    # user's latency_ms includes a model load (Phase 1b).
+    if config.WARMUP_ON_STARTUP:
+        from app.m2_analysis.warmup import warm_up
+
+        warm_up()
     yield
 
 
@@ -170,8 +176,9 @@ def api_health_check():
 def health() -> dict:
     """Liveness check: device, and which pretrained models are in use.
 
-    ``loaded`` is false until the first prediction, because both branches load
-    lazily. ``ai_index`` is the output index resolved from the primary's own
+    ``loaded`` is true once the startup warm-up has run (WARMUP_ON_STARTUP,
+    the default); with the warm-up off, both branches load lazily and stay
+    false until the first prediction. ``ai_index`` is the output index resolved from the primary's own
     id2label; the frequency detector has no labels, so what it reports instead
     is the documented sign convention it is running under.
     """

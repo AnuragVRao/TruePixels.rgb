@@ -12,7 +12,7 @@ persistence.
        |                                                                   \\
        +--> 2.2 frequency branch (SPAI, spectral)     -> frequency_score ---+--> 2.3 fusion
        |                                                                          |
-       +--> [xai only] FFT features -> ActivationBundle.spectrum                  v
+       +--> [xai only, Phase 3] FFT features -> ActivationBundle.spectrum         v
                                                                   2.4 prediction & confidence
                                                                                   |
                                                                                   v
@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.m2_analysis import detectors, frequency, frequency_detector, fusion, registry
+from app.m2_analysis import detectors, frequency_detector, fusion, registry
 from app.m2_analysis.models import Prediction
 from app.shared.contracts.c1 import PreprocessedImage
 from app.shared.contracts.c2 import InferenceOutput
@@ -60,8 +60,12 @@ async def run_detection(
             ``run_detection(prepared)`` call form still works; a private
             session is opened and closed when it is omitted.
         xai_requested: capture internal model state for M3's explainability.
-            Currently this computes the spectral features; the full
-            ActivationBundle is assembled in Step 6 (milestone M2.5).
+            Currently a no-op: the ActivationBundle is assembled in Phase 3
+            (milestone M2.5), and until then ``activations`` is None.
+
+    ``latency_ms`` is inference time only - both branches and fusion. It
+    excludes one-time model loading (done at startup by the warm-up, or before
+    the timer otherwise), preprocessing hand-off and the D3/D4 writes.
 
     Raises:
         ModelUnavailableError: a checkpoint could not be loaded or verified,
@@ -72,8 +76,18 @@ async def run_detection(
     """
     models = registry.active()
 
-    started = time.perf_counter()
     try:
+        # One-time model loads happen HERE, outside the timed region, so
+        # latency_ms measures inference only. Normally both are already
+        # resident (startup warm-up, app/m2_analysis/warmup.py) and these return
+        # immediately; if the warm-up was off or failed, the load still happens
+        # - it is just not counted as this request's inference time.
+        detectors.primary.load()
+        if models.frequency_detector is not None:
+            frequency_detector.frequency.load()
+
+        started = time.perf_counter()
+
         # Semantic branch: the SigLIP 2 fine-tune.
         semantic_score = detectors.primary.score(
             prepared.source_reference, capture=xai_requested
@@ -99,19 +113,9 @@ async def run_detection(
         fusion_score, predicted_class, confidence_score = fusion.combine(
             semantic_score, frequency_score, models.fusion
         )
-
-        # Spectral FEATURES for M3's explainability - the hand-written FFT
-        # pipeline, not the detector. Computed ONLY when asked: a 512x512 FFT
-        # on every request would be paid for nothing, since this produces no
-        # score. Never fails the request - explainability is a nice-to-have,
-        # a verdict is not.
-        if xai_requested:
-            try:
-                frequency.extract_features(
-                    prepared.source_reference, models.spectral_features
-                )
-            except Exception:  # noqa: BLE001
-                pass
+        # (The xai path used to run frequency.extract_features() here and
+        # throw the spectrum away - pure cost, counted in latency_ms. Removed
+        # in Phase 1b; Phase 3 brings it back with its result actually used.)
     except InferenceError:
         raise
     except Exception as exc:  # noqa: BLE001 - deliberately broad, see PRD2 11.1

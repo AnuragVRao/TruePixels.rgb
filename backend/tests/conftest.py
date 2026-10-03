@@ -29,6 +29,7 @@ os.environ.setdefault("DATABASE_URL", f"sqlite:///{(_SCRATCH / 'test.db').as_pos
 os.environ.setdefault("STORAGE_DIR", str(_SCRATCH / "storage"))
 os.environ.setdefault("EMAIL_BACKEND", "console")
 os.environ.setdefault("REQUIRE_2FA", "False")
+os.environ.setdefault("WARMUP_ON_STARTUP", "False")  # models load lazily in tests
 
 
 def make_image(width: int = 256, height: int = 256, seed: int = 7) -> Image.Image:

@@ -114,7 +114,8 @@ def run() -> dict:
     os.environ["STORAGE_DIR"] = str(scratch / "storage")
     os.environ.setdefault("EMAIL_BACKEND", "console")
     os.environ["REQUIRE_2FA"] = "False"
-    os.environ["WARMUP_ON_STARTUP"] = "False"
+    # WARMUP_ON_STARTUP is left at its default (on): the check runs the app the
+    # way production does, so a warm-up that changed a score would be caught.
     sys.path.insert(0, str(BACKEND_ROOT))
 
     from fastapi.testclient import TestClient

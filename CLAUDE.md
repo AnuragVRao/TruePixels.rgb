@@ -246,8 +246,11 @@ rejected at upload. `GET /health` shows both models, whether each
 is loaded, the AI index the semantic branch resolved, and the sign convention
 the frequency branch is running under.
 
-The **first** prediction downloads the SigLIP 2 checkpoint (~370 MB) and loads
-and verifies the SPAI weights (~8 s); after that both stay resident.
+Both models load at **startup** (`WARMUP_ON_STARTUP`, default on; ~9 s per
+branch, plus the SigLIP 2 download, ~370 MB, the very first time), so no
+request pays for it and `latency_ms` measures inference only. With the
+warm-up off they load on the first prediction instead, still outside the
+timed region.
 
 ### Observed latency, warm (measured 2026-09-12, 14 images, 1024^2 - 8192x4096)
 
@@ -320,8 +323,9 @@ backend/app/
 backend/scripts/
   convert_spai_checkpoint.py one-time spai.pth → spai.safetensors (restricted unpickler)
 backend/seed_admin.py        M1's script: creates the first Admin account
-backend/tests/               152 tests, all green (2026-09-30):
-  test_*.py                  M2: 76 fast + 13 model-backed (end-to-end through M1 and M3)
+backend/tests/               184 tests, all green (2026-10-03, phase 1b):
+  test_*.py                  M2 + cross-module: storage access, audit logging, warm-up,
+                             plus the model-backed end-to-end suite (test_api_predict.py)
   m1/                        M1's suite (36), unchanged
   m3/                        M3's suite (27), test files unchanged; conftest adapted
   fixtures/spai_state_dict_manifest.json   key/shape/dtype of all 324 released tensors
@@ -500,10 +504,10 @@ The public field set is now exactly PRD2 §7.3's again.
    M1's auth. `run_detection(prepared)` still works as PRD4 writes it; it
    also accepts the request's `db` session.
 3. ~~No auth on any endpoint~~ — **resolved 2026-09-30** by M1's C3.
-4. **C1's `tensor_ref` is no longer read by M2.** Each branch preprocesses
-   the native original itself. M1 still builds and saves the CLIP tensor
-   (at upload and again at prediction), which nothing consumes. **C1 v2
-   should drop it**; until then it costs one small `.npy` per call.
+4. ~~C1's CLIP tensor is built and saved but never read~~ — **resolved
+   2026-10-03**: M1 no longer builds or saves it (changes.md 6.3). C1's
+   `tensor_ref`/`shape`/`dtype`/`normalization` remain as optional fields,
+   always `None`; **C1 v2 should drop them**.
 5. **`ml/training/` is retired** — it contradicts §0. `ml/evaluation/` stays:
    benchmarking a pretrained detector is evaluation, not training, and remains
    both legitimate and wanted (Step 7).
@@ -518,7 +522,31 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-01 (latest) — operating point selected on a validation split
+### 2026-10-02 / 10-03 (latest) — completion phases 0, 1a, 1b
+- The project is being finished in reviewed phases (plan approved by the user;
+  one `phase-N:` commit per unit, never pushed). Phase 0 baseline commit
+  `d371021`; the hard-coded admin seed password was removed **before** it
+  could enter history (`git log --all -S` finds only the unrelated M1 test
+  fixture string).
+- **Security: `/static` served the whole storage tree unauthenticated** —
+  every upload and the SPAI weights. Removed; files now go out only through
+  owner-only endpoints with resolved-path containment checks and D6 audit
+  rows (changes.md 6.1, 6.2). Path-traversal and junction/symlink tests.
+- `emit_log` swallows write errors by design; tests had silently written no
+  D6 rows. Swallowed failures are now recorded and `strict_audit_log` fails a
+  test on them.
+- NF.5 tripwire: `ml/evaluation/regression_check.py` (24 images, float.hex,
+  real HTTP path). Bit-identical across every phase-1 change.
+- Dead CLIP tensor removed (changes.md 6.3); startup warm-up; `latency_ms`
+  now excludes model load and the discarded xai FFT. First request after
+  boot: 889 ms (was 20,861 ms cold).
+- Baseline was **not** green on arrival: one stale test assumed w = 0.5.
+  Fixed. Held-out metrics re-derived from the per-image CSV: they were
+  computed at w = 0.25, τ = 0.7558 — the configuration that runs.
+- **Next:** Phase 2, PostgreSQL + Alembic (the `cold_start` D4 column lands in
+  its baseline migration).
+
+### 2026-10-01 — operating point selected on a validation split
 - Reopened Step 4. It had been closed as "fitting is training"; that ruling was
   made when no labelled data existed and was broader than §0 requires — §0
   forbids updating model **weights**, and w and τ are config constants that
