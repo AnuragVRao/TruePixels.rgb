@@ -699,3 +699,71 @@ upload files no longer exist (they were already absent from
 **Tests.** `test_missing_files.py`, on a fixture shaped like the migrated
 rows: result view, both image endpoints and the panel endpoint (owner 410,
 stranger 404), the PDF text (via pypdf), and the overlay refusal.
+
+### 6.7 Explainability is real (phase 3) - and a notice to M3 about the ActivationBundle
+
+**Notice to M3: Contract C2 `ActivationBundle` changed.** PRD2 §7.3 and
+PRD4 §4.5 mark it unstable, so the field set can change with notice and
+without a version bump. This is that notice.
+
+- `backbone` now admits `"siglip_b16"`. The semantic model is SigLIP
+  (ViT-B/16, 224 px, a 14x14 patch grid), not CLIP.
+- **`pooling` (new):**
+  - `"mean"` for SigLIP. Its classifier mean-pools all 196 patch tokens and
+    there is **no CLS token**, so rollout must aggregate over every query
+    token.
+  - `"cls"` (the default) keeps M3's original CLS-row behaviour.
+  - `explain.compute_attention_rollout` takes the matching `pooling`
+    argument.
+- **`spectrum` changed meaning.** It is now the mean `log(1+|FFT|)` of the
+  224x224 RGB patches that SPAI actually analyses (stride 224, five-crop when
+  there are fewer than 4 patches, values in [0, 1]). The values come from
+  the vendored SPAI config, not hard-coded. It used to be a 512x512
+  luminance centre crop that SPAI never sees.
+- **`spectrum_meta` (new):** patch size and stride, patch count, five-crop
+  flag, analysed size, and SPAI's mask radius (16).
+- **`timings_ms` (new):** capture costs, for measurement.
+
+**M3 code changed:**
+- `explain.py`:
+  - rollout honours `pooling`;
+  - a token count that does not fit the grid now raises `XAI_UNAVAILABLE`.
+    It used to be truncated or zero-padded, which draws a wrong map;
+  - new `CAPTIONS` / `caption_for()` say what each panel shows and what it
+    does not (NF.13).
+- `overlay.py`:
+  - panels are generated independently;
+  - `persist_explainability()` returns `generated` / `partial` /
+    `unavailable` with reason codes instead of raising (SRS C.3), and
+    `generate_and_persist_explainability()` is kept for the stub;
+  - the spectrum panel draws SPAI's real r = 16 split (no decorative rings);
+  - PNGs carry no metadata and are bounded: the overlay is at most 1600 px
+    on its longer side (aspect kept), the spectrum at most 768 px;
+  - D5 references are stored relative to the explainability folder.
+- `reporting.py`: the PDF shows the original, the semantic overlay and the
+  spectrum in every case, each with its caption. It used to drop the
+  spectrum whenever the original existed.
+- `schemas.py`: `ExplainabilityItem.caption` (additive).
+
+**M2:**
+- `detectors.py`: passive forward pre-hooks capture each attention layer's
+  input during the normal scoring pass. `attention_maps()` recomputes the
+  weights exactly as transformers' eager attention does.
+- `xai.py`: the SPAI-patch spectrum.
+- `pipeline.py`: assembles the bundle after the timed region; `latency_ms`
+  stays inference-only.
+- `router_predict.py`: draws and stores the panels after D4 is committed, in
+  their own transaction, so a failure rolls back only D5. Reports
+  `xai_status` / `xai_reasons` (additive response fields) and an
+  `X-XAI-Time-Ms` header, and writes a D6 warning when not `generated`.
+
+**Faithfulness and cost (measured, not assumed).**
+- **Faithfulness:** on 40 validation images, masking the top-attended 20% of
+  the semantic map changes SigLIP 2's score more than random masks of equal
+  size: +0.071 [0.041, 0.103], 35/40 images, p = 5.8e-8. Bottom-attended
+  masks change it least. So the caption may say the map shows where the
+  model looked. It must not, and does not, claim that the map shows
+  manipulated regions.
+- **Cost:** explainability adds 1.1–3.6 s per request and about 7 MB of
+  VRAM. Details in `ml/evaluation/RESULTS.md`.
+

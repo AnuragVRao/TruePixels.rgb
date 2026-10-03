@@ -107,7 +107,7 @@ def payloads() -> list[tuple[str, bytes, str]]:
     return out
 
 
-def run(database_url: str | None = None) -> dict:
+def run(database_url: str | None = None, xai: bool = False) -> dict:
     """Score every payload through the HTTP path; return {name: {field: value}}.
 
     ``database_url``: run against this database instead of a scratch SQLite
@@ -158,6 +158,7 @@ def run(database_url: str | None = None) -> dict:
     headers = {"Authorization": f"Bearer {token}"}
 
     results: dict[str, dict] = {}
+    statuses: dict[str, int] = {}
     with TestClient(app) as client:
         for name, data, mime in payloads():
             up = client.post("/api/v1/images", headers=headers,
@@ -165,7 +166,7 @@ def run(database_url: str | None = None) -> dict:
             if up.status_code != 201:
                 raise SystemExit(f"upload failed for {name}: {up.status_code} {up.text}")
             pred = client.post("/api/v1/predictions", headers=headers,
-                               json={"image_id": up.json()["image_id"], "xai": False})
+                               json={"image_id": up.json()["image_id"], "xai": xai})
             if pred.status_code not in (200, 201):
                 raise SystemExit(f"prediction failed for {name}: {pred.status_code} {pred.text}")
             body = pred.json()
@@ -173,9 +174,13 @@ def run(database_url: str | None = None) -> dict:
                 f: (float(body[f]).hex() if isinstance(body[f], (int, float)) else body[f])
                 for f in FIELDS
             }
+            if xai:
+                statuses[body.get("xai_status", "?")] = statuses.get(body.get("xai_status", "?"), 0) + 1
             print(f"  {body['predicted_class']:<13} fusion={body['fusion_score']:.6f}  {name}")
+    if xai:
+        print(f"xai_status counts: {statuses}")
     return {"device": str(config.DEVICE), "database": database.engine.dialect.name,
-            "results": results}
+            "xai": xai, "results": results}
 
 
 def latest() -> Path:
@@ -193,6 +198,8 @@ def main() -> int:
     mode.add_argument("--compare", action="store_true")
     parser.add_argument("--out", help="baseline name for --record (default: timestamp)")
     parser.add_argument("--against", help="baseline file name for --compare (default: newest)")
+    parser.add_argument("--xai", action="store_true",
+                        help="request explainability on every prediction; scores must still match")
     parser.add_argument("--database-url", help="run through this database (scratch, *_test or "
                         "*_regression) instead of a temporary SQLite file")
     args = parser.parse_args()
@@ -201,7 +208,7 @@ def main() -> int:
         make_list()
         return 0
 
-    current = run(args.database_url)
+    current = run(args.database_url, xai=args.xai)
     if args.record:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

@@ -304,7 +304,7 @@ is therefore a **measured** 16 (3.4 GB peak; 24 gave 5% for +600 MB), and
 | 3 | ~~M2.2~~ | ~~Train the frequency classifier~~ → **superseded**: integrate a pretrained frequency-domain detector. Interim (2026-09-07): a second semantic detector, SwinV2. Final (2026-09-12): **SPAI**, SwinV2 removed | ✅ done (2026-09-12) |
 | 4 | M2.3 | Select the fusion weight and τ on a validation split | ✅ **done (2026-10-01)** — reopened. It had been closed as "fitting is training", a ruling made when no labelled data existed. w and τ are configuration constants, not model weights; §0 forbids updating weights, and PRD2 FR-03 explicitly calls for both to be tuned on validation. Chosen on scenes 99–296, disjoint from the test set: **w = 0.25, τ = 0.7558**. Not done: the calibration temperature (MM2.5) |
 | 5 | M2.4 | Postgres + Alembic, D3/D4 tables, registry endpoints, atomic activation | 🟡 D3/D4 tables exist (designed by M3, moved to M2) and every prediction writes D4 + commits; D3 rows are recorded **from config**. Not done: D3 as the authority (`active()` still reads config), registration canary, Alembic, Postgres |
-| 6 | M2.5 | ActivationBundle capture hooks (joint delivery with M3) | ⬜ waiting on M3 |
+| 6 | M2.5 | ActivationBundle capture hooks (joint delivery with M3) | ✅ **done (2026-10-03, Phase 3)** — SigLIP attention rollout (mean-pooled, faithfulness-tested) + spectrum of SPAI's own patches; panels in D5, results and PDF |
 | 7 | M2.6 | Benchmark the **pretrained** branches on a public labelled set — evaluation only, no weight updates. Should include the SigLIP 2 / SPAI / fused ablation | ✅ **done (2026-09-30)** — Synthbuster vs RAISE-1k, 99/class, with the SigLIP 2 / SPAI / fused ablation, a confound control and a degradation sweep (§6). Optional next: scale to 1000/class (one flag), and a set from post-2023 generators |
 
 Steps 2–4 previously blocked on acquiring a labelled dataset. **That
@@ -374,7 +374,7 @@ module.
 | D3/D4 persistence | ✅ every prediction writes D4 and commits before responding; M3 reads it back (asserted end-to-end). SQLite by default |
 | Registry (FR-06/07) | ⚠ D3 rows mirror config, `metrics` null; M3's activate endpoint flips a flag but does not change what runs |
 | Authentication / ownership | ✅ M1's JWT sessions on every M2/M3 endpoint; predictions owner-only, `IMG_NOT_FOUND` for not-yours (no id oracle) |
-| ActivationBundle for M3 | ❌ not built — always `None`, so M3 shows no panels and `/explainability` answers `XAI_UNAVAILABLE` (never a synthetic map) |
+| Explainability (F.10/F.11/F.14/NF.13) | ✅ **real** — attention recomputed from passively captured inputs (matches eager attention < 1e-4; scores bit-identical, `regression_check --xai` 24/24). Deletion test on 40 validation images: masking the top-attended 20% changes the score 0.265 vs 0.195 random (+0.071, CI [0.041, 0.103], p = 5.8e-8) — better than chance, modest. Frequency panel = mean spectrum of SPAI's 224 px patches + its r = 16 split; descriptive, not evidence. Cost: +1.1–3.6 s, +7 MB VRAM. See RESULTS.md |
 | **Detection of whole-image synthesis** | ✅ **measured** — Synthbuster vs RAISE-1k, 99 per class, at an operating point chosen on a disjoint validation split: fused accuracy 0.864 [0.81, 0.90], recall 0.838, AUC 0.941 [0.91, 0.97]; SPAI alone AUC 0.967. Confound-controlled. Read the narrow claim, not "accuracy" |
 | **False-positive rate MM2.6 (≤ 0.10)** | ❌ **still missed, narrowly** — 0.111 [0.06, 0.19] after selecting w and τ on a validation split specifically to meet it (validation predicted 0.096). Improved from 0.162, at a cost of 10 points of recall. 11 of 99 genuine photographs called AI Generated |
 | Robustness to resizing | ❌ **measured and poor** — halving both classes takes SPAI recall 0.939 → 0.616. JPEG q75 costs almost nothing. See below |
@@ -539,7 +539,20 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-02 / 10-03 (latest) — completion phases 0, 1a, 1b
+### 2026-10-03 (latest) — Phase 2 (PostgreSQL + Alembic) and Phase 3 (explainability)
+- Phase 2: PostgreSQL via compose (127.0.0.1 only), Alembic baseline, one
+  engine for app + logger + pipeline, startup refuses an un-migrated DB,
+  dev SQLite data migrated (pre-checked, read-only on the source). Scores
+  bit-identical end to end through PostgreSQL.
+- Phase 3: explainability built for real — see the §6 row and RESULTS.md.
+  Two things found on the way: `attn_implementation="eager"` passed to
+  `from_pretrained` does **not** reach this checkpoint's vision sub-config
+  (it stays SDPA); and PNG `optimize=True` was ~80% of the overlay's cost.
+  Explainability never fails a prediction: D5 is written after D4 commits;
+  forced failures tested on SQLite and PostgreSQL.
+- **Next:** Phase 4 (real model management, F.19).
+
+### 2026-10-02 / 10-03 — completion phases 0, 1a, 1b
 - The project is being finished in reviewed phases (plan approved by the user;
   one `phase-N:` commit per unit, never pushed). Phase 0 baseline commit
   `d371021`; the hard-coded admin seed password was removed **before** it

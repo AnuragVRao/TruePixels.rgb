@@ -63,3 +63,14 @@ Run `--record` before any change that could touch the scoring path and
 written to `ml/outputs/regression/` (gitignored) together with the device
 they were recorded on — GPU and CPU differ in the last bits, so only
 same-device comparisons are expected to be identical.
+
+## Explainability checks
+
+- `xai_faithfulness.py`: a deletion sanity test of the semantic attention
+  map. Masking the top-attended region is compared with random and
+  bottom-attended regions of equal size, on the validation split.
+- `xai_cost.py`: latency and peak VRAM with xai off vs on, through the HTTP
+  path, including 16 MP images.
+
+Results and caveats are in `RESULTS.md` under "Explainability: faithfulness
+and cost".

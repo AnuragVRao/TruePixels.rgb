@@ -16,6 +16,97 @@ and summary JSON land in `ml/outputs/`.
 
 ---
 
+### Explainability: faithfulness and cost, 2026-10-03
+
+**What the semantic map is.** It is an attention rollout of the SigLIP 2
+classifier. The attention weights are recomputed from inputs captured during
+the normal scoring pass; on a test image they match transformers' own eager
+attention to within 1e-4, across all 12 layers and 12 heads. Rollout is
+mean-pooled, because the classifier averages all 196 patch tokens and has no
+CLS token. With capture on, the score is bit-identical:
+`regression_check.py --xai` gives 24/24 identical, with 23 `generated` and
+1 `partial` (the 128 px image has no frequency panel).
+
+**Faithfulness (deletion sanity test)**, `ml/evaluation/xai_faithfulness.py`.
+The protocol was fixed before running:
+- **sample:** 40 images from the *validation* split (`sbr_val`, 20 real + 20
+  generated);
+- **masks:** the 39 highest-relevance cells (20%), 10 random 39-cell sets,
+  and the 39 lowest-relevance cells, each filled with the image's mean colour;
+- **effect:** the absolute change in SigLIP 2's P(AI).
+
+| mask | mean \|change in score\| |
+|---|---|
+| top-20% attended | **0.265** |
+| random 20% (mean of 10) | 0.195 |
+| bottom-20% attended | 0.103 |
+
+- Top minus random, paired per image: **+0.071, 95% bootstrap CI
+  [0.041, 0.103]**.
+- Top beats random on **35 of 40 images (87.5%)**; Wilcoxon signed-rank
+  (top > random) **p = 5.8e-8**.
+- The ordering top > random > bottom is the one a faithful map produces.
+
+**What this supports, and no more:** the map ranks regions by how much the
+semantic branch's score depends on them better than chance, on this sample.
+Three limits:
+1. The effect is modest, and random masks alone move the score by 0.195, so
+   the model reacts strongly to any masking.
+2. A mean-colour patch is an out-of-distribution edit.
+3. The measure is the size of the change, not its direction; the map does
+   not say whether a region pushes towards "Real" or "AI Generated".
+
+It says nothing about the frequency branch, and nothing about *where an
+image was manipulated*. The captions say exactly this.
+
+**What the panels look like (an observation on two images, not a finding).**
+- **Semantic overlay:** on a Midjourney image, the strongest rollout cells
+  sat in background corners and edges rather than on the objects. That is a
+  known behaviour of ViTs, which park attention on low-content tokens. It is
+  one more reason the caption claims "where the model looked" and never
+  "where the image is fake".
+- **Spectrum, Midjourney image:** a regular grid of isolated peaks (around
+  ±56 and ±112 cycles/patch), the periodic pattern upsampling layers tend to
+  leave.
+- **Spectrum, camera crop:** smooth.
+- **Both spectra:** a bright axis-aligned cross from the patch edges. SPAI
+  applies no window before its FFT, so this is part of what SPAI sees, and
+  the panel keeps it.
+- **Display:** the colour range is clipped to the 1st–99.5th percentile.
+  Unclipped, the DC peak made the panel almost black. The data is unchanged
+  and the colourbar says so.
+
+**The frequency panel** is not a map of evidence. It is the mean
+log-magnitude spectrum of the 224x224 patches SPAI actually analyses, with
+SPAI's r = 16 low/high split drawn. It is descriptive by construction, so
+there is no faithfulness test for it.
+
+**Cost**, `ml/evaluation/xai_cost.py`:
+- RTX 4050 Laptop GPU, warm, 3 repeats, medians;
+- through the real HTTP path (scratch SQLite);
+- `wall` is the whole request; `xai` is `X-XAI-Time-Ms` (capture, spectrum,
+  rendering and the D5 write); VRAM is the peak during the request.
+
+| image | MP | SPAI patches | wall, xai off | wall, xai on | xai | peak VRAM off / on |
+|---|---|---|---|---|---|---|
+| DALL-E 2, 1024² | 1.0 | 16 | 0.59 s | 1.68 s | 1.15 s | 2148 / 2155 MB |
+| Firefly, 1792x2304 | 4.1 | 80 | 2.63 s | 4.38 s | 1.99 s | 2273 / 2280 MB |
+| RAISE JPEG, 4288x2848 | 12.2 | 228 | 6.88 s | 9.58 s | 2.90 s | 2535 / 2542 MB |
+| RAISE JPEG, 3264x4928 | 16.1 | 308 | 9.35 s | 12.54 s | 3.58 s | 2672 / 2679 MB |
+| RAISE JPEG, 3264x4928 | 16.1 | 308 | 9.33 s | 12.42 s | 3.46 s | 2672 / 2679 MB |
+
+- **VRAM:** XAI adds **about 7 MB**; nothing new runs on the GPU.
+- **Wall time:** it adds **1.1–3.6 s**.
+- **Where the time goes:** at 16 MP, the SPAI-patch spectrum takes ~1.8 s
+  (CPU FFT of 308 patches), rollout plus overlay ~1.2 s, and the spectrum
+  panel ~0.6 s. Attention recomputation is under 50 ms.
+- **PNG compression:** the first run used PNG `optimize=True`, which cost
+  about 3 s of a 3.7 s overlay at 16 MP and doubled these figures (xai
+  2.5–6.5 s). It was switched to the standard compression level, and the
+  table is from the re-run.
+- **Caveat:** these are three repeats on one laptop. They are cost
+  indicators, not latency percentiles; Phase 7 measures those under load.
+
 ### Choosing the operating point, 2026-10-01 — a validation split
 
 **Why a second split.** The 2026-09-30 benchmark (below) was run at
