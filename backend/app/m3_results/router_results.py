@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Literal
 from fastapi import APIRouter, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.shared import config
 from app.shared.db import get_db
@@ -15,7 +15,7 @@ from app.shared.deps import current_session
 from app.shared.schemas import SessionContext
 from app.shared.errors import AppException
 from app.m3_results.models import Prediction, Image, Explainability
-from app.m3_results.schemas import PredictionResultView, ExplainabilityItem
+from app.m3_results.schemas import ExplainabilityItem, ModelRef, PredictionResultView, ResultModels
 from app.m3_results.explain import caption_for
 from app.m3_results.reporting import compute_confidence_band
 from app.m3_results.urls import explainability_file_url, image_file_url
@@ -92,6 +92,11 @@ def get_prediction_result(
         visualizations=vis_items,
         model_name=model_name,
         model_version=model_version,
+        models=ResultModels(
+            semantic=_model_ref(db, getattr(pred, "semantic_model_id", None)),
+            frequency=_model_ref(db, getattr(pred, "frequency_model_id", None)),
+            fusion=_model_ref(db, pred.model_id),
+        ),
         prediction_timestamp=pred.prediction_timestamp,
     )
 
@@ -158,6 +163,14 @@ def get_explainability(
 # changes.md.
 
 
+def _model_ref(db: Session, model_id: int | None) -> ModelRef | None:
+    from app.m2_analysis.models import ModelRegistry
+
+    row = db.get(ModelRegistry, model_id) if model_id else None
+    return ModelRef(model_id=row.model_id, model_name=row.model_name,
+                    model_version=row.model_version) if row else None
+
+
 def _not_found(prediction_id: int) -> AppException:
     return AppException(
         code="INF_PREDICTION_NOT_FOUND",
@@ -168,7 +181,7 @@ def _not_found(prediction_id: int) -> AppException:
 
 @router.get(
     "/explainability/{prediction_id}/{branch}",
-    response_class=FileResponse,
+    response_class=Response,
     summary="Download one explainability panel (owner only)",
 )
 def get_explainability_file(
@@ -176,7 +189,7 @@ def get_explainability_file(
     branch: Literal["semantic", "frequency"],
     session: SessionContext = Depends(current_session),
     db: Session = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     """INTEGRATION: replaces the unauthenticated /static mount (changes.md).
 
     Same ownership join and same INF_PREDICTION_NOT_FOUND as the endpoints

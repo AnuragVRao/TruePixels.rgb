@@ -13,7 +13,7 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 
 from app.shared.errors import AppException
 
@@ -69,10 +69,19 @@ def resolve_stored_file(
 
 def stored_file_response(
     reference: str | None, root: Path, not_found: AppException, missing: AppException | None = None
-) -> FileResponse:
-    """A ``FileResponse`` for a stored image, after :func:`resolve_stored_file`."""
+) -> Response:
+    """The stored image's bytes, after :func:`resolve_stored_file`.
+
+    Read in full with a ``with`` block and sent from memory rather than as a
+    streaming ``FileResponse``: every stored file is bounded (uploads <= 10 MB,
+    panels a few MB), and the handle is then closed deterministically before
+    the response is sent - a browser run on Windows found storage files left
+    open by the server, which blocks deleting them (Phase 5a).
+    """
     path = resolve_stored_file(reference, root, not_found, missing)
-    return FileResponse(path, media_type=_MEDIA_TYPES[path.suffix.lower()], headers=_HEADERS)
+    with open(path, "rb") as handle:
+        data = handle.read()
+    return Response(data, media_type=_MEDIA_TYPES[path.suffix.lower()], headers=_HEADERS)
 
 
 def thumbnail_response(

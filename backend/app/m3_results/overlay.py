@@ -52,7 +52,8 @@ def _save_clean_png(pixels: np.ndarray | Image.Image, output_path: str, max_side
                              Image.Resampling.LANCZOS)
     # compress_level 6 without optimize: optimize=True spent ~3 s of a 3.7 s
     # overlay on a 16 MP image (measured, Phase 3) for ~6% smaller files.
-    clean.save(output_path, format="PNG", compress_level=6)
+    with open(output_path, "wb") as handle:  # closed deterministically (Windows file locks)
+        clean.save(handle, format="PNG", compress_level=6)
 
 
 def _bounded(width: int, height: int, max_side: int) -> tuple[int, int]:

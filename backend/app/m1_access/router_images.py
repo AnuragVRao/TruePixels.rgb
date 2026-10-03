@@ -4,7 +4,7 @@ Conforms to PRD Section 5.2 / 6.3 and SRS F.5, F.6, F.7.
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, File, UploadFile, status
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.m1_access.models import Image as DBImage
 from app.m1_access.schemas import ImageMetadataResponse, ImageUploadResponse
@@ -126,7 +126,7 @@ def _file_missing(image_id: int) -> AppException:
     "/{image_id}/file",
     status_code=status.HTTP_200_OK,
     summary="Download an uploaded image (owner only)",
-    response_class=FileResponse,
+    response_class=Response,
 )
 def get_image_file(
     image_id: int,

@@ -654,65 +654,35 @@
       }
     }
 
-    // RELIABLE PDF DOWNLOAD FUNCTION USING DIRECT BROWSER STREAM
-    function downloadReport() {
+    // PDF download (Phase 5a): fetched with the Authorization header and saved
+    // from a blob URL. The ?token= query parameter no longer exists - a token
+    // in a URL lands in browser history and server logs.
+    async function downloadReport() {
       hideError();
-      const reportUrl = `/api/v1/reports/${activePredictionId}?token=${encodeURIComponent(currentPersonaToken)}`;
-      
       const btn = document.getElementById("btnPdfDownload");
       const originalText = btn.innerHTML;
-      btn.innerHTML = "<i data-lucide='check' class='w-4 h-4 text-emerald-400'></i> Downloading...";
+      btn.innerHTML = "<i data-lucide='loader' class='w-4 h-4'></i> Downloading...";
       lucide.createIcons();
-
-      // Trigger native browser download
-      window.location.href = reportUrl;
-
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        lucide.createIcons();
-      }, 2500);
-    }
-
-    async function loadHistory(page = 1) {
-      hideError();
       try {
-        const res = await fetch(`/api/v1/history?page=${page}&page_size=10`, { headers: getAuthHeaders() });
+        const res = await fetch(`/api/v1/reports/${activePredictionId}`, {
+          headers: { "Authorization": `Bearer ${currentPersonaToken}` },
+        });
         if (!res.ok) {
-          const errData = await res.json();
-          showError(errData.error?.code || res.status, errData.error?.message);
+          const err = await res.json().catch(() => ({}));
+          showError(err.error?.code || res.status, err.error?.message || "Report download failed");
           return;
         }
-        const data = await res.json();
-        const tbody = document.getElementById("historyTableBody");
-        tbody.innerHTML = "";
-
-        data.items.forEach(item => {
-          const tr = document.createElement("tr");
-          tr.className = "hover:bg-slate-800/40 cursor-pointer transition";
-          const badgeClass = item.predicted_class === "AI Generated" ? "badge-ai" : "badge-real";
-          tr.innerHTML = `
-            <td class="py-3 px-4 font-bold text-white">#${item.prediction_id}</td>
-            <td class="py-3 px-4">
-              <img data-auth-src="${item.thumbnail_url}" alt="" class="w-10 h-7 rounded object-cover border border-slate-700" />
-            </td>
-            <td class="py-3 px-4">
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">${item.predicted_class}</span>
-            </td>
-            <td class="py-3 px-4 font-bold">${item.confidence_percentage}% <span class="text-[10px] text-slate-400 font-normal">(${item.confidence_band})</span></td>
-            <td class="py-3 px-4 text-slate-400 text-[11px]">${new Date(item.prediction_timestamp).toLocaleDateString()}</td>
-            <td class="py-3 px-4 text-right space-x-1.5">
-              <button onclick="switchTab('results'); loadResult(${item.prediction_id});" class="px-2.5 py-1 bg-blue-600/80 hover:bg-blue-600 text-white rounded text-[11px] font-medium">View</button>
-              <button onclick="downloadSpecificReport(${item.prediction_id})" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[11px] font-medium">PDF</button>
-            </td>
-          `;
-          tbody.appendChild(tr);
-          const thumb = tr.querySelector("img[data-auth-src]");
-          setAuthImage(thumb, thumb.dataset.authSrc).catch(() => thumb.classList.add("hidden"));
-        });
-
-        document.getElementById("historyTotal").textContent = `Showing ${data.items.length} of ${data.total} scans (Page ${data.page} of ${data.total_pages})`;
-      } catch (err) {
-        showError("HISTORY_ERROR", err.message);
+        const url = URL.createObjectURL(await res.blob());
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `TruePixels_Report_${activePredictionId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } finally {
+        btn.innerHTML = originalText;
+        lucide.createIcons();
       }
     }
 

@@ -12,7 +12,6 @@ from app.shared.deps import current_session
 from app.shared.errors import AppException
 from app.shared.schemas import SessionContext
 from app.main import app
-from app.m3_results.router_reports import report_session
 from app.m3_results.models import LogEntry
 from app.stubs.m1_stub import create_dummy_user, create_dummy_image, prepare_model_input
 from app.stubs.m2_stub import seed_dummy_models, run_detection
@@ -79,15 +78,6 @@ def mock_current_session(authorization: str | None = Header(default=None)) -> Se
     if not authorization or not authorization.startswith("Bearer "):
         raise AppException(code="AUTH_TOKEN_INVALID", message="Missing or malformed Authorization header.", status_code=401)
     return _resolve_mock_token(authorization.split(" ", 1)[1].strip())
-
-
-def mock_report_session(
-    token: str | None = None,
-    authorization: str | None = Header(default=None),
-) -> SessionContext:
-    if authorization and authorization.startswith("Bearer "):
-        return _resolve_mock_token(authorization.split(" ", 1)[1].strip())
-    return _resolve_mock_token(token)
 
 
 # INTEGRATION (Phase 2, changes.md 6.5): no private in-memory engine any more.
@@ -200,7 +190,6 @@ def client(db_session):
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[current_session] = mock_current_session
-    app.dependency_overrides[report_session] = mock_report_session
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

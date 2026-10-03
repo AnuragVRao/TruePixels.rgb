@@ -3,50 +3,33 @@ Module M3 Report Generation endpoints (F.14, US-3.3).
 Generates and streams downloadable PDF reports for authorized predictions.
 """
 from __future__ import annotations
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from fastapi.responses import Response
-from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.shared.db import get_db
 from app.shared.schemas import SessionContext
-from app.shared.errors import AppException, AuthTokenInvalidException
+from app.shared.deps import current_session
+from app.shared.errors import AppException
 from app.shared.logging import emit
-from app.m1_access.security import http_bearer, verify_session_token
 from app.m3_results.models import Prediction, Image, Explainability
 from app.m3_results.reporting import build_pdf_report
 
 router = APIRouter(tags=["Reports"])
 
 
-def report_session(
-    token: str | None = Query(default=None, description="Session token, for plain browser downloads that cannot set a header."),
-    credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
-    db: Session = Depends(get_db),
-) -> SessionContext:
-    """
-    INTEGRATION: resolves the caller through M1's real token verification,
-    from the Authorization header or the ?token= parameter.
-
-    The original resolved tokens against M3's mock ACTIVE_SESSIONS table and,
-    when none matched, fell back to test user 1 - so anyone could download
-    user 1's reports. Its `authorization` parameter was also read from the
-    query string rather than the header. See changes.md.
-    """
-    raw = credentials.credentials if credentials and credentials.credentials else token
-    if not raw:
-        raise AuthTokenInvalidException("Authorization Bearer token or ?token= is required.")
-    return verify_session_token(raw, db)
-
-
 @router.get("/reports/{prediction_id}")
 def download_prediction_report(
     prediction_id: int,
-    resolved_session: SessionContext = Depends(report_session),
+    resolved_session: SessionContext = Depends(current_session),
     db: Session = Depends(get_db),
 ) -> Response:
     """
     Generates and streams a downloadable PDF forensic report.
-    Supports either Authorization: Bearer token header or ?token= query parameter.
+
+    INTEGRATION (Phase 5a, changes.md 6.9): Authorization header only. The
+    ?token= query parameter is gone - a session token in a URL ends up in
+    browser history, proxy and server logs. Browsers download with fetch +
+    the header + a blob URL (React app and legacy dashboard).
     """
     # 1. Enforce ownership check (or admin access)
     query = db.query(Prediction).join(Image, Image.image_id == Prediction.image_id).filter(Prediction.prediction_id == prediction_id)

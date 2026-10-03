@@ -16,6 +16,20 @@ class ExplainabilityItem(BaseModel):
     caption: str = ""
 
 
+class ModelRef(BaseModel):
+    model_id: int
+    model_name: str
+    model_version: str
+
+
+class ResultModels(BaseModel):
+    """INTEGRATION (Phase 5a, changes.md 6.9): the D3 rows that actually
+    produced this prediction (D4's foreign keys), so a UI can name them."""
+    semantic: ModelRef | None = None
+    frequency: ModelRef | None = None  # null when the frequency branch gave no score
+    fusion: ModelRef | None = None
+
+
 class PredictionResultView(BaseModel):
     prediction_id: int
     image_id: int
@@ -35,6 +49,7 @@ class PredictionResultView(BaseModel):
     visualizations: list[ExplainabilityItem]
     model_name: str
     model_version: str
+    models: ResultModels = ResultModels()
     prediction_timestamp: datetime
     interpretive_caption: str = (
         "Highlighted regions indicate where the model focused and are not proof of manipulation."

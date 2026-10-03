@@ -387,3 +387,24 @@ def test_thumbnail_reference_with_dotdot_is_refused(variant):
     _set_image_reference(image_id, _traversal_references(config.UPLOADS_DIR, target)[variant])
     assert_not_found(client.get(f"/api/v1/images/{image_id}/thumbnail", headers=owner),
                      "IMG_NOT_FOUND")
+
+
+def test_report_download_no_longer_accepts_a_query_token():
+    """Phase 5a: a session token in a URL is refused; only the header works."""
+    from app.m1_access.security import create_session_token
+
+    user_id, owner = make_user()
+    image_id, _ = upload(owner, seed=90)
+    prediction_id = add_prediction(image_id, "unused.png")
+    token = owner["Authorization"].split(" ", 1)[1]
+    assert client.get(f"/api/v1/reports/{prediction_id}?token={token}").status_code == 401
+    ok = client.get(f"/api/v1/reports/{prediction_id}", headers=owner)
+    assert ok.status_code == 200 and ok.headers["content-type"] == "application/pdf"
+
+
+def test_results_name_the_models_that_produced_the_prediction():
+    _, owner = make_user()
+    image_id, _ = upload(owner, seed=91)
+    prediction_id = add_prediction(image_id, "unused.png")
+    models = client.get(f"/api/v1/results/{prediction_id}", headers=owner).json()["models"]
+    assert models["fusion"]["model_name"] == "test fusion" and models["semantic"] is None
