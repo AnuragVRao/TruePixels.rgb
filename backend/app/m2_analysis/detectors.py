@@ -110,8 +110,9 @@ class PretrainedDetector:
     first load against concurrent requests.
     """
 
-    def __init__(self, checkpoint: str, *, role: str) -> None:
+    def __init__(self, checkpoint: str, *, role: str, revision: str | None = None) -> None:
         self.checkpoint = checkpoint
+        self.revision = revision
         self.role = role  # "primary", for error messages
         self._lock = threading.Lock()
         self._model = None
@@ -140,11 +141,8 @@ class PretrainedDetector:
             from transformers import AutoImageProcessor, AutoModelForImageClassification
 
             try:
-                processor = AutoImageProcessor.from_pretrained(self.checkpoint)
-                model = AutoModelForImageClassification.from_pretrained(
-                    self.checkpoint,
-                    use_safetensors=True,
-                )
+                processor, model = self._from_pretrained(AutoImageProcessor,
+                                                         AutoModelForImageClassification)
             except Exception as exc:  # noqa: BLE001
                 raise ModelUnavailableError(
                     f"could not load the {self.role} detector "
@@ -160,8 +158,30 @@ class PretrainedDetector:
             self._processor = processor
             self._ai_index = ai_index
 
-    def score(self, image_path: str, *, capture: bool = False) -> BranchResult:
+    def _from_pretrained(self, processor_cls, model_cls):
+        """Load the pinned revision - from the local cache when it is there.
+
+        local_files_only first, so a cached model never touches the network
+        (startup works offline); only an uncached revision is downloaded.
+        """
+        kwargs = {"revision": self.revision, "use_safetensors": True}
+        try:
+            return (processor_cls.from_pretrained(self.checkpoint, revision=self.revision,
+                                                  local_files_only=True),
+                    model_cls.from_pretrained(self.checkpoint, local_files_only=True, **kwargs))
+        except OSError:
+            return (processor_cls.from_pretrained(self.checkpoint, revision=self.revision),
+                    model_cls.from_pretrained(self.checkpoint, **kwargs))
+
+    def score(self, image_path: str, *, capture: bool = False, head=None) -> BranchResult:
         """Return P(AI Generated) for an image on disk.
+
+        ``head`` (Phase 4, F.19): an uploaded classification head
+        (``heads.LoadedHead``) to use instead of the checkpoint's own. The
+        backbone and pooling are unchanged; a forward hook on the published
+        classifier replaces its output with the uploaded head's for this one
+        call (the hook is always removed). With ``head=None`` the forward pass
+        is exactly the published model's - no hook at all.
 
         Reads the native-resolution original and applies the checkpoint's own
         preprocessing. Deterministic: eval mode, inference mode, no sampling,
@@ -184,6 +204,11 @@ class PretrainedDetector:
 
         captured: list[torch.Tensor] = []
         handles = self._attach_attention_capture(captured) if capture else []
+        ai_index = self._ai_index
+        if head is not None:
+            handles.append(self._model.classifier.register_forward_hook(
+                lambda _m, inputs, _out: head.module(inputs[0])))
+            ai_index = head.ai_index
         try:
             with torch.inference_mode():
                 logits = self._model(**inputs).logits
@@ -197,7 +222,7 @@ class PretrainedDetector:
                 handle.remove()
 
         return BranchResult(
-            score=float(probabilities[0, self._ai_index].item()),
+            score=float(probabilities[0, ai_index].item()),
             activations=activations,
         )
 
@@ -217,6 +242,11 @@ class PretrainedDetector:
     # The hooks only read; the forward pass and so the score are unchanged
     # bit for bit (asserted by test and by regression_check --xai). Hooks are
     # attached for one call and always removed.
+
+    def classifier_state(self) -> dict:
+        """The published head's tensors (for the quality gate's reference path)."""
+        self.load()
+        return {k: v.detach() for k, v in self._model.classifier.state_dict().items()}
 
     def _encoder_layers(self):
         return self._model.vision_model.encoder.layers
@@ -270,7 +300,8 @@ class PretrainedDetector:
 
 
 # Module-level instance, so the weights are shared across all requests.
-primary = PretrainedDetector(config.DETECTOR_PRIMARY, role="primary")
+primary = PretrainedDetector(config.DETECTOR_PRIMARY, role="primary",
+                             revision=config.DETECTOR_PRIMARY_REVISION)
 
 
 def reset_cache() -> None:

@@ -20,20 +20,16 @@ from fastapi.testclient import TestClient
 
 from app.m1_access.models import User
 from app.m1_access.security import create_session_token, hash_password
-from app.m2_analysis import frequency_detector
 from app.m2_analysis.models import ModelRegistry, Prediction
 from app.main import app
 from app.shared import config
 from app.shared.db import SessionLocal
 from conftest import make_image, png_bytes
 
-pytestmark = [
-    pytest.mark.slow,
-    # Reproduction committed BEFORE the fix (Phase 4 item i); both fail on the
-    # config-driven registry. strict=True: the suite goes red if they pass
-    # without the fix commit removing this marker.
-    pytest.mark.xfail(strict=True, reason="stale D3 provenance - fixed by the D3-authority registry"),
-]
+pytestmark = pytest.mark.slow
+# History: these two tests were committed first as strict xfail, failing on the
+# config-driven registry (commit "reproduce stale D3 provenance"). The second
+# is rewritten below for D3 authority: config edits no longer change what runs.
 client = TestClient(app)
 _n = itertools.count()
 
@@ -61,14 +57,15 @@ def _predict(headers, seed: int) -> int:
     return r.json()["prediction_id"]
 
 
-def _linked(prediction_id: int) -> dict[str, ModelRegistry]:
+def _linked(prediction_id: int) -> dict:
     db = SessionLocal()
     try:
         p = db.get(Prediction, prediction_id)
-        ids = p.branch_model_ids or {}
-        return {"semantic": db.get(ModelRegistry, ids["semantic"]),
-                "frequency": db.get(ModelRegistry, ids["frequency"]),
-                "fusion": db.get(ModelRegistry, p.model_id)}
+        assert p.branch_model_ids == {"semantic": p.semantic_model_id, "frequency": p.frequency_model_id}
+        return {"semantic": db.get(ModelRegistry, p.semantic_model_id),
+                "frequency": db.get(ModelRegistry, p.frequency_model_id),
+                "fusion": db.get(ModelRegistry, p.model_id),
+                "frequency_score": p.frequency_score}
     finally:
         db.close()
 
@@ -79,16 +76,42 @@ def test_semantic_row_pins_revision_and_weights():
     assert row.model_version != "main", "semantic D3 row is the floating 'main' branch"
 
 
-def test_linked_frequency_row_records_the_sign_convention_that_ran(monkeypatch):
+def test_editing_config_no_longer_changes_what_runs(monkeypatch):
+    """The old defect's trigger - a config edit - is now inert: what runs and
+    what D4 links are the ACTIVE D3 rows, so both stay as they were."""
     headers = _auth()
-    first = _linked(_predict(headers, 2))["frequency"]
-    assert first.hyperparameters["ai_is_positive"] is True
-
-    # Flip the convention the way the old system allowed: in config.
+    first = _linked(_predict(headers, 2))
     monkeypatch.setattr(config, "DETECTOR_FREQUENCY_AI_IS_POSITIVE", False)
-    monkeypatch.setattr(frequency_detector.frequency, "ai_is_positive", False)
-    second = _linked(_predict(headers, 3))["frequency"]
-    assert second.hyperparameters["ai_is_positive"] is False, (
-        f"prediction ran with ai_is_positive=False but links D3 row #{second.model_id} "
-        f"recording {second.hyperparameters}"
-    )
+    second = _linked(_predict(headers, 2))
+    assert second["frequency"].model_id == first["frequency"].model_id
+    assert second["frequency"].hyperparameters["ai_is_positive"] is True
+    assert second["frequency_score"] == first["frequency_score"]
+
+
+def test_linked_frequency_row_records_the_sign_convention_that_ran():
+    """Activating a D3 row with the opposite sign convention changes what runs,
+    and D4 links exactly that row (forced past the gate: it is deliberately bad)."""
+    from app.m2_analysis import registry
+
+    headers = _auth()
+    before = _linked(_predict(headers, 3))
+    db = SessionLocal()
+    try:
+        base = before["frequency"]
+        flipped = ModelRegistry(
+            model_name=base.model_name, model_version="test-sign-flipped",
+            model_type=base.model_type, artifact_ref=base.artifact_ref,
+            artifact_sha256=base.artifact_sha256,
+            hyperparameters={**base.hyperparameters, "ai_is_positive": False},
+            training_reference="test: inverted sign convention", is_active=False)
+        db.add(flipped)
+        db.commit()
+        registry.activate(db, flipped.model_id, actor_id=None, force=True, reason="provenance test")
+        flipped_id = flipped.model_id
+    finally:
+        db.close()
+
+    after = _linked(_predict(headers, 3))
+    assert after["frequency"].model_id == flipped_id
+    assert after["frequency"].hyperparameters["ai_is_positive"] is False
+    assert after["frequency_score"] == pytest.approx(1.0 - before["frequency_score"], abs=1e-9)

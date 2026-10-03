@@ -770,3 +770,62 @@ without a version bump. This is that notice.
 - **Cost:** explainability adds 1.2–3.7 s per request and about 7 MB of
   VRAM. Details in `ml/evaluation/RESULTS.md`.
 
+
+### 6.8 Model management is real: D3 decides what runs (phase 4, F.19)
+
+**Problem.** M3's `POST /admin/models/{id}/activate` flipped `is_active`,
+but nothing read it. `registry.active()` returned config, and every
+prediction's `registry.record()` re-activated the config rows, undoing the
+admin's choice. Provenance was stale: the semantic row was always `main`
+with a null hash, and rows were keyed on (name, version) and never updated.
+`tests/test_provenance.py` reproduced both cases, failing, in a commit
+before the fix. There was no way to upload anything.
+
+**Change.**
+- **M2** `registry.py`, rewritten:
+  - `active(db)` reads the ACTIVE D3 row of each type; the pipeline runs
+    exactly those and writes their ids into D4;
+  - `ensure_registry()` registers the published baseline (pinned SigLIP
+    revision and weights SHA-256, SPAI weights digest, fusion w/tau/T) when
+    a type has no valid active row; legacy rows stay, unchanged;
+  - `activate()` runs the canary, then the quality gate, then the switch in
+    one transaction with the type's rows locked;
+  - `rollback()` is one call;
+  - `baseline()` gives offline scripts the config defaults without a
+    database.
+- **M2** `gate.py`, `scripts/build_reference_set.py`: the quality gate on a
+  cached validation-split sample (`sbr_val`, never the test set).
+  Thresholds were fixed before any candidate was scored:
+  - accuracy may drop by at most 0.05;
+  - FPR may be at most 0.20;
+  - AUC may drop by at most 0.02.
+- **M2** `model_artifacts.py`, `router_models.py` (C4, `/api/v1/models`,
+  admin only):
+  - registration of a fusion JSON or a head as `.safetensors`, never pickle;
+  - shapes must exactly match the live head, values must be finite, and
+    there are size limits;
+  - files are stored under their SHA-256; the hash is recorded in D3 and in
+    the D6 audit log;
+  - a `training_reference` is required.
+- **M2** `heads.py`: uploaded heads are cached by row id and are immutable.
+  The file hash is re-verified on load.
+- **M2** `detectors.py`, `frequency_detector.py`:
+  - SigLIP is loaded at the pinned revision, from the local cache first, so
+    startup works offline;
+  - an uploaded head is applied through a one-call forward hook on the
+    published classifier;
+  - SPAI's sign convention comes from the active row.
+- **Schema** (migration 0002):
+  - `models.training_reference`, `models.registered_by`;
+  - `predictions.semantic_model_id` and `frequency_model_id` as real
+    foreign keys (ON DELETE RESTRICT), backfilled from the JSON;
+  - a `model_activations` table (audit trail, rollback);
+  - D3 rows immutable by trigger, except `is_active`.
+- **M3** `router_admin.py`: `POST /admin/models/{id}/activate` now delegates
+  to M2's registry, as PRD3 FR-09 asks; M3 no longer writes D3. A refusing
+  gate cannot be forced from the M3 endpoint.
+
+**Scope, stated plainly.** Head uploads were validated ONLY with perturbed
+copies of the published heads. This project trains nothing (CLAUDE.md §0),
+and a new head would have to come from a third party. Fusion-configuration
+swapping is the feature demonstrated end to end.

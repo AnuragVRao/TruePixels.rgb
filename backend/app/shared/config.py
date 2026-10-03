@@ -124,6 +124,12 @@ SEED = 20260907
 #   Upstream self-reported accuracy 0.9149 over 18,618 samples. That figure is
 #   THEIRS, measured on their split. We have run no benchmark of our own.
 DETECTOR_PRIMARY = "prithivMLmods/AIorNot-SigLIP2"
+# Pinned hub revision (commit). Without it from_pretrained() follows the
+# floating "main" branch, so new weights pushed upstream would change what
+# runs without anything here - or in D3 - changing (Phase 0 finding, fixed in
+# Phase 4). Loaded from the local cache first (no network at startup); the
+# hub is contacted only if this revision is not cached yet.
+DETECTOR_PRIMARY_REVISION = "f4e6a281725e8dfb11a1d8c959b69737bba1e91d"
 
 
 # --------------------------------------------------------------------------

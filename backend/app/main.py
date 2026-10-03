@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse
 from app.m1_access.router_auth import router as auth_router
 from app.m1_access.router_images import router as images_router
 from app.m1_access.router_users import router as users_router
+from app.m2_analysis.router_models import router as models_router
 from app.m2_analysis.router_predict import router as predictions_router
 from app.m3_results.router_admin import router as admin_router
 from app.m3_results.router_history import router as history_router
@@ -50,6 +51,13 @@ async def lifespan(_: FastAPI):
     # Startup: storage layout (M2) and database tables D1-D6 (M1, M3)
     config.ensure_storage_dirs()
     init_db()
+    # D3 is the authority on what runs (Phase 4): register the published
+    # baseline if no valid active row exists yet, before any request.
+    from app.m2_analysis import registry
+    from app.shared.db import SessionLocal
+
+    with SessionLocal() as session:
+        registry.ensure_registry(session)
     # Both detectors load here, before the first request is accepted, so no
     # user's latency_ms includes a model load (Phase 1b).
     from app.m2_analysis import warmup
@@ -140,6 +148,7 @@ app.include_router(users_router, prefix="/api/v1")
 
 # M2 router (declares its own /api/v1 prefix)
 app.include_router(predictions_router)
+app.include_router(models_router, prefix="/api/v1")  # C4, F.19 (admin only)
 
 # M3 routers under /api/v1
 app.include_router(results_router, prefix="/api/v1")

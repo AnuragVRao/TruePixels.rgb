@@ -6,7 +6,7 @@ persistence.
     Input: PreprocessedImage (from M1, Contract C1)
        |
        v
-    registry.active()  -- raises INF_MODEL_UNAVAILABLE if a model is missing
+    registry.active(db) -- the ACTIVE D3 rows; raises INF_MODEL_UNAVAILABLE if none
        |
        +--> 2.1 semantic branch  (SigLIP 2 fine-tune) -> semantic_score  --\\
        |                                                                   \\
@@ -16,7 +16,7 @@ persistence.
                                                                   2.4 prediction & confidence
                                                                                   |
                                                                                   v
-                                                        record D3 rows, persist D4 -> commit
+                                       persist D4 (with the active D3 row ids) -> commit
                                                                                   |
                                                                                   v
                                                                     InferenceOutput --> M3
@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.m2_analysis import detectors, frequency_detector, fusion, registry
+from app.m2_analysis import detectors, frequency_detector, fusion, heads, registry
 from app.m2_analysis.models import Prediction
 from app.shared.contracts.c1 import PreprocessedImage
 from app.shared.contracts.c2 import ActivationBundle, InferenceOutput
@@ -77,7 +77,19 @@ async def run_detection(
             The WHOLE request fails - M2 never returns a prediction based on
             the surviving branch alone (PRD2 section 11.1, AC-03).
     """
-    models = registry.active()
+    # Phase 4: what runs is the set of ACTIVE D3 rows, resolved once here; the
+    # same row ids go into D4 below, so provenance is exactly what ran.
+    owns_session = db is None
+    session = SessionLocal() if owns_session else db
+    try:
+        models = registry.active(session)
+        semantic_head = heads.semantic_head(models.primary.model_id, models.primary.head)
+        spectral = models.frequency_detector
+        freq_head = heads.frequency_head(spectral.model_id, spectral.head) if spectral else None
+    except Exception:
+        if owns_session:
+            session.close()
+        raise
 
     try:
         # One-time model loads happen HERE, outside the timed region, so
@@ -96,7 +108,8 @@ async def run_detection(
 
         # Semantic branch: the SigLIP 2 fine-tune. With xai on, passive hooks
         # also record each attention layer's input (the score is unchanged).
-        semantic = detectors.primary.score(prepared.source_reference, capture=xai_requested)
+        semantic = detectors.primary.score(prepared.source_reference, capture=xai_requested,
+                                           head=semantic_head)
         semantic_score = semantic.score
 
         # Frequency branch: SPAI, a different kind of evidence entirely.
@@ -110,7 +123,8 @@ async def run_detection(
         if models.frequency_detector is not None:
             try:
                 frequency_score = frequency_detector.frequency.score(
-                    prepared.source_reference
+                    prepared.source_reference, head=freq_head,
+                    ai_is_positive=models.frequency_detector.ai_is_positive,
                 ).score
             except frequency_detector.SpectralBranchUnavailable:
                 frequency_score = None
@@ -120,8 +134,12 @@ async def run_detection(
             semantic_score, frequency_score, models.fusion
         )
     except InferenceError:
+        if owns_session:
+            session.close()
         raise
     except Exception as exc:  # noqa: BLE001 - deliberately broad, see PRD2 11.1
+        if owns_session:
+            session.close()
         raise InferenceError(f"inference failed: {exc}") from exc
 
     latency_ms = int((time.perf_counter() - started) * 1000)
@@ -138,14 +156,15 @@ async def run_detection(
     # foreign key the instant M3 receives this structure (FR-05, AC-08,
     # PRD4 4.2.4). If the write fails the request fails: a prediction shown
     # to a user but absent from history is worse than an error (AC-10).
-    owns_session = db is None
-    session = SessionLocal() if owns_session else db
+    frequency_model_id = models.frequency_detector.model_id if (
+        models.frequency_detector is not None and frequency_score is not None) else None
     try:
-        recorded = registry.record(session, models)
         row = Prediction(
             image_id=prepared.image_id,
-            model_id=recorded.fusion_id,
-            branch_model_ids=recorded.branch_ids(),
+            model_id=models.fusion.model_id,
+            semantic_model_id=models.primary.model_id,
+            frequency_model_id=frequency_model_id,
+            branch_model_ids={"semantic": models.primary.model_id, "frequency": frequency_model_id},
             predicted_class=predicted_class,
             confidence_score=confidence_score,
             semantic_score=semantic_score,

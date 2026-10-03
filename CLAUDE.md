@@ -303,7 +303,7 @@ is therefore a **measured** 16 (3.4 GB peak; 24 gave 5% for +600 MB), and
 | 2 | ~~M2.1~~ | ~~Train the CLIP head~~ → **superseded**: integrate a pretrained SigLIP 2 detector | ✅ done (2026-09-07) |
 | 3 | ~~M2.2~~ | ~~Train the frequency classifier~~ → **superseded**: integrate a pretrained frequency-domain detector. Interim (2026-09-07): a second semantic detector, SwinV2. Final (2026-09-12): **SPAI**, SwinV2 removed | ✅ done (2026-09-12) |
 | 4 | M2.3 | Select the fusion weight and τ on a validation split | ✅ **done (2026-10-01)** — reopened. It had been closed as "fitting is training", a ruling made when no labelled data existed. w and τ are configuration constants, not model weights; §0 forbids updating weights, and PRD2 FR-03 explicitly calls for both to be tuned on validation. Chosen on scenes 99–296, disjoint from the test set: **w = 0.25, τ = 0.7558**. Not done: the calibration temperature (MM2.5) |
-| 5 | M2.4 | Postgres + Alembic, D3/D4 tables, registry endpoints, atomic activation | 🟡 D3/D4 tables exist (designed by M3, moved to M2) and every prediction writes D4 + commits; D3 rows are recorded **from config**. Not done: D3 as the authority (`active()` still reads config), registration canary, Alembic, Postgres |
+| 5 | M2.4 | Postgres + Alembic, D3/D4 tables, registry endpoints, atomic activation | ✅ **done (2026-10-03, Phases 2 + 4)** — PostgreSQL + Alembic; D3 is the authority on what runs; upload (safetensors heads / fusion JSON), canary, quality gate on a validation-split reference, atomic activation, one-call rollback, immutable D3 rows |
 | 6 | M2.5 | ActivationBundle capture hooks (joint delivery with M3) | ✅ **done (2026-10-03, Phase 3)** — SigLIP attention rollout (mean-pooled, faithfulness-tested) + spectrum of SPAI's own patches; panels in D5, results and PDF |
 | 7 | M2.6 | Benchmark the **pretrained** branches on a public labelled set — evaluation only, no weight updates. Should include the SigLIP 2 / SPAI / fused ablation | ✅ **done (2026-09-30)** — Synthbuster vs RAISE-1k, 99/class, with the SigLIP 2 / SPAI / fused ablation, a confound control and a degradation sweep (§6). Optional next: scale to 1000/class (one flag), and a set from post-2023 generators |
 
@@ -372,7 +372,7 @@ module.
 | τ and fusion weight | ✅ **selected on a validation split** (2026-10-01), disjoint from the test set, by PRD2 FR-03's own rule. w = 0.25, τ = 0.7558. No model weight was touched |
 | Calibration (temperature) | ❌ no-op at T=1.0, and **MM2.5 is now measured as missed** — ECE 0.113 on validation, and the best temperature available (T = 0.97) only reaches 0.110 against a ≤ 0.05 target. Temperature scaling alone will not close it |
 | D3/D4 persistence | ✅ every prediction writes D4 and commits before responding; M3 reads it back (asserted end-to-end). SQLite by default |
-| Registry (FR-06/07) | ⚠ D3 rows mirror config, `metrics` null; M3's activate endpoint flips a flag but does not change what runs |
+| Registry / model management (F.19) | ✅ D3 decides what runs; every D4 row links the semantic, frequency and fusion rows that actually ran (real FKs, RESTRICT). Activation = canary + quality gate (validation-split reference, 100 images; refuse if accuracy −0.05, FPR > 0.20 or AUC −0.02) + locked atomic switch; forced overrides need a reason and are audit-logged; rollback is one call (gate advisory there). Head uploads validated **only with perturbed copies of the published heads** (no training); fusion-config swap is the demonstrated feature. `metrics` stays null |
 | Authentication / ownership | ✅ M1's JWT sessions on every M2/M3 endpoint; predictions owner-only, `IMG_NOT_FOUND` for not-yours (no id oracle) |
 | Explainability (F.10/F.11/F.14/NF.13) | ✅ **real** — attention recomputed from passively captured inputs (matches eager attention < 1e-4; scores bit-identical, `regression_check --xai` 24/24). Rollout is an **attention-based proxy**. Deletion test (40 validation images, semantic branch only, per-image unit): masking the top-attended 20% beats random by mean +0.071 [0.041, 0.103], **median +0.019**; paired t one-sided p = 4.0e-5 (Wilcoxon 5.8e-8). Better than chance; typical advantage small. Frequency panel is descriptive, **not validated**. Frequency panel = mean spectrum of SPAI's 224 px patches + its r = 16 split; descriptive, not evidence. Cost: +1.2–3.7 s, +7 MB VRAM. See RESULTS.md |
 | **Detection of whole-image synthesis** | ✅ **measured** — Synthbuster vs RAISE-1k, 99 per class, at an operating point chosen on a disjoint validation split: fused accuracy 0.864 [0.81, 0.90], recall 0.838, AUC 0.941 [0.91, 0.97]; SPAI alone AUC 0.967. Confound-controlled. Read the narrow claim, not "accuracy" |
@@ -539,7 +539,21 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-03 (latest) — Phase 2 (PostgreSQL + Alembic) and Phase 3 (explainability)
+### 2026-10-03 (latest) — Phase 4 (model management, F.19)
+- D3 became the authority: `registry.active(db)` reads the active rows; the
+  stale-provenance defect was reproduced in a failing test first (commit
+  `4f00e19`), then fixed. SigLIP pinned to revision `f4e6a281…`, loaded from
+  the local cache (works with `HF_HUB_OFFLINE=1`).
+- Quality gate on a cached 100-image `sbr_val` reference. Thresholds fixed
+  before any candidate was scored. τ 0.60 passes and flips labels
+  (asserted by test); τ 0.05 is refused (FPR). Finding: on this reference, τ 0.65 scores
+  accuracy 0.83 vs the baseline τ 0.7558's 0.77 at the same FPR 0.14 —
+  a hint, on 100 images, that the operating point could be revisited.
+- Rollback made the gate advisory (it is a return to a previously active
+  model); decided by default, reversible.
+- **Next:** Phase 5 (React front end).
+
+### 2026-10-03 — Phase 2 (PostgreSQL + Alembic) and Phase 3 (explainability)
 - Phase 2: PostgreSQL via compose (127.0.0.1 only), Alembic baseline, one
   engine for app + logger + pipeline, startup refuses an un-migrated DB,
   dev SQLite data migrated (pre-checked, read-only on the source). Scores

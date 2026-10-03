@@ -233,8 +233,21 @@ class SpectralDetector:
             model.eval()  # dropout and stochastic depth off - PRD2 section 8.4
             self._model = model.to(config.DEVICE)
 
-    def score(self, image_path: str, *, capture: bool = False) -> BranchResult:
+    def score(
+        self,
+        image_path: str,
+        *,
+        capture: bool = False,
+        head=None,
+        ai_is_positive: bool | None = None,
+    ) -> BranchResult:
         """Return P(AI Generated) for an image on disk.
+
+        Phase 4 (F.19): ``head`` is an uploaded classification head
+        (``heads.LoadedHead``) used instead of the published one - a forward
+        hook on ``cls_head`` replaces its output for this one call, and is
+        always removed. ``ai_is_positive`` is the sign convention of the ACTIVE
+        D3 row; None falls back to this detector's configured default.
 
         Deterministic: eval mode, inference mode, no sampling, no test-time
         augmentation. The patch tiling is a fixed function of the image size.
@@ -261,6 +274,10 @@ class SpectralDetector:
 
         tensor = tensor.to(config.DEVICE)
 
+        hook = None
+        if head is not None:
+            hook = self._model.cls_head.register_forward_hook(
+                lambda _m, inputs, _out: head.module(inputs[0]))
         try:
             with torch.inference_mode():
                 # A list of one image takes the arbitrary-resolution path,
@@ -277,14 +294,26 @@ class SpectralDetector:
             # collapses silently. Returning the cache after every request
             # costs milliseconds and keeps each request's footprint bounded
             # by its own image, not by the largest image seen so far.
+            if hook is not None:
+                hook.remove()
             if tensor.is_cuda:
                 del tensor
                 torch.cuda.empty_cache()
 
-        if not self.ai_is_positive:
+        positive = self.ai_is_positive if ai_is_positive is None else ai_is_positive
+        if not positive:
             probability = 1.0 - probability
 
         return BranchResult(score=float(probability), activations=None)
+
+    def cls_head_state(self) -> dict:
+        """The published head's tensors, keys relative to ``cls_head``."""
+        self.load()
+        return {k: v.detach() for k, v in self._model.cls_head.state_dict().items()}
+
+    def cls_head_module(self):
+        self.load()
+        return self._model.cls_head
 
     def reset_cache(self) -> None:
         """Drop the cached model. For tests and Step 5 reactivation."""

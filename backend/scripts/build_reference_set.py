@@ -1,0 +1,90 @@
+"""Build the quality gate's reference cache from the VALIDATION split. Read-only on images.
+
+    cd backend
+    python scripts/build_reference_set.py [--per-class 50]
+
+Takes the first ``--per-class`` images of each class from
+``ml/datasets/sbr_val`` (validation split, scenes 99-296 - never the
+held-out test set ``synthbuster_raise``), runs both PUBLISHED branches once,
+and stores per image: label, live semantic and frequency scores, and the
+exact inputs of each branch's final head (captured with forward pre-hooks).
+Writes storage/models/reference/<file named by backbone revision + weights
+digest>.npz (gitignored), plus a .json manifest listing the images.
+
+The gate re-verifies that the published heads applied to these cached inputs
+reproduce the cached scores before trusting the cache (app/m2_analysis/gate.py).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+BACKEND = Path(__file__).resolve().parents[1]
+REPO = BACKEND.parent
+sys.path.insert(0, str(BACKEND))
+
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
+
+from app.m2_analysis import detectors, frequency_detector, gate  # noqa: E402
+
+VAL = REPO / "ml" / "datasets" / "sbr_val"
+SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff"}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--per-class", type=int, default=50)
+    args = parser.parse_args()
+
+    items = []
+    for folder, label in (("0_real", 0), ("1_fake", 1)):
+        files = sorted(p for p in (VAL / folder).rglob("*") if p.suffix.lower() in SUFFIXES)
+        items += [(p, label) for p in files[: args.per_class]]
+    if not items:
+        raise SystemExit(f"no images under {VAL}")
+
+    detectors.primary.load()
+    frequency_detector.frequency.load()
+    grabbed: dict[str, torch.Tensor] = {}
+    hooks = [
+        detectors.primary._model.classifier.register_forward_pre_hook(
+            lambda _m, inputs: grabbed.__setitem__("semantic", inputs[0].detach().float().cpu())),
+        frequency_detector.frequency._model.cls_head.register_forward_pre_hook(
+            lambda _m, inputs: grabbed.__setitem__("frequency", inputs[0].detach().float().cpu())),
+    ]
+    names, labels, sem_f, freq_f, sem_s, freq_s = [], [], [], [], [], []
+    try:
+        for n, (path, label) in enumerate(items, 1):
+            grabbed.clear()
+            s = detectors.primary.score(str(path)).score
+            f = frequency_detector.frequency.score(str(path)).score
+            names.append(str(path.relative_to(REPO)))
+            labels.append(label)
+            sem_f.append(grabbed["semantic"][0].numpy())
+            freq_f.append(grabbed["frequency"][0].numpy())
+            sem_s.append(s)
+            freq_s.append(f)
+            print(f"  [{n}/{len(items)}] {label} sem={s:.4f} freq={f:.4f} {path.name}")
+    finally:
+        for hook in hooks:
+            hook.remove()
+
+    out = gate.reference_path()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(out, labels=np.array(labels, dtype=np.int64),
+             semantic_features=np.stack(sem_f), frequency_features=np.stack(freq_f),
+             semantic_scores=np.array(sem_s, dtype=np.float64),
+             frequency_scores=np.array(freq_s, dtype=np.float64))
+    out.with_suffix(".json").write_text(json.dumps(
+        {"split": "sbr_val (validation, scenes 99-296)", "per_class": args.per_class,
+         "images": names}, indent=2) + "\n")
+    print(f"-> {out} ({len(names)} images)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

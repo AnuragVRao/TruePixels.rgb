@@ -183,7 +183,9 @@ def main() -> int:
 
     name = args.name or args.root.name
     items = collect(args.root, args.limit, args.seed)
-    models = registry.active()
+    # The published configuration from config (offline; no database). The
+    # served app runs the ACTIVE D3 rows instead - see registry.active().
+    models = registry.baseline()
     tau = models.fusion.tau
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

@@ -202,35 +202,15 @@ def activate_model(
     model_id: int,
     session: SessionContext = Depends(require_role("Admin")),
     db: Session = Depends(get_db),
-) -> dict:
-    """Admin activation of a model version (Contract C4 / F.19)."""
-    target = db.query(ModelRegistry).filter(ModelRegistry.model_id == model_id).first()
-    if not target:
-        raise AppException(
-            code="INF_MODEL_UNAVAILABLE",
-            message=f"Model #{model_id} not found.",
-            status_code=404,
-        )
+):
+    """Admin activation of a model version (Contract C4 / F.19).
 
-    # Deactivate previous active model of same type atomically in one transaction
-    db.query(ModelRegistry).filter(
-        ModelRegistry.model_type == target.model_type,
-        ModelRegistry.is_active.is_(True),
-    ).update({"is_active": False})
+    INTEGRATION (Phase 4, changes.md 6.8): delegates to M2's registry, which
+    owns D3 (PRD3 FR-09: M3 never writes D3). Activation now really changes
+    what subsequent predictions run, after a canary and the quality gate; it
+    used to flip is_active only, and the next prediction flipped it back. A
+    refusing gate cannot be forced from here - use POST /api/v1/models/{id}/activate.
+    """
+    from app.m2_analysis.router_models import activate_for
 
-    target.is_active = True
-    db.commit()
-
-    emit(
-        event_type="administrative-action",
-        event_detail=f"Admin {session.user_id} activated model #{model_id} ({target.model_name} v{target.model_version})",
-        severity="info",
-        user_id=session.user_id,
-    )
-
-    return {
-        "status": "success",
-        "activated_model_id": target.model_id,
-        "model_type": target.model_type,
-        "is_active": True,
-    }
+    return activate_for(db, session, model_id)

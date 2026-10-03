@@ -39,6 +39,17 @@ ERROR_REGISTRY: dict[str, tuple[int, str]] = {
     "INF_TIMEOUT": (504, "Inference exceeded the configured wall-clock budget."),
     "INF_FAILED": (500, "Unhandled failure inside a classifier or the fusion module."),
     "INF_PREDICTION_NOT_FOUND": (404, "Prediction not found or not visible to the caller."),
+    # M2 model management (Phase 4, F.19)
+    "MDL_NOT_FOUND": (404, "No such model row."),
+    "MDL_INVALID": (422, "The model row does not describe the resident backbone, or is invalid."),
+    "MDL_INVALID_ARTIFACT": (422, "The uploaded artefact failed validation."),
+    "MDL_TOO_LARGE": (413, "The uploaded artefact exceeds the size limit for its type."),
+    "MDL_EXISTS": (409, "A model with this name and version is already registered."),
+    "MDL_CANARY_FAILED": (422, "The candidate failed its canary forward pass."),
+    "MDL_GATE_REFUSED": (409, "The quality gate refused the candidate."),
+    "MDL_FORCE_NEEDS_REASON": (422, "A forced activation must give a reason."),
+    "MDL_CONFLICT": (409, "A concurrent activation committed first; nothing changed."),
+    "MDL_NOTHING_TO_ROLL_BACK": (409, "There is no previous model of this type."),
     # M3 Errors
     "XAI_UNAVAILABLE": (501, "Explainability not supported for the active model."),
     "XAI_FILE_MISSING": (410, "The visualisation record exists but its stored file is no longer available."),
