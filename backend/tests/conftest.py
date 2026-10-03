@@ -120,16 +120,9 @@ def _reset_schema() -> None:
     Building the test database through the migrations (not create_all) means
     every test run also exercises them.
     """
-    from sqlalchemy import inspect, text
-
     from app.shared import db
 
-    db.import_all_models()
-    with db.engine.begin() as connection:
-        db.Base.metadata.drop_all(bind=connection)
-        if inspect(connection).has_table("alembic_version"):
-            connection.execute(text("DROP TABLE alembic_version"))
-    db.migrate_to_head()
+    db.reset_scratch_database()  # guarded: TEST_DATABASE_URL must name a *_test database
 
 
 def _empty_all_tables() -> None:

@@ -58,7 +58,7 @@ from sqlalchemy import Boolean, DateTime, JSON, func, insert, select, text  # no
 from app.shared import db  # noqa: E402
 
 # Parents before children.
-ORDER = ["users", "models", "images", "predictions", "explainability", "logs"]
+ORDER = ["users", "models", "images", "predictions", "explainability", "logs", "model_activations"]
 FILE_COLUMNS = {"images": "file_reference", "explainability": "visualization_reference"}
 
 

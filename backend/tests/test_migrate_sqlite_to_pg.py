@@ -37,16 +37,25 @@ def _legacy_sqlite(path: Path, upload_ref: str) -> None:
     legacy.dispose()
     con = sqlite3.connect(path)
     con.executescript(f"""
-        INSERT INTO users VALUES (7, 'Legacy', 'legacy@example.com', 'h', 'User', 'active',
-                                  '2026-10-01 17:36:47.790204', NULL, NULL, 1);
-        INSERT INTO models VALUES (4, 'fusion', 'v1', 'fusion-configuration', 'cfg', NULL,
-                                   '{{"tau": 0.7558}}', NULL, 1, '2026-10-01 17:00:00');
-        INSERT INTO images VALUES (9, 7, '{upload_ref}', '{"a" * 64}', 'PNG', 10, 1, 1,
-                                   '2026-10-01 17:40:00', 'valid', NULL);
-        INSERT INTO predictions VALUES (11, 9, 4, '{{"semantic": 4}}', 'Real', 0.9, 0.1, NULL,
-                                        0.1, 900, NULL, '2026-10-01 17:41:00');
-        INSERT INTO logs VALUES (21, 7, 'authentication', 'login', 'info', NULL,
-                                 '2026-10-01 17:42:00');
+        INSERT INTO users (user_id, full_name, email, password_hash, role, account_status, registered_at,
+                           otp_hash, otp_expires_at, is_email_verified)
+            VALUES (7, 'Legacy', 'legacy@example.com', 'h', 'User', 'active',
+                    '2026-10-01 17:36:47.790204', NULL, NULL, 1);
+        INSERT INTO models (model_id, model_name, model_version, model_type, artifact_ref, artifact_sha256,
+                            hyperparameters, metrics, is_active, registered_at)
+            VALUES (4, 'fusion', 'v1', 'fusion-configuration', 'cfg', NULL,
+                    '{{"tau": 0.7558}}', NULL, 1, '2026-10-01 17:00:00');
+        INSERT INTO images (image_id, user_id, file_reference, content_sha256, file_format, file_size,
+                            width, height, upload_timestamp, validation_status, rejection_reason)
+            VALUES (9, 7, '{upload_ref}', '{"a" * 64}', 'PNG', 10, 1, 1,
+                    '2026-10-01 17:40:00', 'valid', NULL);
+        INSERT INTO predictions (prediction_id, image_id, model_id, branch_model_ids, predicted_class,
+                                 confidence_score, semantic_score, frequency_score, fusion_score,
+                                 latency_ms, prediction_timestamp)
+            VALUES (11, 9, 4, '{{"semantic": 4}}', 'Real', 0.9, 0.1, NULL, 0.1, 900,
+                    '2026-10-01 17:41:00');
+        INSERT INTO logs (log_id, user_id, event_type, event_detail, severity, request_id, log_timestamp)
+            VALUES (21, 7, 'authentication', 'login', 'info', NULL, '2026-10-01 17:42:00');
     """)
     con.commit()
     con.close()
@@ -110,10 +119,13 @@ def test_many_rows_mixed_case_emails_and_id_gaps(tmp_path, monkeypatch, capsys):
     con = _empty_legacy(source)
     users = [(i * 3, f"User{i}@Example.COM") for i in range(1, 251)]  # ids 3, 6, ..., 750
     con.executemany(
-        "INSERT INTO users VALUES (?, 'U', ?, 'h', 'User', 'active', '2026-10-01 10:00:00', NULL, NULL, 0)",
+        "INSERT INTO users (user_id, full_name, email, password_hash, role, account_status, registered_at, "
+        "otp_hash, otp_expires_at, is_email_verified) "
+        "VALUES (?, 'U', ?, 'h', 'User', 'active', '2026-10-01 10:00:00', NULL, NULL, 0)",
         users)
     con.executemany(
-        "INSERT INTO logs VALUES (?, ?, 'authentication', 'x', 'info', NULL, '2026-10-01 10:00:00')",
+        "INSERT INTO logs (log_id, user_id, event_type, event_detail, severity, request_id, log_timestamp) "
+        "VALUES (?, ?, 'authentication', 'x', 'info', NULL, '2026-10-01 10:00:00')",
         [(i * 2, users[i % 250][0]) for i in range(1, 401)])  # ids up to 800
     con.commit()
     con.close()
@@ -136,11 +148,11 @@ def test_violations_are_all_reported_and_nothing_is_copied(tmp_path, monkeypatch
     source = tmp_path / "bad.db"
     con = _empty_legacy(source)
     con.executescript("""
-        INSERT INTO users VALUES (1, 'A', 'Same@Example.com', 'h', 'User', 'active', '2026-10-01 10:00:00', NULL, NULL, 1);
-        INSERT INTO users VALUES (2, 'B', 'same@example.COM', 'h', 'User', 'active', '2026-10-01 10:00:00', NULL, NULL, 1);
-        INSERT INTO models VALUES (1, 'f', 'a', 'fusion-configuration', 'c', NULL, NULL, NULL, 1, '2026-10-01 10:00:00');
-        INSERT INTO models VALUES (2, 'f', 'b', 'fusion-configuration', 'c', NULL, NULL, NULL, 1, '2026-10-01 10:00:00');
-        INSERT INTO logs VALUES (1, 99, 'authentication', 'x', 'info', NULL, '2026-10-01 10:00:00');
+        INSERT INTO users (user_id, full_name, email, password_hash, role, account_status, registered_at, otp_hash, otp_expires_at, is_email_verified) VALUES (1, 'A', 'Same@Example.com', 'h', 'User', 'active', '2026-10-01 10:00:00', NULL, NULL, 1);
+        INSERT INTO users (user_id, full_name, email, password_hash, role, account_status, registered_at, otp_hash, otp_expires_at, is_email_verified) VALUES (2, 'B', 'same@example.COM', 'h', 'User', 'active', '2026-10-01 10:00:00', NULL, NULL, 1);
+        INSERT INTO models (model_id, model_name, model_version, model_type, artifact_ref, artifact_sha256, hyperparameters, metrics, is_active, registered_at) VALUES (1, 'f', 'a', 'fusion-configuration', 'c', NULL, NULL, NULL, 1, '2026-10-01 10:00:00');
+        INSERT INTO models (model_id, model_name, model_version, model_type, artifact_ref, artifact_sha256, hyperparameters, metrics, is_active, registered_at) VALUES (2, 'f', 'b', 'fusion-configuration', 'c', NULL, NULL, NULL, 1, '2026-10-01 10:00:00');
+        INSERT INTO logs (log_id, user_id, event_type, event_detail, severity, request_id, log_timestamp) VALUES (1, 99, 'authentication', 'x', 'info', NULL, '2026-10-01 10:00:00');
     """)
     con.commit()
     con.close()

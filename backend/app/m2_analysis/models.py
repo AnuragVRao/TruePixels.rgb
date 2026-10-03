@@ -53,8 +53,21 @@ class ModelRegistry(Base):
     metrics = Column(JSON, nullable=True)
     is_active = Column(Boolean, nullable=False, default=False)
     registered_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    # Phase 4 (F.19): what the artefact was trained/evaluated on, as supplied
+    # at registration - e.g. "upstream: prithivMLmods/AIorNot-SigLIP2 model
+    # card; evaluated: RESULTS.md 2026-10-01 held-out, w=0.25 tau=0.7558".
+    # Published metrics describe a specific model + fusion configuration, so
+    # this names both.
+    training_reference = Column(Text, nullable=True)
+    registered_by = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL",
+                                               name="fk_models_registered_by"), nullable=True)
 
-    predictions = relationship("Prediction", back_populates="model")
+    # Rows are IMMUTABLE once inserted (database trigger, migration 0002): only
+    # is_active may change. Rows referenced by a prediction or an activation
+    # cannot be deleted (ON DELETE RESTRICT on every referencing key).
+
+    predictions = relationship("Prediction", back_populates="model",
+                               foreign_keys="Prediction.model_id")
 
     __table_args__ = (
         UniqueConstraint("model_name", "model_version", name="uq_model_name_version"),
@@ -77,8 +90,16 @@ class Prediction(Base):
 
     prediction_id = Column(Integer, primary_key=True, autoincrement=True)
     image_id = Column(Integer, ForeignKey("images.image_id", ondelete="RESTRICT"), nullable=False, index=True)
+    # The fusion configuration that produced the verdict.
     model_id = Column(Integer, ForeignKey("models.model_id", ondelete="RESTRICT"), nullable=False)
-    branch_model_ids = Column(JSON, nullable=True)  # e.g. {"semantic": 1, "frequency": 2}
+    # Phase 4: the branch models as real foreign keys (they were only JSON, so
+    # nothing stopped their D3 rows being deleted). frequency_model_id is NULL
+    # when the frequency branch produced no score.
+    semantic_model_id = Column(Integer, ForeignKey("models.model_id", ondelete="RESTRICT",
+                                                   name="fk_predictions_semantic_model"), nullable=True)
+    frequency_model_id = Column(Integer, ForeignKey("models.model_id", ondelete="RESTRICT",
+                                                    name="fk_predictions_frequency_model"), nullable=True)
+    branch_model_ids = Column(JSON, nullable=True)  # kept in sync: {"semantic": id, "frequency": id|null}
     predicted_class = Column(String(14), nullable=False)  # 'Real', 'AI Generated'
     confidence_score = Column(Float, nullable=False)
     semantic_score = Column(Float, nullable=False)
@@ -100,9 +121,35 @@ class Prediction(Base):
     # One-directional (M3 had back_populates="predictions"): Image is M1's
     # model and does not declare the reverse side, and nothing reads it.
     image = relationship("Image")
-    model = relationship("ModelRegistry", back_populates="predictions")
+    model = relationship("ModelRegistry", back_populates="predictions", foreign_keys=[model_id])
     explainabilities = relationship("Explainability", back_populates="prediction", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_pred_time", prediction_timestamp.desc()),
     )
+
+
+class ModelActivation(Base):
+    """Phase 4 (F.19): every change of the active model of a type.
+
+    Audit trail for activations (who, when, gate result, forced or not), and
+    the basis of one-call rollback: the previous active model of a type is
+    the ``previous_model_id`` of its latest activation.
+    """
+    __tablename__ = "model_activations"
+
+    activation_id = Column(Integer, primary_key=True, autoincrement=True)
+    model_type = Column(String(32), nullable=False)
+    model_id = Column(Integer, ForeignKey("models.model_id", ondelete="RESTRICT"), nullable=False)
+    previous_model_id = Column(Integer, ForeignKey("models.model_id", ondelete="RESTRICT"), nullable=True)
+    activated_by = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
+    activated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    action = Column(String(16), nullable=False)  # 'bootstrap' | 'activate' | 'rollback'
+    forced = Column(Boolean, nullable=False, default=False)
+    reason = Column(Text, nullable=True)
+    gate = Column(JSON, nullable=True)  # quality-gate metrics and verdict
+
+    __table_args__ = (
+        Index("idx_model_activations_type_time", "model_type", activated_at.desc()),
+    )
+

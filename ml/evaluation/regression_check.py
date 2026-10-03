@@ -135,17 +135,10 @@ def run(database_url: str | None = None, xai: bool = False) -> dict:
     from app.m1_access.security import create_session_token, hash_password
     from app.main import app
     from app.shared import config
-    from sqlalchemy import inspect, text
-
     from app.shared import db as database
     from app.shared.db import SessionLocal
 
-    database.import_all_models()
-    with database.engine.begin() as connection:
-        database.Base.metadata.drop_all(bind=connection)
-        if inspect(connection).has_table("alembic_version"):
-            connection.execute(text("DROP TABLE alembic_version"))
-    database.migrate_to_head()
+    database.reset_scratch_database()  # name guarded above: *_test / *_regression only
     db = SessionLocal()
     user = User(full_name="Regression", email="regression@example.com",
                 password_hash=hash_password("Regression12345"), role="User",

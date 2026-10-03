@@ -158,6 +158,29 @@ def check_schema_current() -> None:
         )
 
 
+def reset_scratch_database() -> None:
+    """Drop EVERYTHING in the configured database, then migrate to head.
+
+    For scratch databases only (the test suite, the regression harness) -
+    callers guard the database name. On PostgreSQL the whole ``public``
+    schema is dropped and recreated, which also removes non-table objects a
+    table drop leaves behind (the 0002 trigger function); on SQLite every
+    table is dropped (its triggers go with it).
+    """
+    from sqlalchemy import inspect, text
+
+    import_all_models()
+    with engine.begin() as connection:
+        if connection.dialect.name == "postgresql":
+            connection.execute(text("DROP SCHEMA public CASCADE"))
+            connection.execute(text("CREATE SCHEMA public"))
+        else:
+            Base.metadata.drop_all(bind=connection)
+            if inspect(connection).has_table("alembic_version"):
+                connection.execute(text("DROP TABLE alembic_version"))
+    migrate_to_head()
+
+
 def migrate_to_head() -> None:
     """Run ``alembic upgrade head`` against the configured engine.
 
