@@ -12,7 +12,55 @@ from app.m3_results.schemas import (
     SystemAnalytics,
     TimeSeriesPoint,
     ConfidenceHistogramBin,
+    LatencyPoint,
+    LatencySummary,
 )
+
+
+def _percentile(sorted_values: list[int], q: float) -> float | None:
+    """Linear interpolation between order statistics (numpy's default)."""
+    if not sorted_values:
+        return None
+    pos = (len(sorted_values) - 1) * q
+    low = int(pos)
+    high = min(low + 1, len(sorted_values) - 1)
+    return float(sorted_values[low] + (sorted_values[high] - sorted_values[low]) * (pos - low))
+
+
+def latency_stats(db: Session, since: datetime) -> tuple[LatencySummary, list[LatencyPoint]]:
+    """Warm-only inference latency since ``since``, overall and per UTC day.
+
+    Grouping by day happens here rather than in SQL so SQLite and Postgres
+    agree exactly (func.date returns different types on the two).
+    """
+    rows = (
+        db.query(Prediction.prediction_timestamp, Prediction.latency_ms, Prediction.cold_start)
+        .filter(Prediction.prediction_timestamp >= since, Prediction.latency_ms.isnot(None))
+        .all()
+    )
+    warm: list[int] = []
+    by_day: dict[str, list[int]] = {}
+    cold = unknown = 0
+    for stamp, latency, cold_start in rows:
+        if cold_start is None:
+            unknown += 1
+            continue
+        if cold_start:
+            cold += 1
+            continue
+        warm.append(latency)
+        if stamp.tzinfo is None:  # SQLite returns naive UTC
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        by_day.setdefault(stamp.astimezone(timezone.utc).date().isoformat(), []).append(latency)
+    warm.sort()
+    summary = LatencySummary(warm_count=len(warm), cold_count=cold, unknown_count=unknown,
+                             p50_ms=_percentile(warm, 0.50), p95_ms=_percentile(warm, 0.95))
+    points = []
+    for day in sorted(by_day):
+        values = sorted(by_day[day])
+        points.append(LatencyPoint(date=day, warm_count=len(values),
+                                   p50_ms=_percentile(values, 0.50), p95_ms=_percentile(values, 0.95)))
+    return summary, points
 
 
 def get_admin_summary(db: Session) -> AdminSummaryTile:
@@ -140,7 +188,12 @@ def get_system_analytics(db: Session, days: int = 30) -> SystemAnalytics:
     )
     error_rate = (error_logs / total_logs * 100.0) if total_logs > 0 else 0.0
 
+    latency, latency_points = latency_stats(db, start_date)
+
     return SystemAnalytics(
+        days=days,
+        latency=latency,
+        latency_over_time=latency_points,
         total_predictions=total_preds,
         class_distribution=class_dist,
         usage_over_time=usage_over_time,

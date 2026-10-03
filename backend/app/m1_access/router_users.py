@@ -4,6 +4,7 @@ Conforms to PRD Section 5.1.5 / 6.3 and Module Interface Contract Section 6.3.
 """
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
+from app.m1_access.account_policy import apply_status_change
 from app.m1_access.models import User
 from typing import List
 from app.m1_access.schemas import (
@@ -15,7 +16,6 @@ from app.m1_access.security import require_role
 from app.shared.db import get_db
 from app.shared.errors import (
     AdmActionNotPermittedException,
-    AppException,
 )
 from app.shared.logging import emit
 from app.shared.schemas import SessionContext
@@ -49,29 +49,20 @@ def update_user_status(
     admin_session: SessionContext = Depends(require_role("Admin")),
     db: Session = Depends(get_db),
 ):
-    # Self-modification guard (PRD §5.1.5 / US-3.5 AC1): Admin cannot modify own status
-    if user_id == admin_session.user_id:
+    # INTEGRATION (Phase 5b, changes.md 6.11): the self-change guard, the
+    # last-active-admin invariant and the not-found code live in
+    # account_policy, shared with M3's admin endpoint.
+    try:
+        target_user, old_status = apply_status_change(db, admin_session.user_id, user_id, body.action)
+    except AdmActionNotPermittedException:
         emit(
             "administrative-action",
-            f"Blocked self-modification attempt by admin_id={admin_session.user_id}",
+            f"Blocked status change by admin_id={admin_session.user_id} on user_id={user_id} ({body.action})",
             severity="warning",
             user_id=admin_session.user_id,
         )
-        raise AdmActionNotPermittedException("Administrators are not permitted to alter their own account status.")
-
-    target_user = db.query(User).filter(User.user_id == user_id).first()
-    if not target_user:
-        raise AppException(code="USER_NOT_FOUND", message=f"User with id {user_id} does not exist.", status_code=404)
-
-    # Map action to state
-    status_map = {
-        "enable": "active",
-        "disable": "disabled",
-        "remove": "removed",
-    }
-    new_status = status_map[body.action]
-    old_status = target_user.account_status
-    target_user.account_status = new_status
+        raise
+    new_status = target_user.account_status
     db.commit()
     db.refresh(target_user)
 

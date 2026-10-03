@@ -486,6 +486,27 @@ def config_drift(db: Session) -> list[str]:
     return drift
 
 
+def preview(db: Session, model_id: int) -> dict:
+    """The canary and quality-gate verdict activation WOULD reach - nothing
+    switches, nothing is written (Phase 5b: the admin screen shows these
+    metrics per candidate before anyone decides). Same refusals as activate()
+    for a missing or invalid row."""
+    from app.m2_analysis import gate
+    from app.m2_analysis.models import ModelRegistry
+
+    target = db.get(ModelRegistry, model_id)
+    if target is None:
+        raise RegistryError("MDL_NOT_FOUND", f"model #{model_id} does not exist", 404)
+    if target.model_type not in _needed_types():
+        raise RegistryError("MDL_INVALID", f"model type {target.model_type!r} is not in use", 422)
+    if not VALIDATORS[target.model_type](target.hyperparameters):
+        raise RegistryError("MDL_INVALID", f"model #{model_id} does not describe the resident "
+                            "backbone or has an invalid configuration", 422)
+    canary_result = canary(target)
+    return {"model_id": model_id, "model_type": target.model_type, "is_active": target.is_active,
+            "canary": canary_result, "gate": gate.evaluate(active(db), target)}
+
+
 def rollback(db: Session, model_type: str, *, actor_id: int | None, force: bool = False,
              reason: str | None = None) -> ActivationResult:
     """Re-activate the model that was active before the latest change of this type.

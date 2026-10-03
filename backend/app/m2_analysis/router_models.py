@@ -2,6 +2,7 @@
 
     GET  /api/v1/models                    every D3 row, with the ACTIVE configuration marked
     POST /api/v1/models                    register an artefact (multipart) - inactive
+    POST /api/v1/models/{id}/gate-preview  canary + quality gate verdict, read-only (no switch)
     POST /api/v1/models/{id}/activate      canary + quality gate + atomic switch
     POST /api/v1/models/rollback           return a type to its previous active model
     GET  /api/v1/models/activations        the activation history (audit trail)
@@ -146,6 +147,17 @@ def activate_model(model_id: int, body: ActivateBody = ActivateBody(),
                    session: SessionContext = Depends(require_role("Admin")),
                    db: Session = Depends(get_db)):
     return activate_for(db, session, model_id, body.force, body.reason)
+
+
+@router.post("/{model_id}/gate-preview")
+def gate_preview(model_id: int, session: SessionContext = Depends(require_role("Admin")),
+                 db: Session = Depends(get_db)):
+    """What activation would decide, without activating. Read-only."""
+    try:
+        return registry.preview(db, model_id)
+    except RegistryError as exc:
+        db.rollback()
+        return _error(exc)
 
 
 class RollbackBody(BaseModel):

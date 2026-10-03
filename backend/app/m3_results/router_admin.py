@@ -140,27 +140,19 @@ def update_user_status(
     Administrative account state change (F.17 write half / Contract C3.3).
     Prevents self-modification by the administrator.
     """
-    if user_id == session.user_id and body.action in ("disable", "remove"):
-        raise AppException(
-            code="ADM_ACTION_NOT_PERMITTED",
-            message="Administrators cannot disable or remove their own account.",
-            status_code=409,
-        )
+    # INTEGRATION (Phase 5b, changes.md 6.11): one policy with M1's endpoint -
+    # self-change refused, the last active admin protected, and a missing
+    # user is USER_NOT_FOUND (it used to answer AUTH_INVALID_CREDENTIALS).
+    from app.m1_access.account_policy import apply_status_change
 
-    user = db.query(User).filter(User.user_id == user_id).first()
-    if not user:
-        raise AppException(
-            code="AUTH_INVALID_CREDENTIALS",
-            message=f"User #{user_id} not found.",
-            status_code=404,
-        )
-
-    status_map = {
-        "enable": "active",
-        "disable": "disabled",
-        "remove": "removed",
-    }
-    user.account_status = status_map[body.action]
+    try:
+        user, _old = apply_status_change(db, session.user_id, user_id, body.action)
+    except AppException as exc:
+        if exc.code == "ADM_ACTION_NOT_PERMITTED":
+            emit(event_type="administrative-action",
+                 event_detail=f"Admin {session.user_id} status change on user #{user_id} refused: {exc.message}",
+                 severity="warning", user_id=session.user_id)
+        raise
     db.commit()
 
     emit(

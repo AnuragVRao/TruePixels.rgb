@@ -533,3 +533,41 @@ def test_gate_refuses_a_stale_or_unkeyed_reference_cache(monkeypatch):
     assert reason and "stale" in reason
     unkeyed = {k: v for k, v in ref.items() if k != "cache_key"}
     assert "no content key" in gate.stale_reason(unkeyed)
+
+
+def test_gate_preview_reports_the_verdict_without_switching():
+    """Phase 5b: the admin screen shows a candidate's gate metrics before any
+    decision. The preview must agree with activation and change nothing."""
+    _, admin = _user("Admin")
+    _, user = _user("User")
+    baseline_fusion = _active_id(registry.TYPE_FUSION)
+    bad = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"prev{next(_n)}", _fusion(0.05))
+    good = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"prev{next(_n)}", _fusion(0.74))
+    assert bad.status_code == 201 and good.status_code == 201
+    db = SessionLocal()
+    try:
+        activations_before = db.query(ModelActivation).count()
+    finally:
+        db.close()
+
+    refused = client.post(f"/api/v1/models/{bad.json()['model_id']}/gate-preview", headers=admin)
+    assert refused.status_code == 200, refused.text
+    body = refused.json()
+    assert body["gate"]["available"] and body["gate"]["passed"] is False
+    assert {"accuracy", "fpr", "auc", "recall"} <= set(body["gate"]["candidate"])
+    assert body["canary"]
+    passed = client.post(f"/api/v1/models/{good.json()['model_id']}/gate-preview", headers=admin).json()
+    assert passed["gate"]["passed"] is True
+
+    assert client.post(f"/api/v1/models/{bad.json()['model_id']}/gate-preview", headers=user).status_code == 403
+    missing = client.post("/api/v1/models/987654/gate-preview", headers=admin)
+    assert missing.status_code == 404 and missing.json()["error"]["code"] == "MDL_NOT_FOUND"
+
+    assert _active_id(registry.TYPE_FUSION) == baseline_fusion
+    db = SessionLocal()
+    try:
+        assert db.query(ModelActivation).count() == activations_before
+    finally:
+        db.close()
+    # And activation reaches the same verdict the preview showed.
+    assert _activate(admin, bad.json()["model_id"]).json()["error"]["code"] == "MDL_GATE_REFUSED"

@@ -112,7 +112,32 @@ class ConfidenceHistogramBin(BaseModel):
     count: int
 
 
+class LatencySummary(BaseModel):
+    """Inference latency over WARM predictions only (Phase 5b).
+
+    Cold-start rows (a branch loaded inside the request) and rows written
+    before cold_start was recorded (null) are counted but never enter the
+    percentiles. p50/p95 are null when there are no warm rows - no stand-in.
+    Percentiles use linear interpolation between order statistics.
+    """
+    warm_count: int
+    cold_count: int
+    unknown_count: int
+    p50_ms: float | None
+    p95_ms: float | None
+
+
+class LatencyPoint(BaseModel):
+    date: str
+    warm_count: int
+    p50_ms: float | None
+    p95_ms: float | None
+
+
 class SystemAnalytics(BaseModel):
+    days: int = 30
+    latency: LatencySummary | None = None
+    latency_over_time: list[LatencyPoint] = []
     total_predictions: int
     class_distribution: dict[str, int]
     usage_over_time: list[TimeSeriesPoint]
