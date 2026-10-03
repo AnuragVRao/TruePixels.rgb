@@ -1,0 +1,19 @@
+# Line endings for files that run inside Linux containers or POSIX shells.
+# A CRLF in a shell script or entrypoint breaks it ("/bin/sh^M: not found"),
+# and this repository is developed on Windows with core.autocrlf, so these are
+# pinned to LF regardless of the checkout platform. Everything else keeps
+# git's default handling.
+
+*.sh                 text eol=lf
+*.bash               text eol=lf
+Dockerfile           text eol=lf
+Dockerfile.*         text eol=lf
+*.dockerfile         text eol=lf
+docker-entrypoint*   text eol=lf
+Caddyfile            text eol=lf
+*.caddyfile          text eol=lf
+nginx*.conf          text eol=lf
+compose.yaml         text eol=lf
+compose.*.yaml       text eol=lf
+docker-compose*.yml  text eol=lf
+*.sql                text eol=lf

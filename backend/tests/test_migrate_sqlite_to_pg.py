@@ -88,3 +88,68 @@ def test_refuses_to_merge_into_a_non_empty_target(tmp_path, monkeypatch):
                                       "--target", db.DATABASE_URL, "--apply"])
     with pytest.raises(SystemExit, match="not empty"):
         _load_script().main()
+
+
+def _empty_legacy(path: Path) -> sqlite3.Connection:
+    db.import_all_models()
+    legacy = create_engine(f"sqlite:///{path.as_posix()}")
+    db.Base.metadata.create_all(legacy)
+    legacy.dispose()
+    con = sqlite3.connect(path)
+    # The pre-Phase-2 schema had neither of Phase 2's new unique indexes, and
+    # plain sqlite3 does not enforce foreign keys - so it could hold exactly
+    # the rows the pre-checks exist to catch.
+    con.executescript("DROP INDEX uq_users_email_lower; DROP INDEX uq_models_one_active_per_type;")
+    return con
+
+
+def test_many_rows_mixed_case_emails_and_id_gaps(tmp_path, monkeypatch, capsys):
+    """250 users with mixed-case (but unique) emails and gapped ids, 400 logs:
+    everything copied, case preserved, sequences continue after the max id."""
+    source = tmp_path / "many.db"
+    con = _empty_legacy(source)
+    users = [(i * 3, f"User{i}@Example.COM") for i in range(1, 251)]  # ids 3, 6, ..., 750
+    con.executemany(
+        "INSERT INTO users VALUES (?, 'U', ?, 'h', 'User', 'active', '2026-10-01 10:00:00', NULL, NULL, 0)",
+        users)
+    con.executemany(
+        "INSERT INTO logs VALUES (?, ?, 'authentication', 'x', 'info', NULL, '2026-10-01 10:00:00')",
+        [(i * 2, users[i % 250][0]) for i in range(1, 401)])  # ids up to 800
+    con.commit()
+    con.close()
+
+    monkeypatch.setattr(sys, "argv", ["m", "--source", str(source), "--target", db.DATABASE_URL, "--apply"])
+    assert _load_script().main() == 0
+    assert "0 problem(s)" in capsys.readouterr().out
+    with db.engine.connect() as c:
+        assert c.execute(text("SELECT count(*) FROM users")).scalar_one() == 250
+        assert c.execute(text("SELECT count(*) FROM logs")).scalar_one() == 400
+        assert c.execute(text(
+            "SELECT email FROM users WHERE lower(email) = 'user17@example.com'")).scalar_one() == "User17@Example.COM"
+        assert c.execute(text("SELECT nextval(pg_get_serial_sequence('users', 'user_id'))")).scalar_one() == 751
+        assert c.execute(text("SELECT nextval(pg_get_serial_sequence('logs', 'log_id'))")).scalar_one() == 801
+
+
+def test_violations_are_all_reported_and_nothing_is_copied(tmp_path, monkeypatch, capsys):
+    """Case-only duplicate emails, two active models of one type and an orphan
+    row: refused before any insert, every finding listed."""
+    source = tmp_path / "bad.db"
+    con = _empty_legacy(source)
+    con.executescript("""
+        INSERT INTO users VALUES (1, 'A', 'Same@Example.com', 'h', 'User', 'active', '2026-10-01 10:00:00', NULL, NULL, 1);
+        INSERT INTO users VALUES (2, 'B', 'same@example.COM', 'h', 'User', 'active', '2026-10-01 10:00:00', NULL, NULL, 1);
+        INSERT INTO models VALUES (1, 'f', 'a', 'fusion-configuration', 'c', NULL, NULL, NULL, 1, '2026-10-01 10:00:00');
+        INSERT INTO models VALUES (2, 'f', 'b', 'fusion-configuration', 'c', NULL, NULL, NULL, 1, '2026-10-01 10:00:00');
+        INSERT INTO logs VALUES (1, 99, 'authentication', 'x', 'info', NULL, '2026-10-01 10:00:00');
+    """)
+    con.commit()
+    con.close()
+
+    monkeypatch.setattr(sys, "argv", ["m", "--source", str(source), "--target", db.DATABASE_URL, "--apply"])
+    with pytest.raises(SystemExit, match="nothing was copied"):
+        _load_script().main()
+    out = capsys.readouterr().out
+    assert "3 problem(s)" in out
+    assert "equal apart from case" in out and "ACTIVE model" in out and "logs whose user" in out
+    with db.engine.connect() as c:
+        assert c.execute(text("SELECT count(*) FROM users")).scalar_one() == 0
