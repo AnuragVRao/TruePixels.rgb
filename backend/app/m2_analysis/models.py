@@ -22,6 +22,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -57,6 +58,16 @@ class ModelRegistry(Base):
 
     __table_args__ = (
         UniqueConstraint("model_name", "model_version", name="uq_model_name_version"),
+        # At most one active row per model type, enforced by the database
+        # (FR-07's atomic activation relies on it). Partial unique index on
+        # both backends.
+        Index(
+            "uq_models_one_active_per_type",
+            "model_type",
+            unique=True,
+            postgresql_where=text("is_active"),
+            sqlite_where=text("is_active = 1"),
+        ),
     )
 
 
@@ -71,16 +82,19 @@ class Prediction(Base):
     predicted_class = Column(String(14), nullable=False)  # 'Real', 'AI Generated'
     confidence_score = Column(Float, nullable=False)
     semantic_score = Column(Float, nullable=False)
-    # NOT NULL, as M3 wrote it: M3's views and PDF report format this value
-    # unconditionally. Running with the frequency branch disabled therefore
-    # fails at this write rather than storing a stand-in number.
     # Nullable on purpose: the frequency branch legitimately produces no
     # score when it is switched off, or when the image is below SPAI's 224px
     # patch size. Contract C2 types this `float | None` for the same reason.
     # A stand-in value here would be a lie that survives into reports.
     frequency_score = Column(Float, nullable=True)
     fusion_score = Column(Float, nullable=False)
+    # Inference time only (both branches + fusion); excludes model loading.
     latency_ms = Column(Integer, nullable=True)
+    # True when a branch had to be loaded inside this request (warm-up off or
+    # failed). Excluded from latency statistics: such a request also paid for
+    # the load, even though latency_ms does not count it. Null on rows written
+    # before Phase 2, when this was not recorded.
+    cold_start = Column(Boolean, nullable=True)
     prediction_timestamp = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # One-directional (M3 had back_populates="predictions"): Image is M1's

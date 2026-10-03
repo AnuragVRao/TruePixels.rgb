@@ -76,6 +76,7 @@ def download_prediction_report(
     xai_items = (
         db.query(Explainability)
         .filter(Explainability.prediction_id == prediction_id)
+        .order_by(Explainability.branch)
         .all()
     )
 

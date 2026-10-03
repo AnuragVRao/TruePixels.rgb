@@ -5,6 +5,7 @@ Conforms to PRD Section 5.1 / 6.3 and SRS F.1, F.2, F.3, F.4.
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.m1_access.config import OTP_EXPIRE_MINUTES, REQUIRE_2FA, ENVIRONMENT
@@ -61,7 +62,7 @@ def register_user(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
     # 2. Check email uniqueness in DB (App-level + wrapped DB constraint)
-    existing_user = db.query(User).filter(User.email == body.email).first()
+    existing_user = db.query(User).filter(func.lower(User.email) == body.email.lower()).first()
     if existing_user:
         emit("authentication", f"Registration rejected: email {body.email} already exists", severity="warning")
         raise AuthEmailTakenException("An account with this email address already exists.")
@@ -119,7 +120,7 @@ def login_user(
     db: Session = Depends(get_db),
 ):
     clean_email = body.email.strip().lower()
-    user = db.query(User).filter(User.email == clean_email).first()
+    user = db.query(User).filter(func.lower(User.email) == clean_email).first()
 
     # Timing attack protection: perform dummy verification if user is not found (PRD §5.1.2)
     if not user:
@@ -176,7 +177,7 @@ def login_admin(
     db: Session = Depends(get_db),
 ):
     clean_email = body.email.strip().lower()
-    user = db.query(User).filter(User.email == clean_email).first()
+    user = db.query(User).filter(func.lower(User.email) == clean_email).first()
 
     if not user:
         verify_password(body.password, DUMMY_HASH)
@@ -257,7 +258,7 @@ def send_otp(
     db: Session = Depends(get_db),
 ):
     clean_email = body.email.strip().lower()
-    user = db.query(User).filter(User.email == clean_email).first()
+    user = db.query(User).filter(func.lower(User.email) == clean_email).first()
     if not user:
         # Don't leak whether email exists
         return {"message": "If the account exists, a verification code has been dispatched."}
@@ -283,7 +284,7 @@ def verify_otp(
 ):
     clean_email = body.email.strip().lower()
     clean_otp = body.otp.strip()
-    user = db.query(User).filter(User.email == clean_email).first()
+    user = db.query(User).filter(func.lower(User.email) == clean_email).first()
     if not user or not user.otp_hash or not user.otp_expires_at:
         emit("authentication", f"OTP verification failed: no active OTP for email {clean_email}", severity="warning")
         raise AuthInvalidCredentialsException("Invalid or expired verification code.")

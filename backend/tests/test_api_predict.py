@@ -17,49 +17,23 @@ import itertools
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from app.m1_access.models import User
 from app.m1_access.security import create_session_token, hash_password
 from app.m2_analysis import frequency_detector
 from app.main import app
 from app.shared import config
-from app.shared.db import Base, get_db
+from app.shared.db import SessionLocal
 
 pytestmark = pytest.mark.slow
 
 client = TestClient(app)
 _emails = itertools.count()
-_sessions: sessionmaker | None = None
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _database(tmp_path_factory):
-    """A private database for this module, through get_db like M1/M3's suites.
-
-    The global engine cannot be relied on here: M1's conftest sets
-    DATABASE_URL=sqlite:///:memory: when it is collected, and an in-memory
-    SQLite database without a StaticPool is a different, empty database on
-    every connection.
-    """
-    global _sessions
-    path = tmp_path_factory.mktemp("m2_api") / "test.db"
-    engine = create_engine(f"sqlite:///{path.as_posix()}", connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=engine)
-    _sessions = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    def override_get_db():
-        db = _sessions()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    app.dependency_overrides.pop(get_db, None)
-    engine.dispose()
+# The database is the shared test database built by the root conftest (Alembic
+# migrations, SQLite or PostgreSQL), which the logger also writes to.
+_sessions = SessionLocal
 
 
 def make_user() -> dict[str, str]:
@@ -83,7 +57,7 @@ def make_user() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def auth() -> dict[str, str]:
     return make_user()
 
@@ -306,16 +280,11 @@ def test_another_users_image_is_indistinguishable_from_a_missing_one(sample_png,
     assert theirs.json()["error"]["code"] == missing.json()["error"]["code"] == "IMG_NOT_FOUND"
 
 
-def test_prediction_writes_its_d6_audit_rows(sample_png, auth, monkeypatch, strict_audit_log):
-    """F.15: upload and prediction each leave a D6 row - and a swallowed write fails.
-
-    The logger is pointed at this module's database for the test; elsewhere in
-    this module it still writes to the global engine (fixed in Phase 2).
-    """
-    from app.m3_results import logging_service
+def test_prediction_writes_its_d6_audit_rows(sample_png, auth):
+    """F.15: upload and prediction each leave a D6 row (and, as for every test,
+    a swallowed log write fails it - see strict_audit_log)."""
     from app.m3_results.models import LogEntry
 
-    monkeypatch.setattr(logging_service, "SessionLocal", _sessions)
     image_id = upload(sample_png, auth)
     prediction_id = predict(image_id, auth).json()["prediction_id"]
 
@@ -338,3 +307,26 @@ def test_no_clip_tensor_is_written_at_upload_or_prediction(sample_png, auth):
     assert predict(image_id, auth).status_code in (200, 201)
     assert set(shared_config.STORAGE_ROOT.rglob("*.npy")) == before == set()
     assert not (shared_config.STORAGE_ROOT / "tensors").exists()
+
+
+def test_cold_start_is_recorded_on_d4(sample_png, auth):
+    """A prediction that had to load a branch is flagged cold; the next is not.
+
+    latency_ms excludes the load either way; cold_start is how latency
+    statistics know to leave such a request out.
+    """
+    from app.m2_analysis import detectors
+    from app.m2_analysis.models import Prediction
+
+    image_id = upload(sample_png, auth)
+    detectors.primary.reset_cache()  # force the semantic branch to load in-request
+    cold = predict(image_id, auth).json()["prediction_id"]
+    warm = predict(image_id, auth).json()["prediction_id"]
+
+    db = _sessions()
+    try:
+        flags = {p.prediction_id: p.cold_start for p in db.query(Prediction)}
+    finally:
+        db.close()
+    assert flags[cold] is True
+    assert flags[warm] is False

@@ -47,7 +47,7 @@ def get_user_prediction_history(
         db.query(Prediction, Image)
         .join(Image, Image.image_id == Prediction.image_id)
         .filter(Image.user_id == session.user_id)
-        .order_by(Prediction.prediction_timestamp.desc())
+        .order_by(Prediction.prediction_timestamp.desc(), Prediction.prediction_id.desc())
         .offset(offset)
         .limit(page_size)
         .all()

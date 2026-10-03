@@ -67,7 +67,7 @@ def get_system_logs(
     total_pages = math.ceil(total / page_size) if total > 0 else 1
     offset = (page - 1) * page_size
 
-    rows = query.order_by(LogEntry.log_timestamp.desc()).offset(offset).limit(page_size).all()
+    rows = query.order_by(LogEntry.log_timestamp.desc(), LogEntry.log_id.desc()).offset(offset).limit(page_size).all()
 
     # Log the log-inspection audit action
     emit(
@@ -115,7 +115,7 @@ def list_users(
     db: Session = Depends(get_db),
 ) -> list[AdminUserItem]:
     """Returns list of registered users for administrator management screen (F.17)."""
-    users = db.query(User).order_by(User.registered_at.desc()).all()
+    users = db.query(User).order_by(User.registered_at.desc(), User.user_id.desc()).all()
     return [
         AdminUserItem(
             user_id=u.user_id,
@@ -182,7 +182,7 @@ def list_models(
     db: Session = Depends(get_db),
 ) -> list[dict]:
     """Admin view for Model Registry (Contract C4 / F.19)."""
-    models = db.query(ModelRegistry).order_by(ModelRegistry.registered_at.desc()).all()
+    models = db.query(ModelRegistry).order_by(ModelRegistry.registered_at.desc(), ModelRegistry.model_id.desc()).all()
     return [
         {
             "model_id": m.model_id,
@@ -215,7 +215,7 @@ def activate_model(
     # Deactivate previous active model of same type atomically in one transaction
     db.query(ModelRegistry).filter(
         ModelRegistry.model_type == target.model_type,
-        ModelRegistry.is_active == True,
+        ModelRegistry.is_active.is_(True),
     ).update({"is_active": False})
 
     target.is_active = True

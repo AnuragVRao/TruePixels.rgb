@@ -7,11 +7,7 @@ import pytest
 from datetime import datetime, timezone, timedelta
 from fastapi import Depends, Header
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from app.shared.db import Base, get_db
+from app.shared.db import SessionLocal, get_db
 from app.shared.deps import current_session
 from app.shared.errors import AppException
 from app.shared.schemas import SessionContext
@@ -94,15 +90,24 @@ def mock_report_session(
     return _resolve_mock_token(token)
 
 
-# Create isolated in-memory SQLite database for test execution
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+# INTEGRATION (Phase 2, changes.md 6.5): no private in-memory engine any more.
+# The root conftest builds one test database with the Alembic migrations
+# (SQLite, or PostgreSQL via TEST_DATABASE_URL), points the whole app at it and
+# empties every table after each test, so each test still starts clean.
 
-engine_test = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine_test)
+
+@pytest.fixture
+def strict_audit_log(request):
+    """Root conftest's strict audit check, except for the one M3 test that
+    writes an invalid log row ON PURPOSE to prove emit_log never raises."""
+    from app.m3_results import logging_service
+
+    logging_service.WRITE_FAILURES.clear()
+    yield
+    if request.node.name != "test_emit_log_is_non_throwing_under_failure":
+        from conftest import assert_no_swallowed_log_writes
+        assert_no_swallowed_log_writes()
+    logging_service.WRITE_FAILURES.clear()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -120,14 +125,12 @@ def setup_test_directories(tmp_path_factory):
 
 @pytest.fixture
 def db_session():
-    """Yields a clean database session for each test."""
-    Base.metadata.create_all(bind=engine_test)
-    db = TestingSessionLocal()
+    """Yields a session on the shared test database (emptied after each test)."""
+    db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-        Base.metadata.drop_all(bind=engine_test)
 
 
 @pytest.fixture

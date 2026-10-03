@@ -23,8 +23,6 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from app.m1_access.models import Image, User
 from app.m1_access.security import create_session_token, hash_password
@@ -32,35 +30,16 @@ from app.m2_analysis.models import ModelRegistry, Prediction
 from app.m3_results.models import Explainability
 from app.main import app
 from app.shared import config
-from app.shared.db import Base, get_db
+from app.shared.db import SessionLocal
 from conftest import make_image, png_bytes
 
 client = TestClient(app)
 _emails = itertools.count()
 PNG_MAGIC = bytes([0x89]) + b"PNG"
-_sessions: sessionmaker | None = None
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _database(tmp_path_factory):
-    """A private database, through get_db - same reasoning as test_api_predict."""
-    global _sessions
-    path = tmp_path_factory.mktemp("storage_access") / "test.db"
-    engine = create_engine(f"sqlite:///{path.as_posix()}", connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=engine)
-    _sessions = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    def override_get_db():
-        db = _sessions()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    app.dependency_overrides.pop(get_db, None)
-    engine.dispose()
+# The shared test database (root conftest); emptied after each test.
+_sessions = SessionLocal
 
 
 def make_user(role: str = "User") -> tuple[int, dict[str, str]]:

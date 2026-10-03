@@ -7,11 +7,13 @@ source, so nothing in git is a working credential.
 import os
 import secrets
 
+from sqlalchemy import func
+
 from app.m1_access.models import User
 from app.m1_access.security import hash_password, validate_password_strength
 from app.shared.db import SessionLocal, init_db
 
-init_db()
+init_db()  # refuses to run unless the schema is current: cd backend && alembic upgrade head
 db = SessionLocal()
 
 admin_email = os.getenv("SEED_ADMIN_EMAIL", "admin@truepixels.rgb").strip().lower()
@@ -22,7 +24,7 @@ if generated:
     admin_pwd = secrets.token_urlsafe(18) + "a1"
 validate_password_strength(admin_pwd)
 
-existing = db.query(User).filter(User.email == admin_email).first()
+existing = db.query(User).filter(func.lower(User.email) == admin_email).first()
 if not existing:
     admin = User(
         full_name="System Administrator",

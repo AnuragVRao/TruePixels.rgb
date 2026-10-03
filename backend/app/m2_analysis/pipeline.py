@@ -82,6 +82,9 @@ async def run_detection(
         # resident (startup warm-up, app/m2_analysis/warmup.py) and these return
         # immediately; if the warm-up was off or failed, the load still happens
         # - it is just not counted as this request's inference time.
+        cold_start = not detectors.primary.is_loaded or (
+            models.frequency_detector is not None and not frequency_detector.frequency.is_loaded
+        )
         detectors.primary.load()
         if models.frequency_detector is not None:
             frequency_detector.frequency.load()
@@ -142,6 +145,7 @@ async def run_detection(
             frequency_score=frequency_score,
             fusion_score=fusion_score,
             latency_ms=latency_ms,
+            cold_start=cold_start,
             prediction_timestamp=timestamp,
         )
         session.add(row)

@@ -25,7 +25,23 @@ if str(BACKEND_ROOT) not in sys.path:
 # M2's and M3's - out of the developer's real database and storage tree. (The
 # SPAI weights are not affected: config.MODELS_DIR ignores STORAGE_DIR.)
 _SCRATCH = Path(tempfile.mkdtemp(prefix="truepixels-tests-"))
-os.environ.setdefault("DATABASE_URL", f"sqlite:///{(_SCRATCH / 'test.db').as_posix()}")
+
+# The test database: SQLite in the scratch directory by default, or
+# PostgreSQL via TEST_DATABASE_URL, e.g.
+#   TEST_DATABASE_URL=postgresql+psycopg://truepixels:<pw>@127.0.0.1:5433/truepixels_test
+# ASSIGNED, not setdefault: a DATABASE_URL in the shell or in backend/.env
+# (the developer's real database) must never be the one the suite empties.
+# A PostgreSQL test database must be named *_test, as a second guard.
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL", f"sqlite:///{(_SCRATCH / 'test.db').as_posix()}"
+)
+if TEST_DATABASE_URL.startswith("postgresql") and not TEST_DATABASE_URL.rsplit("/", 1)[-1].split("?")[0].endswith("_test"):
+    raise RuntimeError(
+        f"refusing to run the test suite against {TEST_DATABASE_URL.rsplit('@', 1)[-1]}: "
+        "a PostgreSQL TEST_DATABASE_URL must name a database ending in '_test' "
+        "(the suite empties every table after each test)"
+    )
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("STORAGE_DIR", str(_SCRATCH / "storage"))
 os.environ.setdefault("EMAIL_BACKEND", "console")
 os.environ.setdefault("REQUIRE_2FA", "False")
@@ -81,15 +97,80 @@ def assert_no_swallowed_log_writes() -> None:
 
 @pytest.fixture
 def strict_audit_log():
-    """Opt-in: the test fails if any D6 write raised during it.
+    """The test fails if any D6 write raised during it.
 
-    Opt-in for now because several suites still point the logger at a
-    database without a ``logs`` table (M1's conftest sets an in-memory
-    DATABASE_URL); Phase 2 fixes the test database wiring and can make this
-    autouse.
+    Applied to every test by ``_strict_audit_log_everywhere``. A directory's
+    conftest may override this fixture to exempt a test that writes a bad
+    log row on purpose (M3's non-throwing test does).
     """
     from app.m3_results import logging_service
 
     logging_service.WRITE_FAILURES.clear()
     yield
     assert_no_swallowed_log_writes()
+
+
+# --------------------------------------------------------------------------
+# One test database for the whole run, built by the migrations
+# --------------------------------------------------------------------------
+
+def _reset_schema() -> None:
+    """Drop everything, then build the schema with ``alembic upgrade head``.
+
+    Building the test database through the migrations (not create_all) means
+    every test run also exercises them.
+    """
+    from sqlalchemy import inspect, text
+
+    from app.shared import db
+
+    db.import_all_models()
+    with db.engine.begin() as connection:
+        db.Base.metadata.drop_all(bind=connection)
+        if inspect(connection).has_table("alembic_version"):
+            connection.execute(text("DROP TABLE alembic_version"))
+    db.migrate_to_head()
+
+
+def _empty_all_tables() -> None:
+    """Remove every row; restart ids so each test starts from a clean state."""
+    from sqlalchemy import text
+
+    from app.shared import db
+
+    tables = [t.name for t in reversed(db.Base.metadata.sorted_tables)]
+    with db.engine.begin() as connection:
+        if connection.dialect.name == "postgresql":
+            # A session a test leaked would block TRUNCATE forever; fail instead.
+            connection.execute(text("SET LOCAL lock_timeout = '10s'"))
+            connection.execute(text(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE"))
+        else:
+            for name in tables:
+                connection.execute(text(f"DELETE FROM {name}"))
+            if connection.execute(
+                text("SELECT name FROM sqlite_master WHERE name = 'sqlite_sequence'")
+            ).first():
+                connection.execute(text("DELETE FROM sqlite_sequence"))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _test_database():
+    """Point the whole app (requests, logging, pipeline) at the test database."""
+    from app.shared import db
+
+    db.configure_database(TEST_DATABASE_URL)
+    _reset_schema()
+    yield
+    db.engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean_tables(_test_database):
+    yield
+    _empty_all_tables()
+
+
+@pytest.fixture(autouse=True)
+def _strict_audit_log_everywhere(strict_audit_log):
+    """Every test fails if a D6 write was swallowed (see strict_audit_log)."""
+    yield

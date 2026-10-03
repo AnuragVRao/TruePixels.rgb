@@ -55,6 +55,7 @@ def get_prediction_result(
     xai_rows = (
         db.query(Explainability)
         .filter(Explainability.prediction_id == prediction_id)
+        .order_by(Explainability.branch)
         .all()
     )
 
@@ -123,6 +124,7 @@ def get_explainability(
     xai_rows = (
         db.query(Explainability)
         .filter(Explainability.prediction_id == prediction_id)
+        .order_by(Explainability.branch)
         .all()
     )
 

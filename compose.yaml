@@ -1,0 +1,34 @@
+# Local PostgreSQL for TruePixels.rgb (Phase 2).
+#
+#   docker compose up -d db          # start
+#   cd backend && alembic upgrade head   # create / update the schema
+#   docker compose down              # stop (data kept in the named volume)
+#
+# Credentials come ONLY from backend/.env (gitignored; copy
+# backend/.env.example and choose a password). There are no defaults here on
+# purpose: compose refuses to start without that file, rather than starting a
+# database with a guessable password. DATABASE_URL in the same file must use
+# the same user/password/database, port 5433.
+#
+# Bound to 127.0.0.1 only: the database is not reachable from the network.
+# Port 5433 on the host avoids clashing with any locally installed Postgres.
+
+services:
+  db:
+    image: postgres:16
+    env_file:
+      - path: backend/.env
+        required: true
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - truepixels-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  truepixels-pgdata:

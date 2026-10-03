@@ -34,6 +34,8 @@ scikit-learn==1.7.0
 # M1 - accounts, sessions, upload validation (from M1's requirements.txt,
 # pinned to the versions the integrated suite was run with on 2026-09-30)
 sqlalchemy==2.1.1
+alembic==1.20.0            # schema migrations (backend/migrations); the only way the schema changes
+psycopg[binary]==3.3.6     # PostgreSQL driver (DATABASE_URL=postgresql+psycopg://...)
 python-jose[cryptography]==3.5.0
 argon2-cffi==25.1.0
 python-dotenv==1.2.3

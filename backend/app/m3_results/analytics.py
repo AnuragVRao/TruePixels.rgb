@@ -47,7 +47,8 @@ def get_admin_summary(db: Session) -> AdminSummaryTile:
 
     active_models = (
         db.query(ModelRegistry)
-        .filter(ModelRegistry.is_active == True)
+        .filter(ModelRegistry.is_active.is_(True))
+        .order_by(ModelRegistry.model_type)
         .all()
     )
     models_info = [

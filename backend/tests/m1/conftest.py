@@ -1,4 +1,13 @@
-"""Pytest configuration, test fixtures, and SQLite in-memory test database."""
+"""Pytest configuration, test fixtures, and SQLite in-memory test database.
+
+INTEGRATION (Phase 2, changes.md 6.5): the database is no longer a private
+in-memory SQLite per test. The root conftest builds one test database with
+the Alembic migrations (SQLite, or PostgreSQL via TEST_DATABASE_URL), points
+the whole app at it, and empties every table after each test - so each test
+still starts from an empty database, and the D6 logger now writes to the
+same database as the requests. Fixtures and test files are otherwise
+unchanged.
+"""
 import io
 import os
 import shutil
@@ -6,19 +15,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-# Force testing configuration
-os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+# Force testing configuration (DATABASE_URL is set by the root conftest)
 os.environ["EMAIL_BACKEND"] = "console"
 os.environ["REQUIRE_2FA"] = "False"
 
 from app.main import app
 from app.m1_access.models import User
 from app.m1_access.security import hash_password, create_session_token
-from app.shared.db import Base, get_db
+from app.shared.db import SessionLocal, get_db
 
 TEST_STORAGE_DIR = Path("./test_storage")
 
@@ -33,20 +37,12 @@ def setup_test_storage():
 
 @pytest.fixture(scope="function")
 def db_session():
-    """Creates a fresh in-memory SQLite database for each test function."""
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base.metadata.create_all(bind=engine)
-    db = TestingSessionLocal()
+    """A session on the shared test database (emptied after each test)."""
+    db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture(scope="function")

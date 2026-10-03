@@ -75,6 +75,10 @@ def test_contract_c5_logging_emission(db_session):
     """Validates Contract C5 logging entry structure and secret scrubbing."""
     detail = "User authenticated with bearer token test-token-12345678"
     sanitized = redact_secrets(detail)
+    # INTEGRATION (Phase 2): the user the log row points at must exist - the
+    # D6 -> D1 foreign key is enforced now (PostgreSQL always; SQLite since
+    # PRAGMA foreign_keys=ON). Previously user_id=1 referred to nobody.
+    create_dummy_user(db_session, email="c5-log@nitk.edu.in", role="User")
     entry = LogEntry(
         user_id=1,
         event_type="authentication",

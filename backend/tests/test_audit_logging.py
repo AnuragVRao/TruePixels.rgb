@@ -15,15 +15,13 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from app.m2_analysis.models import ModelRegistry, Prediction
 from app.m3_results import logging_service
 from app.m3_results.models import Explainability, LogEntry
 from app.main import app
 from app.shared import config
-from app.shared.db import Base, get_db
+from app.shared.db import SessionLocal
 from app.shared.logging import emit
 from conftest import assert_no_swallowed_log_writes, make_image, png_bytes
 
@@ -33,25 +31,10 @@ PASSWORD = "AuditLogTest12345"
 
 
 @pytest.fixture
-def sessions(tmp_path, monkeypatch):
-    """One database for the request AND the logger."""
-    engine = create_engine(f"sqlite:///{(tmp_path / 'audit.db').as_posix()}",
-                           connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=engine)
-    factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    def override_get_db():
-        db = factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    monkeypatch.setattr(logging_service, "SessionLocal", factory)
-    yield factory
-    app.dependency_overrides.pop(get_db, None)
-    engine.dispose()
+def sessions():
+    """The shared test database - the same one the logger writes to, with no
+    patching: since Phase 2 there is only one engine (app/shared/db.py)."""
+    return SessionLocal
 
 
 def register_and_login() -> tuple[int, dict[str, str]]:
@@ -106,7 +89,7 @@ def add_panel(factory, image_id: int) -> int:
         db.close()
 
 
-def test_login_upload_and_file_access_write_d6_rows(sessions, strict_audit_log):
+def test_login_upload_and_file_access_write_d6_rows(sessions):
     owner_id, owner = register_and_login()
     stranger_id, stranger = register_and_login()
 

@@ -14,6 +14,7 @@ from sqlalchemy import (
     CheckConstraint,
     Index,
     Boolean,
+    func,
 )
 from sqlalchemy.orm import relationship
 from app.shared.db import Base
@@ -29,15 +30,17 @@ class User(Base):
 
     user_id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     full_name = Column(String(120), nullable=False)
-    email = Column(String(255), unique=True, nullable=False, index=True)
+    # Unique case-insensitively: see uq_users_email_lower below. (Was
+    # unique=True on the raw column, which "A@x" and "a@x" both satisfied.)
+    email = Column(String(255), nullable=False)
     password_hash = Column(Text, nullable=False)
     role = Column(String(10), nullable=False, default="User")
     account_status = Column(String(10), nullable=False, default="active")
-    registered_at = Column(DateTime, default=utcnow, nullable=False)
+    registered_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     # 2FA / OTP Enhancement fields
     otp_hash = Column(String(255), nullable=True)
-    otp_expires_at = Column(DateTime, nullable=True)
+    otp_expires_at = Column(DateTime(timezone=True), nullable=True)
     is_email_verified = Column(Boolean, default=False, nullable=False)
 
     # Relationships
@@ -46,6 +49,10 @@ class User(Base):
     __table_args__ = (
         CheckConstraint("role IN ('User', 'Admin')", name="chk_user_role"),
         CheckConstraint("account_status IN ('active', 'disabled', 'removed')", name="chk_user_status"),
+        # INTEGRATION (Phase 2): case-insensitive uniqueness, enforced by the
+        # database. Lookups filter on func.lower(User.email), so this index is
+        # also the one they use.
+        Index("uq_users_email_lower", func.lower(email), unique=True),
     )
 
     def __repr__(self) -> str:
@@ -59,12 +66,12 @@ class Image(Base):
     image_id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False)
     file_reference = Column(Text, nullable=False)
-    content_sha256 = Column(String(64), nullable=False, index=True)
+    content_sha256 = Column(String(64), nullable=False)  # indexed by idx_images_sha below
     file_format = Column(String(5), nullable=False)
     file_size = Column(BigInteger, nullable=False)
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
-    upload_timestamp = Column(DateTime, default=utcnow, nullable=False)
+    upload_timestamp = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     validation_status = Column(String(10), nullable=False, default="pending")
     rejection_reason = Column(String(32), nullable=True)
 
