@@ -758,12 +758,15 @@ without a version bump. This is that notice.
   `X-XAI-Time-Ms` header, and writes a D6 warning when not `generated`.
 
 **Faithfulness and cost (measured, not assumed).**
-- **Faithfulness:** on 40 validation images, masking the top-attended 20% of
-  the semantic map changes SigLIP 2's score more than random masks of equal
-  size: +0.071 [0.041, 0.103], 35/40 images, p = 5.8e-8. Bottom-attended
-  masks change it least. So the caption may say the map shows where the
-  model looked. It must not, and does not, claim that the map shows
-  manipulated regions.
-- **Cost:** explainability adds 1.1–3.6 s per request and about 7 MB of
+- **Faithfulness (rollout is an attention-based proxy):** on 40 validation
+  images, semantic branch only, one value per image, masking the
+  top-attended 20% changes SigLIP 2's score more than equal random masks:
+  - mean gap +0.071 [0.041, 0.103], median +0.019;
+  - paired t one-sided p = 4.0e-5; Wilcoxon 5.8e-8; 35/40 images.
+
+  So the caption may say where the model looked, not where an image was
+  manipulated. The frequency panel is descriptive and has not been
+  validated.
+- **Cost:** explainability adds 1.2–3.7 s per request and about 7 MB of
   VRAM. Details in `ml/evaluation/RESULTS.md`.
 

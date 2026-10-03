@@ -125,15 +125,16 @@ def build_relevance_map(
 
 CAPTIONS: dict[str, str] = {
     "attention-rollout": (
-        "Attention rollout of the SigLIP 2 classifier: where its attention concentrated, "
-        "averaged over every image patch as its classifier does. It shows where the model "
-        "looked - not where an image was edited or generated, and not whether a region "
-        "pushed the verdict towards Real or towards AI Generated."
+        "Attention rollout of the SigLIP 2 classifier - an attention-based proxy for "
+        "where the model looked, averaged over every image patch as its classifier does. "
+        "It is not a measurement of what caused the verdict, not a map of where an image "
+        "was edited or generated, and it does not say whether a region pushed the verdict "
+        "towards Real or towards AI Generated."
     ),
     "spai-patch-spectrum": (
         "Average frequency content of the 224x224 patches the frequency detector (SPAI) "
-        "analysed, with SPAI's low/high split marked (r = 16). It shows which frequencies "
-        "are present in what SPAI saw - not which of them drove its score."
+        "analysed, with SPAI's low/high split marked (r = 16). Descriptive only: it shows "
+        "which frequencies are present in what SPAI saw - not which of them drove its score."
     ),
 }
 

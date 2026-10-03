@@ -31,33 +31,49 @@ CLS token. With capture on, the score is bit-identical:
 The protocol was fixed before running:
 - **sample:** 40 images from the *validation* split (`sbr_val`, 20 real + 20
   generated);
-- **masks:** the 39 highest-relevance cells (20%), 10 random 39-cell sets,
-  and the 39 lowest-relevance cells, each filled with the image's mean colour;
-- **effect:** the absolute change in SigLIP 2's P(AI).
+- **masks**, each the same size (39 cells = 20% of the 14x14 grid):
+  - top-attended cells;
+  - 10 random cell sets per image;
+  - bottom-attended cells;
+- **fill:** every masked cell is filled with **that image's mean RGB colour**;
+- **effect:** |change in SigLIP 2's P(AI)|.
 
-| mask | mean \|change in score\| |
-|---|---|
-| top-20% attended | **0.265** |
-| random 20% (mean of 10) | 0.195 |
-| bottom-20% attended | 0.103 |
+**Headline: the gap over random.** Masking the top-attended 20% changes the
+score more than masking random 20%:
+- mean gap **+0.071, 95% bootstrap CI [0.041, 0.103]**;
+- **median gap +0.019**. The distribution is skewed (sd 0.101), so a minority
+  of images carries most of the effect, and for a typical image the
+  advantage over random is small.
 
-- Top minus random, paired per image: **+0.071, 95% bootstrap CI
-  [0.041, 0.103]**.
-- Top beats random on **35 of 40 images (87.5%)**; Wilcoxon signed-rank
-  (top > random) **p = 5.8e-8**.
-- The ordering top > random > bottom is the one a faithful map produces.
+**Unit of analysis: one value per image, n = 40.** Each image's 10 random
+draws are averaged *before* any test. Draws are never treated as
+independent samples.
 
-**What this supports, and no more:** the map ranks regions by how much the
-semantic branch's score depends on them better than chance, on this sample.
-Three limits:
-1. The effect is modest, and random masks alone move the score by 0.195, so
-   the model reacts strongly to any masking.
+| test (top vs random, paired per image) | statistic | p |
+|---|---|---|
+| Wilcoxon signed-rank, exact, one-sided | W = 764 of 820 | 5.8e-8 |
+| paired t-test, one-sided | t = 4.41, df = 39 | 4.0e-5 |
+| sign test, one-sided | 35 of 40 positive | 6.9e-7 |
+
+Why the Wilcoxon p is so much smaller than the t-test's: it is rank-based.
+The 5 images where random beat top-k lost by tiny margins (|gap| 0.0001 to
+0.015; ranks 1, 8, 12, 17, 18 of 40), so ranks favour top-k strongly, while
+the magnitudes are noisy. The t-test is the more conservative figure.
+
+For context, the mean |change| was 0.265 for top-k, 0.195 for random and
+0.103 for bottom-k. The ordering top > random > bottom is what a faithful
+map produces, but random masks alone already move the score a lot.
+
+**What this supports, and no more.** Attention rollout is an
+**attention-based proxy**, not a causal attribution. On these 40
+validation images it ranks regions by the semantic branch's sensitivity to
+them better than chance, with a small typical advantage. Limits:
+1. The evidence covers **40 images and the semantic branch only**.
 2. A mean-colour patch is an out-of-distribution edit.
-3. The measure is the size of the change, not its direction; the map does
-   not say whether a region pushes towards "Real" or "AI Generated".
-
-It says nothing about the frequency branch, and nothing about *where an
-image was manipulated*. The captions say exactly this.
+3. The measure is the size of the change, not its direction.
+4. The map says nothing about *where an image was manipulated*.
+5. The **frequency panel is descriptive and has not been validated** as an
+   explanation; no such test applies to it.
 
 **What the panels look like (an observation on two images, not a finding).**
 - **Semantic overlay:** on a Midjourney image, the strongest rollout cells
@@ -89,14 +105,17 @@ there is no faithfulness test for it.
 
 | image | MP | SPAI patches | wall, xai off | wall, xai on | xai | peak VRAM off / on |
 |---|---|---|---|---|---|---|
-| DALL-E 2, 1024² | 1.0 | 16 | 0.59 s | 1.68 s | 1.15 s | 2148 / 2155 MB |
-| Firefly, 1792x2304 | 4.1 | 80 | 2.63 s | 4.38 s | 1.99 s | 2273 / 2280 MB |
-| RAISE JPEG, 4288x2848 | 12.2 | 228 | 6.88 s | 9.58 s | 2.90 s | 2535 / 2542 MB |
-| RAISE JPEG, 3264x4928 | 16.1 | 308 | 9.35 s | 12.54 s | 3.58 s | 2672 / 2679 MB |
-| RAISE JPEG, 3264x4928 | 16.1 | 308 | 9.33 s | 12.42 s | 3.46 s | 2672 / 2679 MB |
+| DALL-E 2, 1024² | 1.0 | 16 | 0.56 s | 1.80 s | 1.23 s | 2148 / 2155 MB |
+| Firefly, 1792x2304 | 4.1 | 80 | 2.64 s | 4.48 s | 2.10 s | 2273 / 2280 MB |
+| RAISE JPEG, 4288x2848 | 12.2 | 228 | 6.86 s | 9.62 s | 3.11 s | 2535 / 2542 MB |
+| RAISE JPEG, 3264x4928 | 16.1 | 308 | 9.26 s | 12.57 s | 3.68 s | 2672 / 2679 MB |
+| RAISE JPEG, 3264x4928 | 16.1 | 308 | 9.22 s | 12.51 s | 3.56 s | 2672 / 2679 MB |
 
 - **VRAM:** XAI adds **about 7 MB**; nothing new runs on the GPU.
-- **Wall time:** it adds **1.1–3.6 s**.
+- **Wall time:** it adds **1.2–3.7 s**. The table is from the re-run after
+  the spectrum colour-clipping change (2026-10-03, `xai_cost_20261003T063052Z`);
+  the run just before it gave 1.1–3.6 s, so the percentile clipping adds
+  about 0.1 s.
 - **Where the time goes:** at 16 MP, the SPAI-patch spectrum takes ~1.8 s
   (CPU FFT of 308 patches), rollout plus overlay ~1.2 s, and the spectrum
   panel ~0.6 s. Attention recomputation is under 50 ms.
