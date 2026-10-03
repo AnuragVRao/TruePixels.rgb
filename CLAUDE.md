@@ -555,7 +555,18 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-03 (latest) — Phase 4 (model management, F.19)
+### 2026-10-03 (latest) — Phase 5a (React user flows)
+- React app: routes for sign-in / register / OTP, upload + analyse, results
+  (panels with backend captions, model rows, PDF via blob), history. Token in
+  sessionStorage; all files via Authorization header + blob URLs. `?token=`
+  removed from `/reports`. ESLint with `react/no-danger`.
+- Browser run (headless Chromium, Playwright; the Chrome extension was not
+  connected): 16 of the 17 manual-test steps automated and passing; found and
+  fixed a sign-out-on-reload bug and a server-side file-handle leak on Windows
+  (trigger unconfirmed; fixed by reading stored files in memory).
+- **Next:** Phase 5b (admin UI).
+
+### 2026-10-03 — Phase 4 (model management, F.19)
 - D3 became the authority: `registry.active(db)` reads the active rows; the
   stale-provenance defect was reproduced in a failing test first (commit
   `4f00e19`), then fixed. SigLIP pinned to revision `f4e6a281…`, loaded from

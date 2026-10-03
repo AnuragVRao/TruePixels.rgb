@@ -861,3 +861,49 @@ swapping is the feature demonstrated end to end.
   With models not yet loaded, the canary adds the ~9 s model load per
   branch. The admin UI should show a long-running state for that case.
 
+
+### 6.9 React user flows; token removed from report URLs; stored files read from memory (phase 5a)
+
+**Backend (M3 / shared):**
+- `router_reports.py`: `GET /reports/{id}` accepts the Authorization header
+  only. The `?token=` query parameter (known issue in §5) is removed, because
+  a session token in a URL ends up in browser history and in proxy and server
+  logs. The legacy dashboard now downloads with `fetch` + header + blob URL.
+  Test: a query token gets 401; the header works.
+- `router_results.py` / `schemas.py`: `/results` gains `models`, the
+  semantic, frequency and fusion D3 rows that produced the prediction (D4's
+  foreign keys; additive). The React results page lists them.
+- `app/shared/files.py`, `router_images.py`, `router_results.py`: stored
+  files are read in full inside a `with` block and sent from memory instead
+  of as a streaming `FileResponse`; `overlay.py` writes PNGs through an
+  explicitly closed handle. **Why:** after a browser run on Windows the
+  server still held three storage files open (two semantic panels and one
+  upload), which blocked deleting them. A sequential HTTP reproduction
+  (downloads, thumbnails, panels, PDFs, a stream aborted after 1 KB, 60
+  near-instant aborts) did NOT reproduce the leak, so the exact trigger is
+  unconfirmed. With these changes the full browser scenario leaves the
+  server holding no storage files (checked with psutil). Files are bounded
+  (uploads <= 10 MB), so reading them into memory is safe.
+
+**Frontend (`frontend/src`, M1's React app):**
+- `react-router-dom` routes: `/login`, `/register`, `/verify` (OTP, with the
+  console-mode hint), `/` (upload + analyse), `/results/:id`, `/history`.
+- Session token in **sessionStorage** (was localStorage): same XSS exposure,
+  shorter lifetime - it dies with the tab.
+- One API client:
+  - error codes mapped to plain messages;
+  - a 401 clears the session and returns to `/login?next=`.
+- All images and the PDF are fetched with the Authorization header and shown
+  through blob URLs, which are revoked on unmount.
+- Bug found by the browser run and fixed: a profile request aborted by a page
+  reload was treated as "session invalid" and deleted the token. Only a 401
+  clears the session now, and the session check no longer re-runs on every
+  navigation.
+- `InvigilatorPanel.tsx` deleted (approved): it fabricated "passed" results
+  without calling the API.
+- M1's original components (`Navbar`, `AuthModal`, `AdminLoginModal`,
+  `OTPModal`, `ImageUpload`) are no longer rendered and are kept for the
+  owner to decide on; compatibility aliases keep them compiling.
+- ESLint added, with `react/no-danger` as an error; no
+  `dangerouslySetInnerHTML` anywhere.
+- `docs/manual-test-react.md`: the manual test script.

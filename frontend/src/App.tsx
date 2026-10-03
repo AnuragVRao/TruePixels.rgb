@@ -1,87 +1,51 @@
-import React, { useState } from 'react';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { Navbar } from './components/Navbar';
-import { ImageUpload } from './features/m1_access/ImageUpload';
-import { AdminUserManagement } from './features/m1_access/AdminUserManagement';
-import { InvigilatorPanel } from './features/m1_access/InvigilatorPanel';
-import { AuthModal } from './features/m1_access/AuthModal';
-import { AdminLoginModal } from './features/m1_access/AdminLoginModal';
-import { OTPModal } from './features/m1_access/OTPModal';
-import { ShieldCheck, Cpu, BarChart3, Binary, Lock, Sparkles } from 'lucide-react';
+import React, { useCallback } from 'react';
+import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { Layout, RequireAuth } from './components/Layout';
+import { LoginPage, RegisterPage, VerifyOtpPage } from './pages/AuthPages';
+import { UploadPage } from './pages/UploadPage';
+import { ResultsPage } from './pages/ResultsPage';
+import { HistoryPage } from './pages/HistoryPage';
 
-const MainContent: React.FC = () => {
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [adminLoginOpen, setAdminLoginOpen] = useState(false);
-  const [otpModalOpen, setOtpModalOpen] = useState(false);
-  const [otpEmail, setOtpEmail] = useState('');
+const NotFound: React.FC = () => (
+  <div className="text-center space-y-3 py-16">
+    <p className="text-slate-300">That page does not exist.</p>
+    <Link className="text-indigo-400 hover:underline" to="/">Go to the start page</Link>
+  </div>
+);
 
-  const openAuth = (mode: 'login' | 'register') => {
-    setAuthMode(mode);
-    setAuthModalOpen(true);
-  };
-
-  const handleTriggerOTP = (email: string) => {
-    setOtpEmail(email);
-    setOtpModalOpen(true);
-  };
+const Routed: React.FC = () => {
+  const navigate = useNavigate();
+  // Any 401 from the API: the session is gone - back to sign-in, then here again.
+  const onExpired = useCallback(() => {
+    const here = window.location.pathname + window.location.search;
+    navigate(`/login?expired=1&next=${encodeURIComponent(here)}`, { replace: true });
+  }, [navigate]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
-      <Navbar
-        onOpenAuth={openAuth}
-        onOpenAdminLogin={() => setAdminLoginOpen(true)}
-      />
-
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Core M1 Image Upload Component */}
-        <ImageUpload
-          onRequestAuth={(mode = 'login') => openAuth(mode)}
-          onUploadSuccess={(result) => {
-            console.log('Image preprocessed for inference:', result);
-          }}
-        />
-
-        {/* Dedicated Admin Management Console (F.17 - Admin Role Exclusive) */}
-        <AdminUserManagement />
-
-        {/* Live Invigilator & Evaluation Test Bench */}
-        <InvigilatorPanel />
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-950 py-6 text-center text-xs text-slate-500">
-        <p>TruePixels.rgb — AI-Generated Image Detection System</p>
-      </footer>
-
-      {/* Modals */}
-      <AuthModal
-        isOpen={authModalOpen}
-        initialMode={authMode}
-        onClose={() => setAuthModalOpen(false)}
-        onTriggerOTP={handleTriggerOTP}
-      />
-
-      <AdminLoginModal
-        isOpen={adminLoginOpen}
-        onClose={() => setAdminLoginOpen(false)}
-        onTriggerOTP={handleTriggerOTP}
-      />
-
-      <OTPModal
-        isOpen={otpModalOpen}
-        email={otpEmail}
-        onClose={() => setOtpModalOpen(false)}
-      />
-    </div>
+    <AuthProvider onExpired={onExpired}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify" element={<VerifyOtpPage />} />
+          <Route element={<RequireAuth />}>
+            <Route path="/" element={<UploadPage />} />
+            <Route path="/results/:id" element={<ResultsPage />} />
+            <Route path="/history" element={<HistoryPage />} />
+          </Route>
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </AuthProvider>
   );
 };
 
 export function App() {
   return (
-    <AuthProvider>
-      <MainContent />
-    </AuthProvider>
+    <BrowserRouter>
+      <Routed />
+    </BrowserRouter>
   );
 }
 
