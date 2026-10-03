@@ -124,7 +124,7 @@ def test_login_upload_and_file_access_write_d6_rows(sessions, strict_audit_log):
     assert has(mine, "authentication", "info", "User registered successfully")
     assert has(mine, "authentication", "info", "User logged in successfully")
     assert has(mine, "prediction-request", "info",
-               f"Image validated and preprocessed: image_id={image_id}")
+               f"Image validated and stored: image_id={image_id}")
     assert has(mine, "prediction-request", "info", f"Image file served: image_id={image_id}")
     assert has(mine, "prediction-request", "info",
                f"Explainability file served: prediction_id={prediction_id} branch=semantic")

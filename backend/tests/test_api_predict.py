@@ -325,5 +325,16 @@ def test_prediction_writes_its_d6_audit_rows(sample_png, auth, monkeypatch, stri
                    .filter(LogEntry.event_type == "prediction-request")]
     finally:
         db.close()
-    assert any(f"image_id={image_id}" in d and "preprocessed" in d for d in details)
+    assert any(d.startswith(f"Image validated and stored: image_id={image_id},") for d in details)
     assert any(d.startswith(f"Prediction {prediction_id} for image_id={image_id}:") for d in details)
+
+
+def test_no_clip_tensor_is_written_at_upload_or_prediction(sample_png, auth):
+    """The dead C1 tensor (changes.md 6.3): no .npy appears anywhere in storage."""
+    from app.shared import config as shared_config
+
+    before = set(shared_config.STORAGE_ROOT.rglob("*.npy"))
+    image_id = upload(sample_png, auth)
+    assert predict(image_id, auth).status_code in (200, 201)
+    assert set(shared_config.STORAGE_ROOT.rglob("*.npy")) == before == set()
+    assert not (shared_config.STORAGE_ROOT / "tensors").exists()

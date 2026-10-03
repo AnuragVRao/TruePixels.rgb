@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, File, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.m1_access.models import Image as DBImage
-from app.m1_access.preprocess import prepare_model_input
 from app.m1_access.schemas import ImageMetadataResponse, ImageUploadResponse
 from app.m1_access.security import current_session
 from app.m1_access.storage import sanitize_and_persist_image
@@ -63,12 +62,12 @@ async def upload_image(
         db.commit()
         db.refresh(db_image)
 
-        # Execute deterministic preprocessing (PRD §5.3, Contract C1)
-        prepare_model_input(db_image.image_id, db, session)
-
+        # INTEGRATION: the Contract C1 preprocessing call that used to run here
+        # built and saved a CLIP tensor nothing reads, and discarded its result;
+        # removed (changes.md 6.3). C1 is assembled at prediction time.
         emit(
             "prediction-request",
-            f"Image validated and preprocessed: image_id={db_image.image_id}, sha256={content_sha256[:8]}...",
+            f"Image validated and stored: image_id={db_image.image_id}, sha256={content_sha256[:8]}...",
             severity="info",
             user_id=session.user_id,
         )

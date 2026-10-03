@@ -41,10 +41,9 @@ SESSION_EXPIRE_HOURS = int(os.getenv("SESSION_EXPIRE_HOURS", "8"))
 # the repo root). Must match app.shared.config.STORAGE_ROOT. See changes.md.
 STORAGE_DIR = Path(os.getenv("STORAGE_DIR", str(BASE_DIR.parent / "storage")))
 UPLOADS_DIR = STORAGE_DIR / "uploads"
-TENSORS_DIR = STORAGE_DIR / "tensors"
+# (No tensors/ directory any more: the CLIP .npy is no longer written. changes.md 6.3)
 
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-TENSORS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Validation Bounds
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))

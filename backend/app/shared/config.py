@@ -20,14 +20,13 @@ import torch
 # backend/app/shared/config.py -> repository root
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-# User data: M1's uploads and tensors, M3's explainability panels. All three
+# User data: M1's uploads, M3's explainability panels. All three
 # modules share this one tree. It is NOT web-served: files leave only through
 # owner-checked endpoints (app/shared/files.py). It
 # honours M1's STORAGE_DIR variable so the two can never disagree; M1's own
 # default points here too.
 STORAGE_ROOT = Path(os.getenv("STORAGE_DIR", str(REPO_ROOT / "storage"))).resolve()
 UPLOADS_DIR = STORAGE_ROOT / "uploads"
-TENSORS_DIR = STORAGE_ROOT / "tensors"
 EXPLAINABILITY_DIR = STORAGE_ROOT / "explainability"
 
 # Model weights are NOT user data and deliberately do not follow STORAGE_DIR:
@@ -41,7 +40,7 @@ def ensure_storage_dirs() -> None:
     Contents are gitignored; the directories themselves are not guaranteed to
     exist on a fresh clone.
     """
-    for directory in (UPLOADS_DIR, TENSORS_DIR, EXPLAINABILITY_DIR, MODELS_DIR):
+    for directory in (UPLOADS_DIR, EXPLAINABILITY_DIR, MODELS_DIR):
         directory.mkdir(parents=True, exist_ok=True)
 
 
@@ -80,6 +79,10 @@ CORS_ALLOWED_ORIGINS = [
 # PRD2 section 4: inference must remain viable on CPU (SRS 3.2.2 minimum spec);
 # a CUDA GPU is used automatically where available.
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Load both detectors at startup (app/m2_analysis/warmup.py) so that no user
+# request pays the one-time load. Off for the test suite, which loads lazily.
+WARMUP_ON_STARTUP = os.getenv("WARMUP_ON_STARTUP", "True").strip().lower() in {"1", "true", "yes"}
 
 
 # --------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import io
 from pathlib import Path
 from typing import Tuple
 from PIL import Image, ImageOps
-from app.m1_access.config import UPLOADS_DIR, TENSORS_DIR
+from app.m1_access.config import UPLOADS_DIR
 
 
 def get_content_addressed_path(content_sha256: str, ext: str) -> Path:
@@ -60,7 +60,3 @@ def sanitize_and_persist_image(
 
     return str(target_path.resolve()), width, height
 
-
-def get_tensor_path(image_id: int) -> Path:
-    """Returns filesystem path for preprocessed model tensor (.npy)."""
-    return TENSORS_DIR / f"{image_id}.npy"

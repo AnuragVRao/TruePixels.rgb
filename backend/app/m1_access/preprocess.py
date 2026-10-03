@@ -6,6 +6,13 @@ Processes:
   0.3.2 Bicubic resize shorter side to 224, then 224x224 center crop.
   0.3.3 Scale to [0,1], normalize with CLIP mean/std.
   0.3.4 Transpose to (3, 224, 224) float32, persist .npy, assemble PreprocessedImage.
+
+INTEGRATION (2026-10-03, changes.md 6.3): ``prepare_model_input`` no longer
+builds or saves the CLIP tensor (steps 0.3.2-0.3.4). No detector read it -
+each M2 branch preprocesses the original with its own processor - so it cost
+a decode, a resize and a .npy write at upload and again at every prediction
+for nothing. ``preprocess_pil_to_clip_tensor`` is kept, unchanged, because
+M1's own test suite covers it; nothing in the application calls it.
 """
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,9 +20,8 @@ import numpy as np
 from PIL import Image, ImageOps
 from sqlalchemy.orm import Session
 from app.m1_access.models import Image as DBImage
-from app.m1_access.storage import get_tensor_path
 from app.shared.errors import ImgCorruptedException, ImgNotFoundException
-from app.shared.schemas import NormalizationParams, PreprocessedImage, SessionContext
+from app.shared.schemas import PreprocessedImage, SessionContext
 
 # CLIP standard normalization constants (PRD §5.3)
 CLIP_MEAN = np.array([0.48145466, 0.4578275, 0.40821073], dtype=np.float32)
@@ -84,25 +90,11 @@ def prepare_model_input(
     if not image_path.exists():
         raise ImgCorruptedException(f"Image source file missing on disk: {db_img.file_reference}")
 
-    # Load original image
-    with Image.open(image_path) as img:
-        tensor = preprocess_pil_to_clip_tensor(img)
-
-    # Persist serialized tensor to .npy on shared storage
-    tensor_path = get_tensor_path(image_id)
-    np.save(tensor_path, tensor)
-
+    # The original is handed over as-is: each M2 branch applies its own
+    # preprocessing to it (no shared CLIP tensor - see the module docstring).
     return PreprocessedImage(
         image_id=db_img.image_id,
         user_id=db_img.user_id,
-        tensor_ref=str(tensor_path.resolve()),
-        shape=(3, 224, 224),
-        dtype="float32",
-        normalization=NormalizationParams(
-            mean=(0.48145466, 0.4578275, 0.40821073),
-            std=(0.26862954, 0.26130258, 0.27577711),
-            scheme="clip_openai",
-        ),
         source_reference=str(image_path.resolve()),
         created_at=datetime.now(timezone.utc),
     )

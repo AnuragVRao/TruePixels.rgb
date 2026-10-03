@@ -540,3 +540,34 @@ its logger pointed at a database with no `logs` table, and nothing noticed.
 A history page with N rows now writes N `Image file served` entries, one per
 thumbnail. That is the honest cost of logging file access; if it proves too
 noisy, thumbnails could be exempted from logging - a decision for the M3 owner.
+
+### 6.3 The unused CLIP tensor is no longer built or saved (phase 1b)
+
+**Problem.** M1's `prepare_model_input` (Contract C1) decoded the image,
+resized and centre-cropped it to 224x224, CLIP-normalised it and saved it as
+`storage/tensors/<image_id>.npy` - at upload (`router_images.py`, result
+discarded) and again at every prediction (`router_predict.py`). Nothing ever
+read it: no `np.load` exists anywhere, and both M2 branches preprocess the
+original themselves (SigLIP 2 with its own processor, whose mean/std is 0.5,
+not CLIP's; SPAI at native resolution). Recorded as known issue in §5.
+
+**Change.**
+- **M1** `router_images.py`: the upload no longer calls `prepare_model_input`.
+  Its audit line now reads `Image validated and stored` (it said
+  "preprocessed", which was no longer true).
+- **M1** `preprocess.py`: `prepare_model_input` still assembles C1 at
+  prediction time - existence check, ids, `source_reference` - but builds and
+  saves no tensor. `preprocess_pil_to_clip_tensor` is kept unchanged because
+  M1's own test suite covers it; the application no longer calls it.
+- **M1** `storage.py` / `config.py` and `app/shared/config.py`:
+  `get_tensor_path` and `TENSORS_DIR` removed; no `tensors/` directory is
+  created. An existing `storage/tensors/` folder is now dead data - safe to
+  delete by hand; nothing deletes it automatically.
+- **Contract C1** (`contracts/c1.py`): `tensor_ref`, `shape`, `dtype`,
+  `normalization` are now optional and always `None`. Kept rather than
+  deleted so M3's stub (which still fills them) and any other caller still
+  validate; C1 v2 should drop them.
+
+**Evidence.** Predictions are bit-identical to the pre-phase-1 baseline
+(`regression_check.py`, 24 images). `test_api_predict.py` asserts no `.npy`
+is written at upload or prediction.
