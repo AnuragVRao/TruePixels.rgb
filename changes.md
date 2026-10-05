@@ -1251,3 +1251,33 @@ changed:
   - `infra/caddy/data/` and `config/` are gitignored (local CA private key);
   - `PROXY_SHARED_SECRET` was added to `backend/.env` (generated, never
     printed) and to `.env.example`.
+
+### 6.19 Parity check against M1.zip (2026-10-05)
+
+`M1.zip` is the original M1 project, gitignored. It was compared file by file
+with this repository:
+
+- **10 of 12 M1 files are identical**, including `security.py` and
+  `validation.py`.
+- **`config.py` and `email_service.py`** differ only by the 2026-09-30
+  integration fixes: a Gmail address, a Gmail app password and a JWT key were
+  hard-coded as defaults in the source.
+- **All 11 M1 endpoints exist here.**
+- **M1's tests:** `test_m1_api`, `test_m1_preprocess` and `test_m1_validation`
+  are identical. `test_m1_auth` differs only by the approved password-first
+  OTP change (6.15).
+
+**Why e-mail OTP worked in M1.zip and not here:** the zip ships working Gmail
+credentials, both hard-coded and in its `.env`, while `backend/.env` held a
+different account and a password Gmail rejects. The zip's `SMTP_*` values
+were copied into `backend/.env`. No code changed. Delivery is now confirmed:
+D6 reads "2FA OTP email delivered via Gmail TLS". That app password appears
+in M1's source, so the M1 owner should revoke and replace it.
+
+**The one missing feature was drag-and-drop on the upload page**, which M1's
+`ImageUpload` had. It is now in `pages/UploadPage.tsx`, and a dropped file
+goes through the same client-side checks as the file dialog.
+
+M1's preview and reset were already here. Its "progress" bar was three fixed
+steps (20/60/100 %); here the real stages are shown instead (Uploading, then
+Analysing with a live timer).

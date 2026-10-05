@@ -39,6 +39,7 @@ export const UploadPage: React.FC = () => {
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [xai, setXai] = useState(true);
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsed, setElapsed] = useState(0);
@@ -102,17 +103,27 @@ export const UploadPage: React.FC = () => {
         </p>
       </div>
 
+      {/* Drag-and-drop as in M1's original ImageUpload; a dropped file goes
+          through exactly the same checks as one picked with the dialog. */}
       <label
         className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer ${
-          busy ? 'opacity-50 pointer-events-none' : 'border-slate-700 hover:border-indigo-500'
+          busy ? 'opacity-50 pointer-events-none'
+            : dragOver ? 'border-indigo-400 bg-indigo-950/30' : 'border-slate-700 hover:border-indigo-500'
         }`}
+        onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (!busy) void choose(e.dataTransfer.files?.[0] ?? null);
+        }}
       >
         {preview ? (
           <img src={preview} alt="Selected image" className="max-h-64 rounded-lg object-contain" />
         ) : (
           <ImageUp className="w-10 h-10 text-slate-500" />
         )}
-        <span className="text-sm text-slate-300">{file ? file.name : 'Choose an image'}</span>
+        <span className="text-sm text-slate-300">{file ? file.name : 'Choose an image or drop it here'}</span>
         <input type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" className="sr-only" disabled={busy}
                onChange={(e) => void choose(e.target.files?.[0] ?? null)} />
       </label>
