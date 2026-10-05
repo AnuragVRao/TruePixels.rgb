@@ -26,9 +26,6 @@ export interface OtpVerifyResponse {
   token?: string | null;
 }
 
-/** @deprecated name kept for M1's original ImageUpload component. */
-export type ImageUploadResult = UploadResponse;
-
 export interface UploadResponse {
   image_id: number;
   validation_status: string;

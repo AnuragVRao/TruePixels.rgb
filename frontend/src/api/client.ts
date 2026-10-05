@@ -13,8 +13,6 @@
  * turned into blob URLs - nothing is ever authenticated by a URL parameter.
  */
 
-export type { ImageUploadResult } from './types';
-
 const API_BASE = '/api/v1';
 const TOKEN_KEY = 'tp_token';
 
@@ -64,6 +62,7 @@ const MESSAGES: Record<string, string> = {
   AUTH_TOKEN_INVALID: 'Your session has expired. Please sign in again.',
   AUTH_FORBIDDEN: 'You do not have permission to do that.',
   AUTH_ACCOUNT_DISABLED: 'This account is disabled.',
+  // AUTH_RATE_LIMITED: the server's own message carries the wait in seconds.
   IMG_FORMAT_UNSUPPORTED: 'Only JPG, JPEG and PNG images are accepted.',
   IMG_TOO_LARGE: 'The file is larger than the allowed upload size.',
   IMG_CORRUPTED: 'The file could not be read as an image (it may be truncated or corrupted).',

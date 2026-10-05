@@ -22,14 +22,4 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
-  {
-    // M1's original components: superseded by src/pages and no longer
-    // rendered (deletion pending the owner's decision). The security rules
-    // above still apply; style rules are not enforced on code we did not write.
-    files: ['src/features/m1_access/**/*.tsx', 'src/components/Navbar.tsx', 'src/components/ErrorBanner.tsx'],
-    rules: {
-      '@typescript-eslint/no-unused-vars': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-    },
-  },
 );

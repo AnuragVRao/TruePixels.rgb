@@ -1081,3 +1081,32 @@ swapping is the feature demonstrated end to end.
 - **`backend/scripts/verify_rotation.py`:** checks a rotation and prints
   only True/False.
 - **Tests:** `test_throttle.py`, 11 tests on an injectable clock, no sleeps.
+
+### 6.14 M1's superseded React components deleted (M1 owner informed first)
+
+M1 built these components before the routed React app existed. Since Phase
+5a/5b the pages under `frontend/src/pages/` replace them, and none of them
+was rendered. Deleted, with the user's go-ahead after the M1 owner was told:
+
+| Deleted | Replaced by |
+|---|---|
+| `features/m1_access/AuthModal.tsx` | `pages/AuthPages.tsx` (`LoginPage`, `RegisterPage`) |
+| `features/m1_access/OTPModal.tsx` | `pages/AuthPages.tsx` (`VerifyOtpPage`) |
+| `features/m1_access/AdminLoginModal.tsx` | the "Sign in as administrator" option on `LoginPage` |
+| `features/m1_access/ImageUpload.tsx` | `pages/UploadPage.tsx` (upload **and** analyse) |
+| `features/m1_access/AdminUserManagement.tsx` | `pages/admin/UsersPage.tsx` (confirmations, soft-delete wording, last-admin rule) |
+| `components/Navbar.tsx` | `components/Layout.tsx` |
+| `components/ErrorBanner.tsx` | `components/Feedback.tsx` (`ErrorNotice`) |
+
+The compatibility shims that existed only for these components were removed
+with them:
+
+- the deprecated `login` / `logout` / `token` aliases in `AuthContext`;
+- the `ImageUploadResult` type (in `types.ts`, re-exported from
+  `client.ts`);
+- their ESLint style-rule exemption.
+
+The security rules (`react/no-danger`) now apply to all of `src/` without
+exception. Type check, lint and production build are clean. Nothing in
+`backend/` changed. The files remain in git history (`git log --
+frontend/src/features`).

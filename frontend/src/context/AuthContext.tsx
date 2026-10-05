@@ -10,12 +10,6 @@ interface AuthContextType {
   /** Store a token from login / OTP verification and load the profile. */
   signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
-  /** @deprecated M1's original components (no longer rendered) - use signIn / signOut. */
-  login: (token: string) => Promise<void>;
-  /** @deprecated */
-  logout: () => Promise<void>;
-  /** @deprecated read the session token through api/client instead. */
-  token: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -85,9 +79,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode; onExpired?: () 
         isAdmin: user?.role === 'Admin',
         signIn,
         signOut,
-        login: signIn,
-        logout: signOut,
-        token: getToken(),
       }}
     >
       {children}
