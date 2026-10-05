@@ -12,7 +12,8 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // Overridable so a scratch API can sit behind a second dev server (e2e runs).
+        target: process.env.TP_API_TARGET ?? 'http://localhost:8000',
         changeOrigin: true,
       },
     },

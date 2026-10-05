@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldAlert } from 'lucide-react';
 import { postJson } from '../api/client';
 import type { LoginResponse, OtpVerifyResponse, RegisterResponse } from '../api/types';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,12 @@ import { ErrorNotice, Notice } from '../components/Feedback';
 const field =
   'w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2.5 text-sm text-white placeholder-slate-500 ' +
   'focus:outline-none focus:ring-2 focus:ring-indigo-500';
+const adminField =
+  'w-full rounded-lg bg-slate-950 border border-amber-900/60 px-3 py-2.5 text-sm text-white placeholder-slate-500 ' +
+  'focus:outline-none focus:ring-2 focus:ring-amber-500';
+const adminButton =
+  'w-full flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 ' +
+  'px-4 py-2.5 text-sm font-semibold text-white';
 const button =
   'w-full flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 ' +
   'px-4 py-2.5 text-sm font-semibold text-white';
@@ -43,14 +49,22 @@ function useNext(): string {
   return safeNext(params.get('next'));
 }
 
-export const LoginPage: React.FC = () => {
+type SignInProps = { portal: 'user' | 'admin' };
+
+/**
+ * One form, two portals (as in M1: AuthModal for users, AdminLoginModal for
+ * administrators). The user portal calls /auth/login; the Administrator Portal
+ * calls /auth/admin/login, which refuses non-admin accounts (AUTH_FORBIDDEN).
+ */
+const SignInForm: React.FC<SignInProps> = ({ portal }) => {
+  const admin = portal === 'admin';
   const { signIn, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const next = useNext();
+  const requested = useNext();
+  const next = admin && requested === '/' ? '/admin' : requested;
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [asAdmin, setAsAdmin] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const expired = new URLSearchParams(location.search).get('expired') === '1';
@@ -63,9 +77,10 @@ export const LoginPage: React.FC = () => {
     setError(null);
     try {
       const body = { email: email.trim().toLowerCase(), password };
-      const res = await postJson<LoginResponse>(asAdmin ? '/auth/admin/login' : '/auth/login', body);
+      const res = await postJson<LoginResponse>(admin ? '/auth/admin/login' : '/auth/login', body);
       if (res.requires_otp) {
-        navigate(`/verify?email=${encodeURIComponent(body.email)}&next=${encodeURIComponent(next)}`);
+        navigate(`/verify?email=${encodeURIComponent(body.email)}&next=${encodeURIComponent(next)}`
+          + (admin ? '&portal=admin' : ''));
         return;
       }
       await signIn(res.token);
@@ -77,25 +92,58 @@ export const LoginPage: React.FC = () => {
     }
   };
 
+  const fields = (
+    <>
+      <label className="block space-y-1.5 text-sm">
+        <span className="text-slate-300">{admin ? 'Admin Email' : 'Email'}</span>
+        <input className={admin ? adminField : field} type="email" autoComplete="email" required value={email}
+               onChange={(e) => setEmail(e.target.value)} />
+      </label>
+      <label className="block space-y-1.5 text-sm">
+        <span className="text-slate-300">{admin ? 'Master Password' : 'Password'}</span>
+        <input className={admin ? adminField : field} type="password" autoComplete="current-password" required
+               value={password} onChange={(e) => setPassword(e.target.value)} />
+      </label>
+    </>
+  );
+
+  if (admin) {
+    return (
+      <div className="max-w-md mx-auto bg-slate-900/60 border border-amber-900/50 rounded-2xl p-6 sm:p-8 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <ShieldAlert className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white">Administrator Portal</h1>
+            <p className="text-xs text-amber-300/80">Elevated privilege authentication (F.3)</p>
+          </div>
+        </div>
+        {expired && <Notice tone="warning" title="Your session ended. Please sign in again." />}
+        <Notice tone="warning" title="Administrators only.">
+          This sign-in accepts Admin accounts only. Any other account is refused with AUTH_FORBIDDEN, and the attempt
+          is recorded in the audit log.
+        </Notice>
+        <ErrorNotice error={error} />
+        <form onSubmit={submit} className="space-y-4" aria-label="Administrator sign-in">
+          {fields}
+          <button className={adminButton} disabled={busy} type="submit">
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />} Sign in as administrator
+          </button>
+        </form>
+        <p className="text-sm text-slate-400">
+          Not an administrator? <Link className="text-indigo-400 hover:underline" to="/login">User sign-in</Link>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <Card title="Sign in">
       {expired && <Notice tone="warning" title="Your session ended. Please sign in again." />}
       <ErrorNotice error={error} />
-      <form onSubmit={submit} className="space-y-4" noValidate={false}>
-        <label className="block space-y-1.5 text-sm">
-          <span className="text-slate-300">Email</span>
-          <input className={field} type="email" autoComplete="email" required value={email}
-                 onChange={(e) => setEmail(e.target.value)} />
-        </label>
-        <label className="block space-y-1.5 text-sm">
-          <span className="text-slate-300">Password</span>
-          <input className={field} type="password" autoComplete="current-password" required value={password}
-                 onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        <label className="flex items-center gap-2 text-sm text-slate-400">
-          <input type="checkbox" checked={asAdmin} onChange={(e) => setAsAdmin(e.target.checked)} />
-          Sign in as administrator
-        </label>
+      <form onSubmit={submit} className="space-y-4" aria-label="User sign-in">
+        {fields}
         <button className={button} disabled={busy} type="submit">
           {busy && <Loader2 className="w-4 h-4 animate-spin" />} Sign in
         </button>
@@ -103,9 +151,15 @@ export const LoginPage: React.FC = () => {
       <p className="text-sm text-slate-400">
         No account? <Link className="text-indigo-400 hover:underline" to="/register">Create one</Link>
       </p>
+      <p className="text-xs text-slate-500">
+        Administrator? <Link className="text-amber-400 hover:underline" to="/admin/login">Use the Administrator Portal</Link>
+      </p>
     </Card>
   );
 };
+
+export const LoginPage: React.FC = () => <SignInForm portal="user" />;
+export const AdminLoginPage: React.FC = () => <SignInForm portal="admin" />;
 
 export const RegisterPage: React.FC = () => {
   const { signIn } = useAuth();
@@ -151,7 +205,7 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <Card title="Create an account">
+    <Card title="Create Account">
       <ErrorNotice error={error} />
       <form onSubmit={submit} className="space-y-4">
         <label className="block space-y-1.5 text-sm">
@@ -233,7 +287,7 @@ export const VerifyOtpPage: React.FC = () => {
   };
 
   return (
-    <Card title="Enter your verification code">
+    <Card title={params.get('portal') === 'admin' ? 'Administrator verification' : 'Enter your verification code'}>
       <Notice tone="info">
         We sent a 6-digit code to <strong>{email}</strong>. It expires in a few minutes.
         <br />

@@ -1281,3 +1281,37 @@ goes through the same client-side checks as the file dialog.
 M1's preview and reset were already here. Its "progress" bar was three fixed
 steps (20/60/100 %); here the real stages are shown instead (Uploading, then
 Analysing with a live timer).
+
+### 6.20 Landing page and separate sign-in portals, as in M1 (2026-10-05)
+
+- **New `pages/LandingPage.tsx`.** Signed-out visitors at `/` see M1's landing
+  view: the "Image Authenticity & Integrity Pipeline" badge, "Verify Still
+  Image Authenticity", and the locked "Authentication Required to Upload"
+  panel (C.6) with Sign In and Create Account. M1's copy described a CLIP
+  pipeline; the wording now describes the two detectors that actually run.
+  Signed-in users still get the analyse page at `/`.
+- **Separate portals.**
+  - `/login` is for users only; the "Sign in as administrator" checkbox is
+    removed.
+  - `/admin/login` is the amber "Administrator Portal" (M1's
+    `AdminLoginModal` wording: "Admin Email", "Master Password"). It calls
+    `/auth/admin/login`, which refuses non-admins with `AUTH_FORBIDDEN`.
+  - `/register` is Create Account.
+- **Navbar when signed out:** Admin Login, Sign In and Create Account, as in
+  M1's `Navbar`. Signed in, it shows the email and a role badge.
+- **Navigation:**
+  - signing out returns to the landing page;
+  - the admin area, and an expired admin session, send you to
+    `/admin/login`.
+- **No backend change.**
+- **Tests:**
+  - e2e scripts use the portals, with a new step 19;
+  - `vite.config.ts` reads `TP_API_TARGET`, so a scratch API can sit behind
+    a second dev server.
+- **Incident:** the first e2e attempt ran `npx vite` with an inline variable
+  that did not take effect, so the run hit the live demo API. It created two
+  test accounts in the development database (`react…@example.com` and
+  `other…@example.com`, ids 3 and 4) with no images or other data. Nothing
+  else changed: no models, no activations, no admin actions or status
+  changes. Each suite run now first proves that a probe request reached the
+  scratch API.

@@ -59,7 +59,7 @@ Last run: 2026-10-03, all automated checks passing.
 
 ## Admin flows (Phase 5b)
 
-Sign in with "Sign in as administrator" ticked. Every number on these
+Sign in through **Admin Login** (the Administrator Portal at `/admin/login`). Every number on these
 screens comes from the API; none is hard-coded.
 
 | # | Flow | Steps | Expected |
@@ -120,3 +120,21 @@ inlined small font files as `data:` URIs, which `font-src 'self'` blocks.
 This was fixed in the build, not by loosening the policy. The first user-flow
 run hit the test harness's own `eval` (`wait_for_function`), which was
 replaced by locator waits.
+
+## Landing page and separate portals (2026-10-05)
+
+Like M1's original app, the signed-out start page (`/`) is a landing page with
+three separate entry points in the navbar:
+- **Create Account** (`/register`);
+- **Sign In** (`/login`, users, no administrator option);
+- **Admin Login** (`/admin/login`, the amber "Administrator Portal", which
+  calls `/auth/admin/login`).
+
+The Administrator Portal refuses non-admin accounts with `AUTH_FORBIDDEN`.
+Signing out returns to the landing page. Admin screens, and an expired admin
+session, lead to the Administrator Portal.
+
+Automated in step 19 of `run_manual_flows.py`: the landing page, the three
+links, no admin option on `/login`, and a normal user refused by the portal.
+Run on 2026-10-05 against a scratch stack, headless Chromium: user flows
+18/18 and admin flows A1–A8, with 0 CSP violations.

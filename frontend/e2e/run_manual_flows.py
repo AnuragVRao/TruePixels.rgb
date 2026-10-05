@@ -256,11 +256,37 @@ with sync_playwright() as p:
         page.get_by_role("button", name="Verify").click()
         page.wait_for_url(re.compile(r"/history"))  # returned to the page it was sent from
         page.get_by_role("button", name="Sign out").click()
-        page.wait_for_url(re.compile(r"/login"))
+        page.wait_for_url(f"{BASE}/")  # back to the landing page, as in M1
+        expect(page.get_by_role("heading", name="Verify Still Image Authenticity")).to_be_visible()
         assert page.evaluate("sessionStorage.getItem('tp_token')") is None
         page.goto(f"{BASE}/history")
         page.wait_for_url(re.compile(r"/login\?next="))
     step(15, "sign in again (OTP, returns to next), sign out", s15)
+
+    def s19():
+        # Signed out, "/" is the landing page with M1's three separate entry points.
+        lp = browser.new_context().new_page()
+        lp.goto(f"{BASE}/")
+        expect(lp.get_by_role("heading", name="Verify Still Image Authenticity")).to_be_visible()
+        expect(lp.get_by_text("Authentication Required to Upload")).to_be_visible()
+        nav = lp.get_by_role("navigation", name="Account")
+        for name, path in (("Admin Login", "/admin/login"), ("Sign In", "/login"), ("Create Account", "/register")):
+            nav.get_by_role("link", name=name).click()
+            lp.wait_for_url(f"{BASE}{path}")
+            lp.goto(f"{BASE}/")
+        # The user sign-in page has no administrator option; the portals are separate.
+        lp.goto(f"{BASE}/login")
+        expect(lp.get_by_text("Sign in as administrator")).to_have_count(0)
+        lp.goto(f"{BASE}/admin/login")
+        expect(lp.get_by_role("heading", name="Administrator Portal")).to_be_visible()
+        # A normal user is refused by the Administrator Portal (server-side AUTH_FORBIDDEN).
+        lp.get_by_label("Admin Email").fill(email)
+        lp.get_by_label("Master Password").fill(password)
+        lp.get_by_role("button", name="Sign in as administrator").click()
+        expect(lp.get_by_role("alert")).to_contain_text("AUTH_FORBIDDEN")
+        assert "/verify" not in lp.url
+        lp.context.close()
+    step(19, "landing page (M1), separate Create Account / Sign In / Admin Login; user refused by admin portal", s19)
 
     def s18():
         # After signing in, ?next= must never leave this origin.

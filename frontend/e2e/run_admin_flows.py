@@ -49,13 +49,19 @@ def otp_for(email: str, after: int) -> str:
 
 
 def sign_in(page, email: str, admin: bool, next_path: str = "/"):
-    page.goto(f"{BASE}/login?next={next_path}")
-    page.get_by_label("Email").fill(email)
-    page.get_by_label("Password", exact=True).fill(PASSWORD)
+    # Separate portals: users at /login, administrators at /admin/login.
     if admin:
-        page.get_by_label("Sign in as administrator").check()
+        page.goto(f"{BASE}/admin/login?next={next_path}")
+        page.get_by_label("Admin Email").fill(email)
+        page.get_by_label("Master Password").fill(PASSWORD)
+        submit = page.get_by_role("button", name="Sign in as administrator")
+    else:
+        page.goto(f"{BASE}/login?next={next_path}")
+        page.get_by_label("Email").fill(email)
+        page.get_by_label("Password", exact=True).fill(PASSWORD)
+        submit = page.get_by_role("button", name="Sign in", exact=True)
     mark = len(LOG.read_text(encoding="utf-8", errors="ignore"))
-    page.get_by_role("button", name="Sign in").click()
+    submit.click()
     page.wait_for_url(re.compile(r"/verify"))
     page.get_by_label("Verification code").fill(otp_for(email, mark))
     page.get_by_role("button", name="Verify").click()
@@ -168,7 +174,7 @@ with sync_playwright() as p:
     def a4():
         page.goto(f"{BASE}/admin/users")
         pager = page.get_by_label("Pagination")
-        expect(pager).to_contain_text(re.compile(r"Page 1 of [2-9]"))
+        expect(pager).to_contain_text(re.compile(r"Page 1 of ([2-9]|[1-9][0-9]+)"))
         self_row = page.get_by_test_id(f"user-{SEED['admin']['id']}")
         if self_row.count() == 0:  # newest first: may sit on page 2
             pager.get_by_role("button", name="Next").click()
@@ -297,9 +303,9 @@ with sync_playwright() as p:
         page.wait_for_load_state("networkidle")
         page.evaluate("sessionStorage.setItem('tp_token', 'invalid.' + sessionStorage.getItem('tp_token'))")
         page.get_by_role("navigation", name="Administration").get_by_role("link", name="Logs").click()
-        page.wait_for_url(re.compile(r"/login\?expired=1&next=%2Fadmin%2Flogs"))
+        page.wait_for_url(re.compile(r"/admin/login\?expired=1&next=%2Fadmin%2Flogs"))
         expect(page.get_by_text("Your session ended")).to_be_visible()
-    step("A7", "invalid admin token -> /login?expired=1 with return path", a7)
+    step("A7", "invalid admin token -> Administrator Portal (/admin/login?expired=1) with return path", a7)
 
     def a8():
         assert not image_requests, image_requests[:5]

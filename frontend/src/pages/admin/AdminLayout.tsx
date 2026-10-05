@@ -18,7 +18,7 @@ export const AdminLayout: React.FC = () => {
   const location = useLocation();
   if (loading) return <p className="text-slate-400 text-sm">Checking your session…</p>;
   if (!isAuthenticated) {
-    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+    return <Navigate to={`/admin/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }
   if (!isAdmin) {
     return (

@@ -2,7 +2,9 @@ import React, { Suspense, lazy, useCallback } from 'react';
 import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Layout, RequireAuth } from './components/Layout';
-import { LoginPage, RegisterPage, VerifyOtpPage } from './pages/AuthPages';
+import { useAuth } from './context/AuthContext';
+import { LandingPage } from './pages/LandingPage';
+import { AdminLoginPage, LoginPage, RegisterPage, VerifyOtpPage } from './pages/AuthPages';
 import { UploadPage } from './pages/UploadPage';
 import { ResultsPage } from './pages/ResultsPage';
 import { HistoryPage } from './pages/HistoryPage';
@@ -22,23 +24,33 @@ const NotFound: React.FC = () => (
   </div>
 );
 
+/** "/" - the landing page when signed out (as in M1), the analyse page when signed in. */
+const Home: React.FC = () => {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return <p className="text-slate-400 text-sm">Checking your session…</p>;
+  return isAuthenticated ? <UploadPage /> : <LandingPage />;
+};
+
 const Routed: React.FC = () => {
   const navigate = useNavigate();
   // Any 401 from the API: the session is gone - back to sign-in, then here again.
   const onExpired = useCallback(() => {
     const here = window.location.pathname + window.location.search;
-    navigate(`/login?expired=1&next=${encodeURIComponent(here)}`, { replace: true });
+    // Admin screens send an expired admin back to the Administrator Portal.
+    const portal = window.location.pathname.startsWith('/admin') ? '/admin/login' : '/login';
+    navigate(`${portal}?expired=1&next=${encodeURIComponent(here)}`, { replace: true });
   }, [navigate]);
 
   return (
     <AuthProvider onExpired={onExpired}>
       <Routes>
         <Route element={<Layout />}>
+          <Route path="/" element={<Home />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/verify" element={<VerifyOtpPage />} />
           <Route element={<RequireAuth />}>
-            <Route path="/" element={<UploadPage />} />
             <Route path="/results/:id" element={<ResultsPage />} />
             <Route path="/history" element={<HistoryPage />} />
           </Route>

@@ -46,13 +46,18 @@ with sync_playwright() as p:
     page.on("response", lambda r: documents.append(r) if r.request.resource_type == "document" else None)
 
     def sign_in(email, admin):
-        page.goto(f"{BASE}/login")
-        page.get_by_label("Email").fill(email)
-        page.get_by_label("Password", exact=True).fill(SEED["password"])
         if admin:
-            page.get_by_label("Sign in as administrator").check()
-        page.get_by_role("button", name="Sign in").click()
-        page.wait_for_url(f"{BASE}/")
+            page.goto(f"{BASE}/admin/login")
+            page.get_by_label("Admin Email").fill(email)
+            page.get_by_label("Master Password").fill(SEED["password"])
+            page.get_by_role("button", name="Sign in as administrator").click()
+            page.wait_for_url(f"{BASE}/admin")
+        else:
+            page.goto(f"{BASE}/login")
+            page.get_by_label("Email").fill(email)
+            page.get_by_label("Password", exact=True).fill(SEED["password"])
+            page.get_by_role("button", name="Sign in", exact=True).click()
+            page.wait_for_url(f"{BASE}/")
 
     def user_flow():
         sign_in(SEED["user"]["email"], admin=False)

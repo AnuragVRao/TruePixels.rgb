@@ -120,7 +120,7 @@ e-mailed. That console delivery works **only** with
    `2FA OTP simulated in console for you@example.com: code=123456` and enter
    it.
    - Sign out and back in: the password first, then a fresh code.
-   - Admins tick "Sign in as administrator", then enter the code printed in
+   - Admins use **Admin Login** (the Administrator Portal, `/admin/login`), then enter the code printed in
      the console.
 8. **Analyse an image**, then open History, the PDF report and (as an admin)
    the Admin screens.

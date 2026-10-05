@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { History, LogOut, ScanSearch, Settings, ShieldCheck } from 'lucide-react';
+import { History, LogOut, ScanSearch, Settings, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -20,6 +20,23 @@ export const Layout: React.FC = () => {
             <ShieldCheck className="w-5 h-5 text-indigo-400" />
             <span>TruePixels.rgb</span>
           </Link>
+          {!user && (
+            /* Signed out: M1's three entry points - each its own page. */
+            <nav className="flex items-center gap-2" aria-label="Account">
+              <NavLink to="/admin/login"
+                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 border border-amber-900/40">
+                <ShieldAlert className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Admin Login</span>
+              </NavLink>
+              <NavLink to="/login"
+                       className="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-200 hover:text-white hover:bg-slate-900 border border-slate-800">
+                Sign In
+              </NavLink>
+              <NavLink to="/register"
+                       className="px-4 py-1.5 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/30">
+                Create Account
+              </NavLink>
+            </nav>
+          )}
           {user && (
             <nav className="flex items-center gap-1 overflow-x-auto" aria-label="Main">
               <NavLink to="/" end className={linkClass}>
@@ -33,15 +50,18 @@ export const Layout: React.FC = () => {
                   <Settings className="w-4 h-4" /> <span className="hidden sm:inline">Admin</span>
                 </NavLink>
               )}
-              <span className="hidden md:inline text-xs text-slate-500 px-2 truncate max-w-[14rem]">
-                {user.email}
-                {user.role === 'Admin' ? ' (Admin)' : ''}
+              <span className="hidden md:flex items-center gap-2 text-xs text-slate-400 px-2 max-w-[18rem]">
+                <span className="truncate">{user.email}</span>
+                <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md ${
+                  user.role === 'Admin' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                  {user.role}
+                </span>
               </span>
               <button
                 type="button"
                 onClick={async () => {
                   await signOut();
-                  navigate('/login');
+                  navigate('/');  // back to the landing page, as in M1
                 }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800/60"
               >
