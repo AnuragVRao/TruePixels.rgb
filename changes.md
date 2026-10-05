@@ -1315,3 +1315,75 @@ Analysing with a live timer).
   else changed: no models, no activations, no admin actions or status
   changes. Each suite run now first proves that a probe request reached the
   scratch API.
+
+### 6.21 Confidence is measured from the decision threshold (2026-10-05)
+
+- **Reported by the user:** a "Real" verdict showing under 50 % confidence.
+  Prediction #9: SigLIP 2 gave 0.837, SPAI 0.419, fused 0.523. That is below
+  tau = 0.7558, so the verdict is Real, and the confidence was
+  1 - 0.523 = 47.7 %.
+- **Cause:** PRD2 FR-04's `fusion` / `1 - fusion` assumes tau = 0.5. With the
+  validation-chosen tau of 0.7558, every fused score in [0.5, tau) was called
+  Real with a confidence below 0.5.
+- **Fix (M2 `fusion.py`, `confidence_in_prediction`):**
+  - AI Generated: `0.5 + 0.5 * (fusion - tau) / (1 - tau)`
+  - Real: `0.5 + 0.5 * (tau - fusion) / tau`
+
+  This is 0.5 at tau and 1.0 at the far end, monotonic, and never below 0.5.
+  At tau = 0.5 it equals FR-04 exactly. Prediction #9 now reads "Real,
+  65.4 %". Classes and scores are unchanged.
+- **Migration 0004** recomputes `confidence_score` for every stored D4 row
+  from its own fused score, class and its fusion configuration's tau. The
+  downgrade restores the original values exactly; tested in both directions.
+- **Tests:**
+  - every threshold and score keeps confidence at or above 0.5;
+  - confidence grows with distance from the threshold;
+  - at tau = 0.5 the result is exactly FR-04;
+  - the over-HTTP test reads the active tau.
+- **Not changed:** M3's test-only stub (`app/stubs/m2_stub.py`) keeps
+  `1 - fusion`. It runs at tau = 0.5, where the two rules are identical.
+- **Phase 8:** record this as a deviation from PRD2 FR-04 (the formula), not
+  from its intent (confidence in the predicted class).
+
+### 6.22 Signed-in layout: the four tabs of M3's original dashboard (2026-10-05)
+
+After sign-in, the React app now uses the original dashboard's numbered tabs
+and header options:
+
+1. **Forensic Detection** (`/`, including `/results/:id`): scan an image,
+   see the verdict.
+2. **User Scan History** (`/history`). It also carries the dashboard's
+   "Strict Data Privacy & User Isolation (F.13 / MM3.1)" panel with its
+   **Test Security Barrier** button. The button asks for an id that is not
+   yours and passes only on the exact `404 INF_PREDICTION_NOT_FOUND`.
+3. **Admin Dashboard & Analytics** (`/admin`, with its Overview, Logs, Users
+   and Models sub-tabs). It is shown to everyone, as in the dashboard, with a
+   lock icon for non-admins, who get "Administrators only". The API enforces
+   the role regardless.
+4. **1-Click Verification** (`/verification`, new `VerificationPage.tsx`):
+   the dashboard's Live Verification Suite, run as the signed-in user.
+   - Checks: health; readiness (`ready: true`); session; 401 without a
+     session; your newest result (confidence ≥ 0.5); its PDF; the security
+     barrier (404 with the exact code); the admin summary (200 for admins,
+     403 for users).
+   - Exact-status matching. A check that needs one of your predictions is
+     SKIPPED without one.
+
+**Header:** the email with a role badge, and **Sign Out** with a confirmation
+dialog, as in the dashboard. `ConfirmDialog` moved to `components/` so it is
+shared.
+
+**Not carried over: the "API Console" link.** It opened the legacy
+`/api-tester` page, which is development-only, is never served through
+Caddy, and loads CDN scripts that the production CSP blocks. Tab 4 covers its
+"Run All" purpose.
+
+**Dev server:** `vite.config.ts` also proxies `/ready` and `/health`, the
+paths Caddy proxies, so readiness answers from the API in development too.
+
+**e2e:**
+- step 20 covers the tabs, the barrier, the locked admin tab, a full
+  verification run with no failures, and the sign-out confirmation (Cancel
+  keeps the session);
+- A1 now checks the locked admin tab;
+- the sign-out steps confirm the dialog.

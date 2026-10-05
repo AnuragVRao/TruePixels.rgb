@@ -11,6 +11,9 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      // Same paths Caddy proxies, so /ready and /health answer from the API in dev too.
+      '/ready': { target: process.env.TP_API_TARGET ?? 'http://localhost:8000', changeOrigin: true },
+      '/health': { target: process.env.TP_API_TARGET ?? 'http://localhost:8000', changeOrigin: true },
       '/api': {
         // Overridable so a scratch API can sit behind a second dev server (e2e runs).
         target: process.env.TP_API_TARGET ?? 'http://localhost:8000',

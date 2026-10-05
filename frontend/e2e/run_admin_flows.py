@@ -102,7 +102,9 @@ with sync_playwright() as p:
 
     def a1():
         sign_in(upage, SEED["user"]["email"], admin=False)
-        expect(upage.get_by_role("link", name="Admin")).to_have_count(0)
+        # The admin tab is shown to everyone (as in M3's dashboard) but locked for users.
+        upage.get_by_role("navigation", name="Main").get_by_role("link", name="3. Admin Dashboard & Analytics").click()
+        expect(upage.get_by_text("Administrators only.")).to_be_visible()
         upage.goto(f"{BASE}/admin/users")
         expect(upage.get_by_text("Administrators only.")).to_be_visible()
         for method, path in [("GET", "/admin/summary"), ("GET", "/admin/logs"), ("GET", "/admin/users"),

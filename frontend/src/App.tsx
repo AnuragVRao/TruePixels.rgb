@@ -8,6 +8,7 @@ import { AdminLoginPage, LoginPage, RegisterPage, VerifyOtpPage } from './pages/
 import { UploadPage } from './pages/UploadPage';
 import { ResultsPage } from './pages/ResultsPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { VerificationPage } from './pages/VerificationPage';
 import { AdminLayout } from './pages/admin/AdminLayout';
 
 // Admin screens (and recharts) load only when an admin opens them.
@@ -53,6 +54,7 @@ const Routed: React.FC = () => {
           <Route element={<RequireAuth />}>
             <Route path="/results/:id" element={<ResultsPage />} />
             <Route path="/history" element={<HistoryPage />} />
+            <Route path="/verification" element={<VerificationPage />} />
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Suspense fallback={loadingAdmin}><OverviewPage /></Suspense>} />

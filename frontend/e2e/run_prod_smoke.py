@@ -67,7 +67,8 @@ with sync_playwright() as p:
         expect(page.locator('img[src^="blob:"]').first).to_be_attached(timeout=30000)
         page.goto(f"{BASE}/history")
         expect(page.locator('img[src^="blob:"]').first).to_be_attached(timeout=30000)
-        page.get_by_role("button", name="Sign out").click()
+        page.get_by_role("button", name="Sign Out").click()
+        page.get_by_role("dialog").get_by_role("button", name="Yes, sign out").click()
 
     def admin_flow():
         sign_in(SEED["admin"]["email"], admin=True)
