@@ -40,6 +40,7 @@ const Tabs: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
 export const Layout: React.FC = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const isAdmin = user?.role === 'Admin';
@@ -94,9 +95,15 @@ export const Layout: React.FC = () => {
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-8">
         <Outlet />
       </main>
-      <footer className="border-t border-slate-800 py-5 text-center text-xs text-slate-500 px-4">
-        TruePixels.rgb flags likely AI-generated images. A result is a model&apos;s estimate, not proof.
-      </footer>
+      {user || pathname !== '/' ? (
+        <footer className="border-t border-slate-800 py-5 text-center text-xs text-slate-500 px-4">
+          TruePixels.rgb flags likely AI-generated images. A result is a model&apos;s estimate, not proof.
+        </footer>
+      ) : (
+        <footer className="relative z-10 py-5 px-6 text-left text-xs text-slate-400">
+          &copy; {new Date().getFullYear()} TruePixels.rgb. All rights reserved.
+        </footer>
+      )}
 
       {confirmSignOut && (
         <ConfirmDialog title="Sign out?" confirmLabel="Yes, sign out" busy={signingOut}
