@@ -15,6 +15,16 @@ What the statuses mean - this is a SOFT state change, nothing is deleted:
 "removed" differs from "disabled" only in its label today. There is no hard
 delete and no file cleanup; orphaned files cannot arise from this action.
 
+Re-registration: the D1 row is kept, and the unique index on lower(email)
+still holds its address, so the same e-mail cannot register a new account
+while a removed (or disabled) row exists. The attempt gets exactly the
+answer any taken address gets - 409 AUTH_EMAIL_TAKEN, same message - so it
+does not reveal that the account is removed (test_account_status_enforcement).
+To let the person back in, an admin re-enables the account; there is no
+erase-and-reuse path (a hard delete would need a retention decision first).
+Sign-in reports "disabled"/"removed" only AFTER a correct password, i.e. only
+to the account's owner.
+
 Refused (409 ``ADM_ACTION_NOT_PERMITTED``), whatever the UI shows:
 
 * an administrator changing their OWN status;

@@ -424,3 +424,30 @@ def test_every_file_endpoint_has_a_hard_size_bound(monkeypatch, panel):
                 f"/api/v1/explainability/{prediction_id}/semantic"):
         r = client.get(url, headers=owner)
         assert r.status_code == 413 and r.json()["error"]["code"] == "FILE_TOO_LARGE", (url, r.text)
+
+
+@pytest.mark.parametrize("size,expected", [
+    ((2400, 1800), "Downscaled copy of the original (2400x1800 px)"),
+    ((640, 480), "Copy of the original image (640x480 px), as analysed."),
+])
+def test_pdf_says_when_its_image_is_a_downscaled_copy(size, expected):
+    """Phase 5b review: the PDF embeds a <= 1600 px copy; it must say so."""
+    import io
+
+    import numpy as np
+    from PIL import Image as PILImage
+    from pypdf import PdfReader
+
+    _, owner = make_user()
+    w, h = size
+    gradient = np.add.outer(np.arange(h), np.arange(w)).astype(np.uint16)  # compresses well, unlike noise
+    rgb = np.stack([gradient % 256, (gradient // 7) % 256, np.full_like(gradient, 90)], axis=-1).astype(np.uint8)
+    buf = io.BytesIO()
+    PILImage.fromarray(rgb).save(buf, format="PNG")
+    r = client.post("/api/v1/images", headers=owner, files={"file": ("g.png", buf.getvalue(), "image/png")})
+    assert r.status_code == 201, r.text
+    prediction_id = add_prediction(r.json()["image_id"], "unused.png")
+    pdf = client.get(f"/api/v1/reports/{prediction_id}", headers=owner)
+    assert pdf.status_code == 200
+    text = " ".join(" ".join(page.extract_text().split()) for page in PdfReader(io.BytesIO(pdf.content)).pages)
+    assert expected in text, text[:2000]

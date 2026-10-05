@@ -185,6 +185,18 @@ def build_pdf_report(
         ))
         story.append(Spacer(1, 8))
 
+    def original_caption(path: str) -> str:
+        # Phase 5b review: say plainly that the PDF holds a copy, not the original.
+        try:
+            with PILImage.open(path) as source:
+                width, height = source.size
+        except Exception:  # noqa: BLE001 - the caption must not break the report
+            return "Copy of the original image, for reference."
+        if max(width, height) > 1600:
+            return (f"Downscaled copy of the original ({width}x{height} px), at most 1600 px per side, "
+                    "for reference only. The analysis ran on the full-resolution original.")
+        return f"Copy of the original image ({width}x{height} px), as analysed."
+
     def cell(title: str, path: str | None, missing_text: str, caption: str | None) -> list:
         parts = [Paragraph(f"<b>{title}</b>", body_style), Spacer(1, 3)]
         parts.append(fitted(path) if path else Paragraph(f"<i>{missing_text}</i>", caption_style))
@@ -197,7 +209,7 @@ def build_pdf_report(
     grid = [
         [
             cell("Original image", original_path if original_ok else None,
-                 "Original no longer stored.", None),
+                 "Original no longer stored.", original_caption(original_path) if original_ok else None),
             cell("Semantic attention (SigLIP 2)", semantic[0] if semantic else None,
                  "Not generated for this prediction.", caption_for(semantic[1]) if semantic else None),
         ],

@@ -38,6 +38,7 @@ const EXPLAIN: Record<Action, { title: string; button: string; body: React.React
           only the recorded status differs.</p>
         <p>Their images, results, explainability panels and stored files are <strong>kept unchanged</strong> -
           nothing is erased and no files are orphaned. Enabling the account restores everything.</p>
+        <p>The email address stays reserved: it cannot be used to register a new account while this one exists.</p>
       </>
     ),
   },

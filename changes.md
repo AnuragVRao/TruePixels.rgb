@@ -990,3 +990,46 @@ swapping is the feature demonstrated end to end.
     active-model count;
   - `api_tester.html` "Run All" no longer passes every status, and three
     false descriptions are corrected.
+
+### 6.12 Phase 5b review follow-ups
+
+- **Status changes take effect on the very next request.** This was already
+  true: `security.verify_session_token` re-reads `account_status` from D1 on
+  every request. It is now tested with tokens from the real login endpoint,
+  through both status endpoints, for disable and for remove
+  (`test_account_status_enforcement.py`). With the check disabled, all four
+  token tests fail.
+- **Re-registration after "remove"** is documented in
+  `account_policy.py`.
+  - The kept D1 row holds the email (unique `lower(email)`).
+  - A new registration gets the same `409 AUTH_EMAIL_TAKEN`, with the same
+    message, whatever the existing account's status. This is tested.
+  - Re-enabling the account is the way back.
+- **`POST /models/{id}/gate-preview` is now strictly read-only.** Before
+  this fix it:
+  - could bootstrap or repair D3 through `registry.active()`;
+  - stored the candidate's uploaded head in the process-wide head cache.
+
+  It now reads the active rows without repairing them (and returns 409
+  `MDL_NO_ACTIVE_CONFIGURATION` instead), and builds uncached heads
+  (`heads.no_store()`). A test snapshots every table (row count and a
+  digest of every row), the head cache and the reference file around two
+  previews. The test fails if the head-cache fix is removed.
+- **M3 `reporting.py`:** the PDF captions its image "Downscaled copy of the
+  original (W x H px) ... the analysis ran on the full-resolution original"
+  when the original is over 1600 px, and "Copy of the original image" when
+  it is not. Tested for both cases.
+- **`api_tester.html`:**
+  - no hard-coded ids: results, explainability and PDF use the signed-in
+    user's newest prediction;
+  - without one, those requests are SKIPPED, not failed;
+  - the prediction POST is never run by "Run All" (it creates data);
+  - the isolation probe uses an id that does not exist, with an honest
+    description;
+  - expected statuses follow the persona (401 for an invalid or missing
+    token, 403 for admin endpoints when not an admin).
+
+  Browser run: `10 passed, 0 failed, 1 skipped`. With an invalid token:
+  0 failed, all 401.
+- **`docs/rotate-secrets.md`:** steps to rotate the Postgres password and
+  the JWT key without printing either value.

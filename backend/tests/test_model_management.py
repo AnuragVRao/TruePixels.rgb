@@ -571,3 +571,65 @@ def test_gate_preview_reports_the_verdict_without_switching():
         db.close()
     # And activation reaches the same verdict the preview showed.
     assert _activate(admin, bad.json()["model_id"]).json()["error"]["code"] == "MDL_GATE_REFUSED"
+
+
+def _database_snapshot() -> dict:
+    """Row count plus a digest of every row, per table - any write shows up."""
+    import hashlib
+
+    from sqlalchemy import inspect as sa_inspect
+
+    snapshot = {}
+    with engine.connect() as conn:
+        for table in sorted(sa_inspect(conn).get_table_names()):
+            if table == "alembic_version":
+                continue
+            rows = conn.execute(text(f'SELECT * FROM "{table}"')).fetchall()
+            digest = hashlib.sha256(repr(sorted(map(repr, rows))).encode()).hexdigest()
+            snapshot[table] = (len(rows), digest)
+    return snapshot
+
+
+def test_gate_preview_is_strictly_read_only():
+    """No DB row, no head-cache entry, no reference-cache change - even for an
+    uploaded head the cache has never seen (which activation WOULD cache)."""
+    import hashlib
+
+    _, admin = _user("Admin")
+    _active_id(registry.TYPE_FUSION)  # registry bootstrapped BEFORE the snapshot
+    head = _register(admin, registry.TYPE_SEMANTIC, config.DETECTOR_PRIMARY, f"ro-{next(_n)}",
+                     _perturbed(detectors.primary.classifier_state(), heads.SEMANTIC_PREFIX, scale=2e-3),
+                     id2label=json.dumps({"0": "Real", "1": "AI"}))
+    fusion = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"ro{next(_n)}", _fusion(0.70))
+    assert head.status_code == 201 and fusion.status_code == 201
+    ref = gate.reference_path()
+    ref_before = (ref.stat().st_mtime_ns, hashlib.sha256(ref.read_bytes()).hexdigest())
+    cache_before = heads.cached_ids()
+    db_before = _database_snapshot()
+
+    for model_id in (head.json()["model_id"], fusion.json()["model_id"]):
+        r = client.post(f"/api/v1/models/{model_id}/gate-preview", headers=admin)
+        assert r.status_code == 200 and r.json()["gate"]["available"], r.text
+
+    assert _database_snapshot() == db_before
+    assert heads.cached_ids() == cache_before
+    assert head.json()["model_id"] not in heads.cached_ids()
+    assert (ref.stat().st_mtime_ns, hashlib.sha256(ref.read_bytes()).hexdigest()) == ref_before
+
+
+def test_gate_preview_never_bootstraps_the_registry():
+    """With no valid active row, activate()/predict would repair D3; a preview
+    refuses instead of writing."""
+    _, admin = _user("Admin")
+    candidate = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"nb{next(_n)}", _fusion(0.70))
+    db = SessionLocal()
+    try:
+        db.query(ModelRegistry).filter(ModelRegistry.model_type == registry.TYPE_FUSION) \
+            .update({ModelRegistry.is_active: False})
+        db.commit()
+    finally:
+        db.close()
+    before = _database_snapshot()
+    r = client.post(f"/api/v1/models/{candidate.json()['model_id']}/gate-preview", headers=admin)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "MDL_NO_ACTIVE_CONFIGURATION", r.text
+    assert _database_snapshot() == before

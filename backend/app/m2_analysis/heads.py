@@ -15,9 +15,11 @@ row on every load, so a file changed on disk after registration is refused.
 
 from __future__ import annotations
 
+import contextvars
 import copy
 import hashlib
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import torch
@@ -31,6 +33,18 @@ FREQUENCY_PREFIX = "cls_head."
 
 _cache: dict[int, "LoadedHead"] = {}
 _lock = threading.Lock()
+# Inside no_store(), a head that is not cached yet is built for this call
+# only and NOT added to the cache (the read-only gate preview, Phase 5b).
+_no_store = contextvars.ContextVar("heads_no_store", default=False)
+
+
+@contextmanager
+def no_store():
+    token = _no_store.set(True)
+    try:
+        yield
+    finally:
+        _no_store.reset(token)
 
 
 @dataclass(frozen=True)
@@ -92,7 +106,10 @@ def semantic_head(model_id: int, spec: dict | None) -> LoadedHead | None:
             detectors.primary.load()
             module = build_semantic_head(_tensors(spec), detectors.primary._model.classifier)
             ai_index = detectors.resolve_ai_index({int(k): v for k, v in spec["id2label"].items()})
-            _cache[model_id] = LoadedHead(model_id, module, ai_index, spec["sha256"])
+            loaded = LoadedHead(model_id, module, ai_index, spec["sha256"])
+            if _no_store.get():
+                return loaded
+            _cache[model_id] = loaded
         return _cache[model_id]
 
 
@@ -104,8 +121,16 @@ def frequency_head(model_id: int, spec: dict | None) -> LoadedHead | None:
     with _lock:
         if model_id not in _cache:
             module = build_frequency_head(_tensors(spec), frequency_detector.frequency.cls_head_module())
-            _cache[model_id] = LoadedHead(model_id, module, None, spec["sha256"])
+            loaded = LoadedHead(model_id, module, None, spec["sha256"])
+            if _no_store.get():
+                return loaded
+            _cache[model_id] = loaded
         return _cache[model_id]
+
+
+def cached_ids() -> set[int]:
+    with _lock:
+        return set(_cache)
 
 
 def clear() -> None:

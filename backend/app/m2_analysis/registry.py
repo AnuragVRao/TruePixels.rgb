@@ -490,8 +490,13 @@ def preview(db: Session, model_id: int) -> dict:
     """The canary and quality-gate verdict activation WOULD reach - nothing
     switches, nothing is written (Phase 5b: the admin screen shows these
     metrics per candidate before anyone decides). Same refusals as activate()
-    for a missing or invalid row."""
-    from app.m2_analysis import gate
+    for a missing or invalid row.
+
+    Strictly read-only: no D3/D4/D6 row, no head-cache entry. The only file
+    touched is the canary's synthetic image, inside a TemporaryDirectory that
+    is deleted on exit; the gate's reference cache is only read.
+    """
+    from app.m2_analysis import gate, heads
     from app.m2_analysis.models import ModelRegistry
 
     target = db.get(ModelRegistry, model_id)
@@ -502,9 +507,18 @@ def preview(db: Session, model_id: int) -> dict:
     if not VALIDATORS[target.model_type](target.hyperparameters):
         raise RegistryError("MDL_INVALID", f"model #{model_id} does not describe the resident "
                             "backbone or has an invalid configuration", 422)
-    canary_result = canary(target)
+    # Strictly read-only: never bootstrap or repair D3 here (active() would),
+    # and never add the candidate's head to the process-wide head cache.
+    rows = _active_rows(db)
+    missing = [t for t in _needed_types() if t not in rows or not VALIDATORS[t](rows[t].hyperparameters)]
+    if missing:
+        raise RegistryError("MDL_NO_ACTIVE_CONFIGURATION", f"no valid active model for {missing}; "
+                            "a preview never bootstraps the registry - run one prediction first", 409)
+    with heads.no_store():
+        canary_result = canary(target)
+        gate_result = gate.evaluate(_set_from_rows(rows), target)
     return {"model_id": model_id, "model_type": target.model_type, "is_active": target.is_active,
-            "canary": canary_result, "gate": gate.evaluate(active(db), target)}
+            "canary": canary_result, "gate": gate_result}
 
 
 def rollback(db: Session, model_type: str, *, actor_id: int | None, force: bool = False,

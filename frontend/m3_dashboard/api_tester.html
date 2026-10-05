@@ -185,117 +185,104 @@
 
   <!-- ================= JAVASCRIPT LOGIC ================= -->
   <script>
+    // Phase 5b review: no hard-coded example ids. {own} / {own_image} are
+    // filled from the signed-in user's newest prediction (GET /history);
+    // without one, those requests are SKIPPED, not failed.
     const ENDPOINTS = [
       {
-        id: "health",
-        category: "System Seams",
-        name: "Health Check",
-        method: "GET",
-        url: "/api/v1/health",
-        body: null,
+        id: "health", category: "System Seams", name: "Health Check", method: "GET",
+        url: "/api/v1/health", body: null, auth: false,
         desc: "Returns operational health of the service."
       },
       {
-        id: "result_real",
-        category: "Results & Explainability (F.10, F.11)",
-        name: "GET Result (Real #33)",
-        method: "GET",
-        url: "/api/v1/results/33",
-        body: null,
-        desc: "Fetch prediction result #33 with confidence inversion rule applied."
+        id: "result_own", category: "Results & Explainability (F.10, F.11)", name: "GET Result (your newest)", method: "GET",
+        url: "/api/v1/results/{own}", body: null, needs: "own",
+        desc: "Your newest prediction, with the confidence inversion rule applied."
       },
       {
-        id: "result_ai",
-        category: "Results & Explainability (F.10, F.11)",
-        name: "GET Result (AI #34)",
-        method: "GET",
-        url: "/api/v1/results/34",
-        body: null,
-        desc: "Fetch prediction result #34 with confidence inversion rule applied."
-      },
-      {
-        id: "xai_payload",
-        category: "Results & Explainability (F.10, F.11)",
-        name: "GET Explainability Payload",
-        method: "GET",
-        url: "/api/v1/explainability/33",
-        body: null,
+        id: "xai_payload", category: "Results & Explainability (F.10, F.11)", name: "GET Explainability Payload", method: "GET",
+        url: "/api/v1/explainability/{own}", body: null, needs: "own",
         desc: "Returns the stored panels (SigLIP 2 attention rollout, SPAI patch spectrum) for your own prediction, or XAI_UNAVAILABLE."
       },
       {
-        id: "history",
-        category: "User Privacy & History (F.13)",
-        name: "GET Scan History (Paginated)",
-        method: "GET",
-        url: "/api/v1/history?page=1&page_size=10",
-        body: null,
+        id: "history", category: "User Privacy & History (F.13)", name: "GET Scan History (Paginated)", method: "GET",
+        url: "/api/v1/history?page=1&page_size=10", body: null,
         desc: "Returns scans strictly owned by the authenticated user."
       },
       {
-        id: "isolation_check",
-        category: "User Privacy & History (F.13)",
-        name: "Security Barrier Test (Probe ID #23)",
-        method: "GET",
-        url: "/api/v1/results/23",
-        body: null,
-        expect: 404,
-        desc: "Probes User B's scan as User A. Must return 404 INF_PREDICTION_NOT_FOUND."
+        id: "isolation_check", category: "User Privacy & History (F.13)", name: "Security Barrier (an id that is not yours)", method: "GET",
+        url: "/api/v1/results/2147483647", body: null, expect: 404,
+        desc: "Uses an id that does not exist. The API answers another user's id with the same 404 INF_PREDICTION_NOT_FOUND, so the two are indistinguishable - that is the property under test. To probe a real id of another account, edit the URL."
       },
       {
-        id: "pdf_report",
-        category: "Reporting (F.14)",
-        name: "GET PDF Forensic Report",
-        method: "GET",
-        url: "/api/v1/reports/33",
-        body: null,
+        id: "pdf_report", category: "Reporting (F.14)", name: "GET PDF Report (your newest)", method: "GET",
+        url: "/api/v1/reports/{own}", body: null, needs: "own",
         desc: "Streams the ReportLab PDF report with the result, panels and the NF.13 interpretability notice."
       },
       {
-        id: "simulate_scan",
-        category: "Inference",
-        name: "POST Run Prediction",
-        method: "POST",
-        url: "/api/v1/predictions",
-        body: JSON.stringify({ image_id: 1, xai: true }, null, 2),
-        desc: "Runs both detectors on one of your uploaded images (upload first via POST /api/v1/images) and writes the D4 row."
+        id: "simulate_scan", category: "Inference", name: "POST Run Prediction", method: "POST",
+        url: "/api/v1/predictions", body: '{\n  "image_id": {own_image},\n  "xai": true\n}',
+        needs: "own", batch: false,
+        desc: "Runs both detectors on your newest uploaded image and writes a new D4 row. Not run by Run All (it creates data); use Send."
       },
       {
-        id: "admin_summary",
-        category: "Admin & Analytics (F.15 - F.19)",
-        name: "GET Admin Summary KPI",
-        method: "GET",
-        url: "/api/v1/admin/summary",
-        body: null,
-        desc: "Summary statistics (Total scans, 24h count, class distribution). Requires Admin."
+        id: "admin_summary", category: "Admin & Analytics (F.15 - F.19)", name: "GET Admin Summary KPI", method: "GET",
+        url: "/api/v1/admin/summary", body: null, admin: true,
+        desc: "Summary statistics (total scans, 24h count, class distribution, errors, active models). Admin only: 403 for anyone else."
       },
       {
-        id: "admin_analytics",
-        category: "Admin & Analytics (F.15 - F.19)",
-        name: "GET Admin Analytics (30 Days)",
-        method: "GET",
-        url: "/api/v1/admin/analytics?days=30",
-        body: null,
-        desc: "30-day time-series and 10-bin confidence score distribution."
+        id: "admin_analytics", category: "Admin & Analytics (F.15 - F.19)", name: "GET Admin Analytics (30 Days)", method: "GET",
+        url: "/api/v1/admin/analytics?days=30", body: null, admin: true,
+        desc: "30-day time series, confidence histogram and warm-only latency. Admin only."
       },
       {
-        id: "admin_logs",
-        category: "Admin & Analytics (F.15 - F.19)",
-        name: "GET Audit Logs (D6 Table)",
-        method: "GET",
-        url: "/api/v1/admin/logs?page=1&page_size=10",
-        body: null,
-        desc: "Live audit logs with automatic regex secret redaction."
+        id: "admin_logs", category: "Admin & Analytics (F.15 - F.19)", name: "GET Audit Logs (D6 Table)", method: "GET",
+        url: "/api/v1/admin/logs?page=1&page_size=10", body: null, admin: true,
+        desc: "Audit log entries, newest first. Admin only."
       },
       {
-        id: "admin_users",
-        category: "Admin & Analytics (F.15 - F.19)",
-        name: "GET User Accounts Registry",
-        method: "GET",
-        url: "/api/v1/admin/users",
-        body: null,
-        desc: "User status registry. Requires Admin role."
+        id: "admin_users", category: "Admin & Analytics (F.15 - F.19)", name: "GET User Accounts Registry", method: "GET",
+        url: "/api/v1/admin/users", body: null, admin: true,
+        desc: "User status registry. Admin only."
       }
     ];
+
+    // Ids of the signed-in user's newest prediction, or null (no session, or nothing analysed yet).
+    async function resolveOwnIds() {
+      const token = getAuthToken();
+      if (!token) return null;
+      try {
+        const res = await fetch("/api/v1/history?page=1&page_size=1", { headers: { "Authorization": `Bearer ${token}` } });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const item = data.items && data.items[0];
+        return item ? { own: String(item.prediction_id), own_image: String(item.image_id) } : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function fillIds(text, ids) {
+      if (!text || !ids) return text;
+      return text.replaceAll("{own}", ids.own).replaceAll("{own_image}", ids.own_image);
+    }
+
+    function currentRole() {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem("tp_session") || "null");
+        return saved && saved.role ? saved.role : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // The status a CORRECT server returns for this request and persona.
+    function expectedStatus(ep) {
+      const persona = document.getElementById("personaSelect").value;
+      if (ep.auth !== false && (persona === "none" || persona === "invalid-token" || !getAuthToken())) return 401;
+      if (ep.admin && currentRole() !== "Admin") return 403;
+      return ep.expect || "2xx";
+    }
 
     let selectedEndpoint = ENDPOINTS[0];
 
@@ -373,6 +360,18 @@
         "px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-blue-900/60 text-blue-300 border border-blue-700/60 shrink-0";
 
       document.getElementById("reqUrlInput").value = ep.url;
+      if (ep.needs) {
+        resolveOwnIds().then((ids) => {
+          if (selectedEndpoint !== ep) return;
+          if (ids) {
+            document.getElementById("reqUrlInput").value = fillIds(ep.url, ids);
+            if (ep.body) document.getElementById("reqBodyInput").value = fillIds(ep.body, ids);
+          } else {
+            document.getElementById("bodyNotice").textContent =
+              "Needs one of your predictions: analyse an image on the dashboard first, or edit the id.";
+          }
+        });
+      }
       
       const bodyInput = document.getElementById("reqBodyInput");
       const bodyNotice = document.getElementById("bodyNotice");
@@ -485,21 +484,34 @@
 
       let passed = 0;
       let failed = 0;
+      let skipped = 0;
+      const ids = await resolveOwnIds();
       for (const ep of ENDPOINTS) {
-        outputEl.textContent += `Testing ${ep.method} ${ep.url}... `;
+        if (ep.batch === false) {
+          skipped += 1;
+          outputEl.textContent += `SKIPPED ${ep.method} ${ep.url} (not run in batch: it creates data; use Send)\n`;
+          continue;
+        }
+        if (ep.needs && !ids) {
+          skipped += 1;
+          outputEl.textContent += `SKIPPED ${ep.method} ${ep.url} (needs one of your predictions - analyse an image first)\n`;
+          continue;
+        }
+        const url = fillIds(ep.url, ids);
+        outputEl.textContent += `Testing ${ep.method} ${url}... `;
         const token = getAuthToken();
         const headers = token ? { "Authorization": `Bearer ${token}` } : {};
         if (ep.body) headers["Content-Type"] = "application/json";
 
         const start = performance.now();
         try {
-          const res = await fetch(ep.url, { method: ep.method, headers, body: ep.body || undefined });
+          const res = await fetch(url, { method: ep.method, headers, body: fillIds(ep.body, ids) || undefined });
           const elapsed = (performance.now() - start).toFixed(1);
           // Phase 5b: this used to print PASS for every status, 500s included.
           // A request passes only with its expected status (2xx unless the
           // endpoint declares `expect`, e.g. the isolation probe's 404).
-          const ok = ep.expect ? res.status === ep.expect : res.status >= 200 && res.status < 300;
-          const wanted = ep.expect ? String(ep.expect) : "2xx";
+          const wanted = expectedStatus(ep);
+          const ok = wanted === "2xx" ? res.status >= 200 && res.status < 300 : res.status === wanted;
           if (ok) passed += 1; else failed += 1;
           outputEl.textContent += `[STATUS ${res.status}] (${elapsed}ms) ${ok ? "PASS" : `FAIL (expected ${wanted})`}\n`;
         } catch (e) {
@@ -508,8 +520,7 @@
         }
       }
 
-      outputEl.textContent += `\n=== BATCH RUN COMPLETED: ${passed} passed, ${failed} failed ===`
-        + (failed ? "\n(Ids such as 33 and 23 are examples - edit them to ids that exist for your account.)" : "");
+      outputEl.textContent += `\n=== BATCH RUN COMPLETED: ${passed} passed, ${failed} failed, ${skipped} skipped ===`;
       btn.innerHTML = "<i data-lucide='play' class='w-3 h-3'></i> Run All";
       lucide.createIcons();
     }

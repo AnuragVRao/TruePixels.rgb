@@ -14,7 +14,11 @@ import sys
 import time
 from pathlib import Path
 
+import io
+
 import httpx
+import numpy as np
+from PIL import Image
 from playwright.sync_api import expect, sync_playwright
 
 BASE = "http://127.0.0.1:8000"
@@ -37,7 +41,15 @@ if r.json().get("requires_otp"):
             break
         time.sleep(0.5)
     token = httpx.post(f"{BASE}/api/v1/auth/otp/verify", json={"email": email, "otp": code}).json()["token"]
-summary = httpx.get(f"{BASE}/api/v1/admin/summary", headers={"Authorization": f"Bearer {token}"}).json()
+auth = {"Authorization": f"Bearer {token}"}
+# One real prediction of this admin's own, so the tester's {own} ids resolve.
+buf = io.BytesIO()
+Image.fromarray(np.random.default_rng(7).integers(0, 256, (320, 320, 3), dtype=np.uint8)).save(buf, "PNG")
+image_id = httpx.post(f"{BASE}/api/v1/images", headers=auth,
+                      files={"file": ("t.png", buf.getvalue(), "image/png")}).json()["image_id"]
+pred = httpx.post(f"{BASE}/api/v1/predictions", headers=auth, json={"image_id": image_id, "xai": True}, timeout=120)
+assert pred.status_code == 201, pred.text
+summary = httpx.get(f"{BASE}/api/v1/admin/summary", headers=auth).json()
 
 results = []
 with sync_playwright() as p:
@@ -67,14 +79,23 @@ with sync_playwright() as p:
     page.click("#btnBatchTest")
     expect(page.locator("#responseOutput")).to_contain_text("BATCH RUN COMPLETED", timeout=120000)
     out = page.locator("#responseOutput").inner_text()
+    print(out)
+    results.append(("api-tester: own ids resolved, 0 failed, only the data-creating POST skipped",
+                    bool(re.search(r"COMPLETED: \d+ passed, 0 failed, 1 skipped", out))
+                    and f"/results/{pred.json()['prediction_id']}" in out))
+    # Same run as an invalid token: every authenticated request must be refused (401).
+    page.select_option("#personaSelect", "invalid-token")
+    page.click("#btnBatchTest")
+    expect(page.locator("#responseOutput")).to_contain_text("BATCH RUN COMPLETED", timeout=120000)
+    invalid = page.locator("#responseOutput").inner_text()
+    results.append(("api-tester, invalid token: 401s counted as correct, 0 failed",
+                    bool(re.search(r"COMPLETED: \d+ passed, 0 failed", invalid)) and "[STATUS 401]" in invalid))
     statuses = re.findall(r"\[STATUS (\d+)\][^\n]*?(PASS|FAIL)", out)
     # PASS only ever for 2xx or the isolation probe's 404; any other 4xx/5xx must be FAIL.
     honest = bool(statuses) and all(
         (s.startswith("2") or s == "404") if v == "PASS" else True for s, v in statuses) and all(
         v == "FAIL" for s, v in statuses if s[0] in "45" and s != "404")
     results.append(("api-tester verdicts follow status codes", honest))
-    results.append(("api-tester summary counts", bool(re.search(r"COMPLETED: \d+ passed, \d+ failed", out))))
-    print(out.splitlines()[-2:] if out else "")
     results.append(("no page errors", not errors))
     browser.close()
 
