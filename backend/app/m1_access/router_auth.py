@@ -4,11 +4,12 @@ Conforms to PRD Section 5.1 / 6.3 and SRS F.1, F.2, F.3, F.4.
 """
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.m1_access.config import OTP_EXPIRE_MINUTES, REQUIRE_2FA, ENVIRONMENT
+from app.m1_access import throttle
 from app.m1_access.email_service import EmailService
 from app.m1_access.models import User
 from app.m1_access.schemas import (
@@ -95,6 +96,7 @@ def register_user(
         new_user.otp_hash = create_otp_hash(otp)
         new_user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
         db.commit()
+        throttle.new_code_issued(new_user.user_id)
         EmailService.send_otp_email(new_user.email, otp, new_user.full_name)
         return UserRegisterResponse(
             user_id=new_user.user_id,
@@ -117,21 +119,30 @@ def register_user(
 )
 def login_user(
     body: UserLoginRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     clean_email = body.email.strip().lower()
+    # INTEGRATION (changes.md 6.13): increasing delay per (email, client IP),
+    # shared by both sign-in endpoints; checked before any password work.
+    attempt_key = throttle.login_key(clean_email, request.client.host if request.client else None)
+    throttle.check_login(attempt_key)
     user = db.query(User).filter(func.lower(User.email) == clean_email).first()
 
     # Timing attack protection: perform dummy verification if user is not found (PRD §5.1.2)
     if not user:
         verify_password(body.password, DUMMY_HASH)
+        throttle.login_failed(attempt_key)
         emit("authentication", f"Login failed: unknown email {clean_email}", severity="warning")
         raise AuthInvalidCredentialsException("Invalid email or password.")
 
     # Check password
     if not verify_password(body.password, user.password_hash):
+        throttle.login_failed(attempt_key)
         emit("authentication", f"Login failed: bad password for user_id={user.user_id}", severity="warning", user_id=user.user_id)
         raise AuthInvalidCredentialsException("Invalid email or password.")
+
+    throttle.login_succeeded(attempt_key)  # the password was right
 
     # Check account active status
     if user.account_status in ("disabled", "removed"):
@@ -144,6 +155,7 @@ def login_user(
         user.otp_hash = create_otp_hash(otp)
         user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
         db.commit()
+        throttle.new_code_issued(user.user_id)
         EmailService.send_otp_email(user.email, otp, user.full_name)
         emit("authentication", f"2FA OTP dispatched for login: user_id={user.user_id}", severity="info", user_id=user.user_id)
         return UserLoginResponse(
@@ -174,19 +186,28 @@ def login_user(
 )
 def login_admin(
     body: UserLoginRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     clean_email = body.email.strip().lower()
+    # INTEGRATION (changes.md 6.13): increasing delay per (email, client IP),
+    # shared by both sign-in endpoints; checked before any password work.
+    attempt_key = throttle.login_key(clean_email, request.client.host if request.client else None)
+    throttle.check_login(attempt_key)
     user = db.query(User).filter(func.lower(User.email) == clean_email).first()
 
     if not user:
         verify_password(body.password, DUMMY_HASH)
+        throttle.login_failed(attempt_key)
         emit("authentication", f"Admin login failed: unknown email {clean_email}", severity="warning")
         raise AuthInvalidCredentialsException("Invalid email or password.")
 
     if not verify_password(body.password, user.password_hash):
+        throttle.login_failed(attempt_key)
         emit("authentication", f"Admin login failed: bad password for user_id={user.user_id}", severity="warning", user_id=user.user_id)
         raise AuthInvalidCredentialsException("Invalid email or password.")
+
+    throttle.login_succeeded(attempt_key)  # the password was right
 
     if user.account_status in ("disabled", "removed"):
         emit("authentication", f"Admin login blocked: account is {user.account_status}", severity="warning", user_id=user.user_id)
@@ -202,6 +223,7 @@ def login_admin(
         user.otp_hash = create_otp_hash(otp)
         user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
         db.commit()
+        throttle.new_code_issued(user.user_id)
         EmailService.send_otp_email(user.email, otp, user.full_name)
         emit("authentication", f"2FA OTP dispatched for admin login: user_id={user.user_id}", severity="info", user_id=user.user_id)
         return UserLoginResponse(
@@ -258,19 +280,26 @@ def send_otp(
     db: Session = Depends(get_db),
 ):
     clean_email = body.email.strip().lower()
+    # INTEGRATION (changes.md 6.13): ONE answer for every case - account or
+    # not, sent or throttled (60 s cooldown, 5 per hour, per address). It used
+    # to answer differently for unknown addresses, revealing which exist.
+    answer = {"message": "If the account exists, a verification code has been sent."}
+    if not throttle.may_send(clean_email):
+        return answer
     user = db.query(User).filter(func.lower(User.email) == clean_email).first()
     if not user:
-        # Don't leak whether email exists
-        return {"message": "If the account exists, a verification code has been dispatched."}
+        create_otp_hash(generate_otp())  # same hashing cost as a real send
+        return answer
 
     otp = generate_otp()
     user.otp_hash = create_otp_hash(otp)
     user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
     db.commit()
 
+    throttle.new_code_issued(user.user_id)
     EmailService.send_otp_email(user.email, otp, user.full_name)
     emit("authentication", f"2FA OTP re-dispatched to {clean_email}: user_id={user.user_id}", severity="info", user_id=user.user_id)
-    return {"message": "Verification code has been dispatched to your email."}
+    return answer
 
 
 @router.post(
@@ -301,6 +330,11 @@ def verify_otp(
 
     if not verify_otp_hash(clean_otp, user.otp_hash):
         emit("authentication", f"OTP verification failed: code mismatch for user_id={user.user_id}", severity="warning", user_id=user.user_id)
+        # INTEGRATION (changes.md 6.13): the 5th wrong code kills the code.
+        if throttle.otp_wrong(user.user_id):
+            user.otp_hash = None
+            user.otp_expires_at = None
+            db.commit()
         raise AuthInvalidCredentialsException("Invalid verification code. Please make sure you enter the latest code sent to your email.")
 
     # OTP is valid

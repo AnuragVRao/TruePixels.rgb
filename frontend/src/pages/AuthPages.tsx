@@ -239,7 +239,11 @@ export const VerifyOtpPage: React.FC = () => {
           Development servers without email configured print the code to the server console instead.
         </span>
       </Notice>
-      {resent && <Notice tone="success" title="A new code has been sent." />}
+      {resent && (
+        <Notice tone="success" title="If the account exists, a new code has been sent.">
+          You can request at most one code a minute. A code stops working after 5 wrong entries.
+        </Notice>
+      )}
       <ErrorNotice error={error} />
       <form onSubmit={verify} className="space-y-4">
         <input

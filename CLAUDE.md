@@ -199,7 +199,7 @@ TEST_DATABASE_URL=postgresql+psycopg://truepixels:<pw>@127.0.0.1:5433/truepixels
 
 # Database (once): PostgreSQL in Docker, schema from the migrations
 cp backend/.env.example backend/.env                 # choose POSTGRES_PASSWORD, same value in DATABASE_URL
-docker compose up -d db                              # repo root; 127.0.0.1:5433, data in a named volume
+docker compose --env-file backend/.env up -d db       # repo root; 127.0.0.1:5433, data in a named volume
 cd backend && alembic upgrade head                   # the ONLY way the schema is created or changed
 
 # Server (from backend/, so that `app` is the top-level package)

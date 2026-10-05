@@ -1033,3 +1033,51 @@ swapping is the feature demonstrated end to end.
   0 failed, all 401.
 - **`docs/rotate-secrets.md`:** steps to rotate the Postgres password and
   the JWT key without printing either value.
+
+### 6.13 Sign-in and OTP throttling, before Phase 6
+
+- **Finding (M1, not changed here):** a session can be obtained with an email
+  address and an OTP alone. `/auth/otp/send` issues a code to any address,
+  and `/auth/otp/verify` exchanges it for a full session token, for any
+  role, even with `REQUIRE_2FA` off. The OTP is therefore a password-free
+  sign-in, not a second factor. The limits below bound guessing; closing the
+  path itself is proposed separately.
+- **New M1 module `throttle.py`** (in memory; resets on restart; one counter
+  set per worker):
+  - **Sign-in:** `/auth/login` and `/auth/admin/login` share one counter,
+    keyed by (email, client IP).
+    - The first 3 failures cost nothing.
+    - After that, each failure doubles the wait: 1, 2, 4 s and so on, up to
+      60 s. A waiting key gets `429 AUTH_RATE_LIMITED` with `Retry-After`.
+    - There is no lockout, and a correct password clears the key.
+    - Unknown addresses are throttled exactly like real ones.
+  - **OTP codes:** the 5th wrong code invalidates the code. Any newly
+    issued code resets the count.
+  - **`/auth/otp/send`:** a 60 s cooldown and at most 5 sends per hour, per
+    address, whether or not the account exists.
+    - Every case gets **one identical answer**. The old code answered
+      unknown addresses differently, which revealed which accounts exist.
+    - Unknown addresses pay the same hashing cost.
+  - **Client IP** = `request.client.host`, the address uvicorn resolved.
+    `X-Forwarded-For` counts only from `--forwarded-allow-ips`, so a
+    spoofed header from a direct client is ignored (tested).
+  - **Audit log:** throttle events reach D6 at most once a minute per key.
+  - **Memory:** at most 10,000 keys per table.
+- **M1 `router_auth.py`:** calls the throttle; one answer for `/otp/send`.
+- **Shared `errors.py`:**
+  - new code `AUTH_RATE_LIMITED` (429);
+  - the handler passes an exception's `headers` through (used for
+    `Retry-After`).
+- **Shared `db.py`:** `ensure_scratch_database_exists` CREATEs a dropped
+  `*_test` / `*_regression` database, for those names only.
+  `regression_check.py` was proven against a database that did not exist:
+  created, migrated, 24/24 images bit-identical. `truepixels_regression`
+  was then dropped, as approved.
+- **`compose.yaml`:** the database container receives only `POSTGRES_USER`,
+  `POSTGRES_PASSWORD` and `POSTGRES_DB`. It used to receive all of
+  `backend/.env`, including `JWT_SECRET_KEY`. Compose now needs
+  `--env-file backend/.env`. The running container was **not** recreated;
+  that is step (c) of `docs/rotate-secrets.md`.
+- **`backend/scripts/verify_rotation.py`:** checks a rotation and prints
+  only True/False.
+- **Tests:** `test_throttle.py`, 11 tests on an injectable clock, no sleeps.

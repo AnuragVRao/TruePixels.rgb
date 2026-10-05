@@ -164,6 +164,16 @@ def _clean_tables(_test_database):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_throttles():
+    """Sign-in/OTP throttles are process-wide memory: start every test clean."""
+    from app.m1_access import throttle
+
+    throttle.reset()
+    yield
+    throttle.reset()
+
+
+@pytest.fixture(autouse=True)
 def _strict_audit_log_everywhere(strict_audit_log):
     """Every test fails if a D6 write was swallowed (see strict_audit_log)."""
     yield

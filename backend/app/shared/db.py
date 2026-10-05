@@ -179,6 +179,31 @@ def refuse_unless_scratch(url) -> None:
         raise RuntimeError(f"refusing to reset the development SQLite database {name}")
 
 
+def ensure_scratch_database_exists(url) -> None:
+    """PostgreSQL: CREATE the scratch database if it does not exist yet, so a
+    dropped *_test / *_regression database comes back by itself (Phase 6-pre).
+    Never for any other name; SQLite files are created on connect anyway."""
+    import re
+
+    from sqlalchemy import create_engine, text
+
+    if url.get_backend_name() != "postgresql":
+        return
+    refuse_unless_scratch(url)
+    name = url.database or ""
+    if not re.fullmatch(r"[a-z0-9_]+", name):
+        raise RuntimeError("scratch database names must be lower-case [a-z0-9_]")
+    admin = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with admin.connect() as connection:
+            exists = connection.execute(text("SELECT 1 FROM pg_database WHERE datname = :n"),
+                                        {"n": name}).scalar()
+            if not exists:
+                connection.execute(text(f'CREATE DATABASE "{name}"'))
+    finally:
+        admin.dispose()
+
+
 def reset_scratch_database() -> None:
     """Drop EVERYTHING in the configured database, then migrate to head.
 
@@ -191,6 +216,7 @@ def reset_scratch_database() -> None:
     from sqlalchemy import inspect, text
 
     refuse_unless_scratch(engine.url)
+    ensure_scratch_database_exists(engine.url)
     import_all_models()
     with engine.begin() as connection:
         if connection.dialect.name == "postgresql":

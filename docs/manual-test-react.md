@@ -3,7 +3,7 @@
 Run against a backend and the Vite dev server:
 
 ```bash
-docker compose up -d db                      # repo root
+docker compose --env-file backend/.env up -d db   # repo root
 cd backend && alembic upgrade head
 python -m uvicorn app.main:app --port 8000   # leave running; OTP codes print here in dev
 cd ../frontend && npm install && npm run dev # http://localhost:3000 (proxies /api to :8000)

@@ -27,6 +27,7 @@ ERROR_REGISTRY: dict[str, tuple[int, str]] = {
     "AUTH_TOKEN_INVALID": (401, "Missing, malformed or expired session token."),
     "AUTH_FORBIDDEN": (403, "Authenticated but role is insufficient for the resource."),
     "AUTH_ACCOUNT_DISABLED": (403, "Account state is disabled or removed."),
+    "AUTH_RATE_LIMITED": (429, "Too many attempts; wait before trying again."),
     "IMG_FORMAT_UNSUPPORTED": (415, "Only JPG, JPEG and PNG images are accepted."),
     "IMG_TOO_LARGE": (413, "File exceeds the configured maximum upload size."),
     "IMG_CORRUPTED": (422, "Decoder could not open the file, or the file is truncated."),
@@ -144,7 +145,9 @@ class AdmActionNotPermittedException(AppException):
 
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     """Exception handler for custom AppException."""
-    return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
+    # Phase 6-pre: an exception may carry response headers (Retry-After on 429).
+    return JSONResponse(status_code=exc.status_code, content=exc.to_dict(),
+                        headers=getattr(exc, "headers", None))
 
 
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:

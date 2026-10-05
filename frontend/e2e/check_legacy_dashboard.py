@@ -83,6 +83,21 @@ with sync_playwright() as p:
     results.append(("api-tester: own ids resolved, 0 failed, only the data-creating POST skipped",
                     bool(re.search(r"COMPLETED: \d+ passed, 0 failed, 1 skipped", out))
                     and f"/results/{pred.json()['prediction_id']}" in out))
+    results.append(("api-tester: clean run is green", page.locator("#responseOutput").get_attribute("data-verdict") == "pass"
+                    and "emerald" in (page.locator("#responseOutput").get_attribute("class") or "")))
+    # Mutations: change ONE expected status; the run must turn red (exact match only).
+    for ep_id, wrong in (("history", 201), ("isolation_check", 200), ("admin_users", 403)):
+        page.reload()
+        page.evaluate("([id, s]) => { ENDPOINTS.find(e => e.id === id).expect = s; }", [ep_id, wrong])
+        page.click("#btnBatchTest")
+        expect(page.locator("#responseOutput")).to_contain_text("BATCH RUN COMPLETED", timeout=120000)
+        mutated = page.locator("#responseOutput").inner_text()
+        results.append((f"api-tester mutation {ep_id} expect={wrong}: page turns red",
+                        page.locator("#responseOutput").get_attribute("data-verdict") == "fail"
+                        and "rose" in (page.locator("#responseOutput").get_attribute("class") or "")
+                        and bool(re.search(r"COMPLETED: \d+ passed, 1 failed", mutated))
+                        and f"FAIL (expected {wrong})" in mutated))
+    page.reload()
     # Same run as an invalid token: every authenticated request must be refused (401).
     page.select_option("#personaSelect", "invalid-token")
     page.click("#btnBatchTest")

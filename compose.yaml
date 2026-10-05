@@ -1,14 +1,21 @@
 # Local PostgreSQL for TruePixels.rgb (Phase 2).
 #
-#   docker compose up -d db          # start
-#   cd backend && alembic upgrade head   # create / update the schema
-#   docker compose down              # stop (data kept in the named volume)
+#   docker compose --env-file backend/.env up -d db     # start
+#   cd backend && alembic upgrade head                   # create / update the schema
+#   docker compose --env-file backend/.env down          # stop (data kept; NEVER add -v)
 #
 # Credentials come ONLY from backend/.env (gitignored; copy
-# backend/.env.example and choose a password). There are no defaults here on
-# purpose: compose refuses to start without that file, rather than starting a
-# database with a guessable password. DATABASE_URL in the same file must use
-# the same user/password/database, port 5433.
+# backend/.env.example and choose a password), passed with --env-file for
+# interpolation. There are no defaults here on purpose: without them compose
+# refuses to run (the ":?" below), rather than starting a database with a
+# guessable password. DATABASE_URL in the same file must use the same
+# user/password/database, port 5433.
+#
+# The container receives ONLY the three POSTGRES_* values (Phase 6-pre). It
+# used to get all of backend/.env via env_file - including JWT_SECRET_KEY,
+# readable by anyone with `docker inspect`. POSTGRES_PASSWORD is only applied
+# when the volume is first initialised; to change it later see
+# docs/rotate-secrets.md (ALTER USER).
 #
 # Bound to 127.0.0.1 only: the database is not reachable from the network.
 # Port 5433 on the host avoids clashing with any locally installed Postgres.
@@ -16,9 +23,10 @@
 services:
   db:
     image: postgres:16
-    env_file:
-      - path: backend/.env
-        required: true
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?run compose with --env-file backend/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run compose with --env-file backend/.env}
+      POSTGRES_DB: ${POSTGRES_DB:?run compose with --env-file backend/.env}
     ports:
       - "127.0.0.1:5433:5432"
     volumes:

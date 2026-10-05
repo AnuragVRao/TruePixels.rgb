@@ -633,3 +633,24 @@ def test_gate_preview_never_bootstraps_the_registry():
     r = client.post(f"/api/v1/models/{candidate.json()['model_id']}/gate-preview", headers=admin)
     assert r.status_code == 409 and r.json()["error"]["code"] == "MDL_NO_ACTIVE_CONFIGURATION", r.text
     assert _database_snapshot() == before
+
+
+def test_gate_preview_works_on_first_use_of_a_fresh_registry():
+    """The preview's MDL_NO_ACTIVE_CONFIGURATION needs out-of-band edits: on an
+    EMPTY D3, application startup registers the baseline before any request,
+    so the very first upload-then-preview succeeds."""
+    db = SessionLocal()
+    try:
+        assert db.query(ModelRegistry).count() == 0  # fresh: tables are emptied between tests
+    finally:
+        db.close()
+    with TestClient(app) as started:  # runs the real lifespan (startup)
+        _, admin = _user("Admin")
+        reg = started.post("/api/v1/models", headers=admin,
+                           data={"model_type": registry.TYPE_FUSION, "name": "weighted_average fusion",
+                                 "version": f"first{next(_n)}", "training_reference": "first use"},
+                           files={"file": ("f.json", _fusion(0.74), "application/json")})
+        assert reg.status_code == 201, reg.text
+        r = started.post(f"/api/v1/models/{reg.json()['model_id']}/gate-preview", headers=admin)
+        assert r.status_code == 200, r.text
+        assert r.json()["gate"]["available"]
