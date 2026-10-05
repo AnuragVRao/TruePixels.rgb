@@ -96,8 +96,9 @@ export const Layout: React.FC = () => {
         <Outlet />
       </main>
       {user || pathname !== '/' ? (
-        <footer className="border-t border-slate-800 py-5 text-center text-xs text-slate-500 px-4">
-          TruePixels.rgb flags likely AI-generated images. A result is a model&apos;s estimate, not proof.
+        <footer className="border-t border-slate-800 py-5 px-6 flex flex-wrap justify-between gap-2 text-xs text-slate-500">
+          <span>&copy; {new Date().getFullYear()} TruePixels.rgb. All rights reserved.</span>
+          <span>A result is a model&apos;s estimate, not proof.</span>
         </footer>
       ) : (
         <footer className="relative z-10 py-5 px-6 text-left text-xs text-slate-400">

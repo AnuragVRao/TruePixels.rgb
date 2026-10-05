@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { Download, Loader2 } from 'lucide-react';
+import { Activity, AlertCircle, ArrowLeft, Brain, Download, Info, Layers, Loader2, RefreshCw } from 'lucide-react';
 import { apiBlob, apiRequest } from '../api/client';
 import type { ResultView, Visualization, XaiStatus } from '../api/types';
 import { AuthImage } from '../components/AuthImage';
@@ -31,6 +31,52 @@ function xaiMessage(status: XaiStatus | undefined, reasons: string[] | undefined
   }
   return null;
 }
+
+const BAND_CHIP: Record<ResultView['confidence_band'], string> = {
+  High: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300',
+  Moderate: 'bg-sky-500/10 border-sky-500/40 text-sky-300',
+  Low: 'bg-amber-500/10 border-amber-500/40 text-amber-300',
+};
+
+// A 240° arc with the gap at the bottom; pathLength 100 makes the dash a percentage.
+const GAUGE_ARC = 'M 23.04 100 A 60 60 0 1 1 126.96 100';
+
+/** Confidence in the predicted class (never fusion_score - CLAUDE.md §7). */
+const ConfidenceGauge: React.FC<{ percentage: number; label: string; band: ResultView['confidence_band']; ai: boolean }> = ({
+  percentage, label, band, ai,
+}) => (
+  <div className="flex flex-col items-center">
+    <div className="relative w-48 h-40">
+      <svg viewBox="0 0 150 130" className="w-full h-full" aria-hidden="true">
+        <defs>
+          <linearGradient id="gauge-ai" x1="0" x2="1"><stop offset="0" stopColor="#f43f5e" /><stop offset="1" stopColor="#fb7185" /></linearGradient>
+          <linearGradient id="gauge-real" x1="0" x2="1"><stop offset="0" stopColor="#10b981" /><stop offset="1" stopColor="#34d399" /></linearGradient>
+        </defs>
+        <path d={GAUGE_ARC} pathLength={100} fill="none" stroke="#1e293b" strokeWidth="12" strokeLinecap="round" />
+        <path d={GAUGE_ARC} pathLength={100} fill="none" stroke={`url(#${ai ? 'gauge-ai' : 'gauge-real'})`} strokeWidth="12"
+              strokeLinecap="round" strokeDasharray={`${Math.min(100, Math.max(0, percentage))} 100`} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pb-3">
+        <span className="text-3xl font-bold text-white">{percentage.toFixed(1)}%</span>
+        <span className="text-sm text-slate-300">{label}</span>
+      </div>
+    </div>
+    <span className={`-mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium ${BAND_CHIP[band]}`}>
+      <AlertCircle className="w-3.5 h-3.5" /> {band} confidence
+    </span>
+  </div>
+);
+
+const ScoreCard: React.FC<{ icon: React.ReactNode; title: string; value: string }> = ({ icon, title, value }) => (
+  <div className="flex gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+    <div className="text-indigo-400 shrink-0">{icon}</div>
+    <div>
+      <p className="text-sm text-slate-300">{title}</p>
+      <p className="mt-1 text-2xl font-mono font-semibold text-white">{value}</p>
+      <p className="text-xs text-slate-500" title="Probability that the image is AI-generated, as this detector scores it">P(AI)</p>
+    </div>
+  </div>
+);
 
 const Panel: React.FC<{ v: Visualization }> = ({ v }) => (
   <figure className="space-y-2">
@@ -91,36 +137,47 @@ export const ResultsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Result #{result.prediction_id}</p>
-          <h1 className={`text-3xl font-bold ${ai ? 'text-rose-300' : 'text-emerald-300'}`}>{result.predicted_class}</h1>
-          <p className="text-slate-300 mt-1">
-            Confidence <strong>{result.confidence_percentage.toFixed(1)}%</strong>{' '}
-            <span className="text-slate-500">({result.confidence_band})</span>
-          </p>
-          <p className="text-xs text-slate-500 mt-1">{new Date(result.prediction_timestamp).toLocaleString()}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link to="/" className="flex items-center gap-2 text-sm text-indigo-300 hover:text-indigo-200">
+          <ArrowLeft className="w-4 h-4" /> New Analysis
+        </Link>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={downloadPdf} disabled={pdfBusy}
+                  className="flex items-center gap-2 rounded-xl border border-slate-700 hover:border-indigo-500 bg-slate-900/60 px-4 py-2 text-sm font-medium text-slate-200 disabled:opacity-50">
+            {pdfBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download Report (PDF)
+          </button>
+          <Link to="/"
+                className="flex items-center gap-2 rounded-xl border border-slate-700 hover:border-indigo-500 bg-slate-900/60 px-4 py-2 text-sm font-medium text-slate-200">
+            <RefreshCw className="w-4 h-4" /> Analyse Another
+          </Link>
         </div>
-        <button type="button" onClick={downloadPdf} disabled={pdfBusy}
-                className="flex items-center gap-2 rounded-lg border border-slate-700 hover:border-indigo-500 px-4 py-2 text-sm text-slate-200 disabled:opacity-50">
-          {pdfBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PDF report
-        </button>
       </div>
       <ErrorNotice error={pdfError} />
 
-      <div className="grid gap-3 sm:grid-cols-3 text-sm">
-        <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-3">
-          <p className="text-slate-500 text-xs">Semantic detector, P(AI)</p>
-          <p className="text-white font-mono">{pct(result.semantic_score)}</p>
+      <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6">
+        <div className="space-y-2">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-[11px] font-semibold tracking-wider text-slate-300">
+            <Info className="w-3.5 h-3.5" /> RESULT #{result.prediction_id}
+          </span>
+          <h1 className={`text-4xl sm:text-5xl font-extrabold tracking-tight ${ai ? 'text-rose-400' : 'text-emerald-400'}`}>
+            {result.predicted_class}
+          </h1>
+          <p className="text-lg text-slate-200">
+            Confidence: <strong>{result.confidence_percentage.toFixed(1)}%</strong>{' '}
+            <span className="text-slate-500">({result.confidence_band})</span>
+          </p>
+          <p className="text-sm text-slate-500">{new Date(result.prediction_timestamp).toLocaleString()}</p>
         </div>
-        <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-3">
-          <p className="text-slate-500 text-xs">Frequency detector, P(AI)</p>
-          <p className="text-white font-mono">{result.frequency_score === null ? 'not measured' : pct(result.frequency_score)}</p>
-        </div>
-        <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-3">
-          <p className="text-slate-500 text-xs">Combined score, P(AI)</p>
-          <p className="text-white font-mono">{pct(result.fusion_score)}</p>
-        </div>
+        <ConfidenceGauge percentage={result.confidence_percentage} label={result.predicted_class}
+                         band={result.confidence_band} ai={ai} />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <ScoreCard icon={<Brain className="w-7 h-7" />} title="Semantic detector (SigLIP 2)"
+                   value={pct(result.semantic_score)} />
+        <ScoreCard icon={<Activity className="w-7 h-7" />} title="Frequency detector (SPAI)"
+                   value={result.frequency_score === null ? 'not measured' : pct(result.frequency_score)} />
+        <ScoreCard icon={<Layers className="w-7 h-7" />} title="Combined score" value={pct(result.fusion_score)} />
       </div>
       {result.frequency_score === null && (
         <Notice tone="warning" title="Semantic-only verdict">
@@ -145,7 +202,13 @@ export const ResultsPage: React.FC = () => {
       </div>
       {xai && <Notice tone={xai.tone}>{xai.text}</Notice>}
 
-      <Notice tone="info" title="How to read this">{result.interpretive_caption}</Notice>
+      <div className="flex gap-4 rounded-2xl border border-sky-800/60 bg-sky-950/30 px-5 py-4">
+        <Info className="w-6 h-6 shrink-0 text-sky-300" />
+        <div className="space-y-1">
+          <p className="font-semibold text-white">How to read this result</p>
+          <p className="text-sm leading-relaxed text-slate-300">{result.interpretive_caption}</p>
+        </div>
+      </div>
 
       {models.length > 0 && (
         <div className="text-xs text-slate-500 space-y-0.5">
