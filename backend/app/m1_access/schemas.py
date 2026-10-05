@@ -54,6 +54,8 @@ class OTPRequest(BaseModel):
 class OTPVerifyRequest(BaseModel):
     email: EmailStr
     otp: str = Field(..., min_length=6, max_length=6)
+    # INTEGRATION (changes.md 6.15): which challenge this code redeems.
+    purpose: Literal["login", "register"] = "login"
 
 
 class OTPVerifyResponse(BaseModel):

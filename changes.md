@@ -1110,3 +1110,83 @@ The security rules (`react/no-danger`) now apply to all of `src/` without
 exception. Type check, lint and production build are clean. Nothing in
 `backend/` changed. The files remain in git history (`git log --
 frontend/src/features`).
+
+### 6.15 OTP is a second factor, not an email-only sign-in (M1)
+
+Before this change, `/auth/otp/send` issued a code to any registered
+address, and `/auth/otp/verify` turned that code into a full session. This
+worked for any role, admins included, and even with 2FA off. M1 files
+changed:
+
+- **New `otp_challenge.py`.** A code exists only inside a challenge with a
+  purpose:
+  - `login`: created only after a correct password, by `/auth/login` or
+    `/auth/admin/login`;
+  - `register`: created only by `/auth/register`, role User only.
+
+  It refuses to issue codes in production without real e-mail delivery
+  (`503 OTP_DELIVERY_UNAVAILABLE`). An SMTP failure clears the challenge
+  instead of falling back to the console.
+- **`router_auth.py`:**
+  - with 2FA off, `/otp/send` and `/otp/verify` answer `403 AUTH_FORBIDDEN`;
+  - `/otp/send` only re-sends a pending challenge, with the same purpose,
+    and can never start one;
+  - `/otp/verify` requires the purpose to match, and a `register` challenge
+    is redeemable only by role User;
+  - a wrong purpose or another account's code gets the same "invalid or
+    expired" answer and counts as a wrong attempt;
+  - challenges are single use;
+  - register, login and admin login all issue codes through
+    `otp_challenge`.
+- **`schemas.py`:** `OTPVerifyRequest.purpose` (`login` | `register`,
+  default `login`). The React verify page sends `purpose=register` after
+  registration. The legacy dashboard only verifies sign-in codes, so the
+  default suits it.
+- **`models.py`, migration `0003`:** a `users.otp_purpose` column with a
+  check constraint. On SQLite this is a plain `ALTER TABLE`: a batch
+  rebuild silently drops the expression index `uq_users_email_lower`, and
+  the migration tests caught that.
+- **`config.py`:** `is_production()`, read at call time.
+- **`email_service.py`:** outside development the console fallback is
+  disabled, so a code is never printed.
+- **M1's test `test_m1_auth.py::test_otp_send_and_verify_flow`** used the
+  email-only path. It now signs in with the password first (2FA on), then
+  runs its original send and verify steps.
+- **Hashing:** codes were already stored as Argon2id hashes and compared in
+  constant time (argon2-cffi verify). No change was needed.
+- **Tests:** `test_otp_challenges.py` (12):
+  - email-only send/verify refused for a User and an Admin, and with 2FA
+    off;
+  - an Admin cannot get a session from a registration challenge;
+  - cross-purpose and cross-account redemption refused;
+  - re-send keeps the purpose;
+  - production refuses to issue codes without real e-mail and never falls
+    back to the console.
+
+  With the email-only send restored, the email-only tests fail.
+
+### 6.16 Per-account sign-in counter; eviction that flooding cannot exploit (M1)
+
+- **`throttle.py`:** a second sign-in counter keyed by email alone, any IP.
+  It allows 10 free failures, then the same 1–60 s doubling, so rotating
+  addresses does not escape it. A request waits for the longer of the
+  per-address and per-account waits. Delay only, never a lockout.
+- **Eviction is no longer plain LRU.** At a full table:
+  1. expired entries go first;
+  2. then the entry with the fewest failures or sends goes;
+  3. an entry currently enforcing a delay or cap is never evicted;
+  4. when all entries are enforcing, the new key goes untracked (and that
+     is logged).
+
+  Tests show flooding 4× the table size leaves an active counter intact;
+  with LRU put back, those tests fail.
+- **State stays in memory and resets on restart** (documented in
+  `docs/auth-hardening.md`).
+- **Also:**
+  - `test_scratch_guard.py`: `CREATE DATABASE`, and `regression_check.py`,
+    refuse any name without `_test`/`_regression`, the development
+    database `truepixels` included, before any connection;
+  - `verify_rotation.py` can no longer print a value even when it fails
+    (sentinel test);
+  - tag `pre-m1-cleanup` marks `b0a9597`, the commit before the M1
+    deletion.

@@ -133,7 +133,7 @@ export const RegisterPage: React.FC = () => {
         password,
       });
       if (res.requires_2fa) {
-        navigate(`/verify?email=${encodeURIComponent(cleanEmail)}`);
+        navigate(`/verify?email=${encodeURIComponent(cleanEmail)}&purpose=register`);
         return;
       }
       const login = await postJson<LoginResponse>('/auth/login', { email: cleanEmail, password });
@@ -192,6 +192,8 @@ export const VerifyOtpPage: React.FC = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const email = params.get('email') ?? '';
+  // Which challenge the code redeems: registration or a password sign-in.
+  const purpose = params.get('purpose') === 'register' ? 'register' : 'login';
   const next = useNext();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -205,7 +207,7 @@ export const VerifyOtpPage: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await postJson<OtpVerifyResponse>('/auth/otp/verify', { email, otp: code.trim() });
+      const res = await postJson<OtpVerifyResponse>('/auth/otp/verify', { email, otp: code.trim(), purpose });
       if (res.token) {
         await signIn(res.token);
         navigate(next, { replace: true });
@@ -240,7 +242,7 @@ export const VerifyOtpPage: React.FC = () => {
         </span>
       </Notice>
       {resent && (
-        <Notice tone="success" title="If the account exists, a new code has been sent.">
+        <Notice tone="success" title="If a sign-in or registration is waiting for a code, a new one has been sent.">
           You can request at most one code a minute. A code stops working after 5 wrong entries.
         </Notice>
       )}

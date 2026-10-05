@@ -153,7 +153,14 @@ $env:TEST_DATABASE_URL = "$u/truepixels_test"; python -m pytest backend/tests -q
 Remove-Variable u
 ```
 
-## (f) Clean up
+## (f) Clean up, only after (d) printed True on every line
+
+`verify_rotation.py` needs the backup: it is how the script proves the OLD
+values are dead. Delete the backup only after a full True run. The script
+never prints a value, old or new: whatever fails, it prints True/False, or
+"could not run (<error type>)" (tested with sentinel values,
+`backend/tests/test_verify_rotation.py`).
+
 
 ```powershell
 Remove-Item backend\.env.before-rotation   # it still holds the old values

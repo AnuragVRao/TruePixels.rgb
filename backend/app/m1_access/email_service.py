@@ -110,6 +110,14 @@ TruePixels.rgb Security Team
             except Exception as e:
                 emit("error", f"Gmail SMTP delivery failed to {clean_recipient}: {e}", severity="error")
 
+        # INTEGRATION (changes.md 6.15): never print a code outside development.
+        from app.m1_access.config import is_production
+
+        if is_production():
+            emit("error", f"OTP for {clean_recipient} not delivered: no working e-mail delivery "
+                 "(console delivery is development only)", severity="error")
+            return False
+
         # Fallback to Console / Development mode.
         # INTEGRATION (changes.md 6.10): the code goes to the developer's
         # console ONLY (stdout logger, never persisted). It used to go through

@@ -41,6 +41,10 @@ class User(Base):
     # 2FA / OTP Enhancement fields
     otp_hash = Column(String(255), nullable=True)
     otp_expires_at = Column(DateTime(timezone=True), nullable=True)
+    # INTEGRATION (Phase 6-pre, changes.md 6.15): what the pending code may be
+    # redeemed for - 'login' (issued after a correct password) or 'register'
+    # (issued by registration). NULL = no redeemable challenge.
+    otp_purpose = Column(String(16), nullable=True)
     is_email_verified = Column(Boolean, default=False, nullable=False)
 
     # Relationships
@@ -49,6 +53,8 @@ class User(Base):
     __table_args__ = (
         CheckConstraint("role IN ('User', 'Admin')", name="chk_user_role"),
         CheckConstraint("account_status IN ('active', 'disabled', 'removed')", name="chk_user_status"),
+        CheckConstraint("otp_purpose IS NULL OR otp_purpose IN ('login', 'register')",
+                        name="chk_user_otp_purpose"),
         # INTEGRATION (Phase 2): case-insensitive uniqueness, enforced by the
         # database. Lookups filter on func.lower(User.email), so this index is
         # also the one they use.

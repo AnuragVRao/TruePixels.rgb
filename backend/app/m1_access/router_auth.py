@@ -9,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.m1_access.config import OTP_EXPIRE_MINUTES, REQUIRE_2FA, ENVIRONMENT
-from app.m1_access import throttle
+from app.m1_access import otp_challenge, throttle
 from app.m1_access.email_service import EmailService
 from app.m1_access.models import User
 from app.m1_access.schemas import (
@@ -62,6 +62,9 @@ def register_user(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
+    if REQUIRE_2FA:
+        otp_challenge.ensure_delivery_possible()
+
     # 2. Check email uniqueness in DB (App-level + wrapped DB constraint)
     existing_user = db.query(User).filter(func.lower(User.email) == body.email.lower()).first()
     if existing_user:
@@ -92,12 +95,7 @@ def register_user(
 
     # If 2FA enabled, generate and dispatch OTP
     if REQUIRE_2FA:
-        otp = generate_otp()
-        new_user.otp_hash = create_otp_hash(otp)
-        new_user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
-        db.commit()
-        throttle.new_code_issued(new_user.user_id)
-        EmailService.send_otp_email(new_user.email, otp, new_user.full_name)
+        otp_challenge.issue(db, new_user, "register")  # changes.md 6.15
         return UserRegisterResponse(
             user_id=new_user.user_id,
             message="Account registered. Please verify your email with the OTP sent to your inbox.",
@@ -151,12 +149,7 @@ def login_user(
 
     # If 2FA is required, trigger OTP dispatch before issuing token
     if REQUIRE_2FA:
-        otp = generate_otp()
-        user.otp_hash = create_otp_hash(otp)
-        user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
-        db.commit()
-        throttle.new_code_issued(user.user_id)
-        EmailService.send_otp_email(user.email, otp, user.full_name)
+        otp_challenge.issue(db, user, "login")  # after the correct password only (changes.md 6.15)
         emit("authentication", f"2FA OTP dispatched for login: user_id={user.user_id}", severity="info", user_id=user.user_id)
         return UserLoginResponse(
             token="",
@@ -219,12 +212,7 @@ def login_admin(
         raise AuthForbiddenException("Access denied. Administrator privileges required.")
 
     if REQUIRE_2FA:
-        otp = generate_otp()
-        user.otp_hash = create_otp_hash(otp)
-        user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
-        db.commit()
-        throttle.new_code_issued(user.user_id)
-        EmailService.send_otp_email(user.email, otp, user.full_name)
+        otp_challenge.issue(db, user, "login")  # after the correct password only (changes.md 6.15)
         emit("authentication", f"2FA OTP dispatched for admin login: user_id={user.user_id}", severity="info", user_id=user.user_id)
         return UserLoginResponse(
             token="",
@@ -271,76 +259,82 @@ def get_me(
 
 
 # --- 2FA / OTP Verification Endpoints ---
+# INTEGRATION (changes.md 6.15): codes only exist inside a challenge that a
+# correct password ('login') or registration ('register') created. These two
+# endpoints can re-send and redeem such a challenge; they can never start one.
+
+
+def _otp_in_use() -> None:
+    if not REQUIRE_2FA:
+        raise AuthForbiddenException("Verification codes are not in use on this server.")
+
+
 @router.post(
     "/otp/send",
-    summary="Request a new OTP code to email",
+    summary="Re-send the code of a pending sign-in or registration challenge",
 )
 def send_otp(
     body: OTPRequest,
     db: Session = Depends(get_db),
 ):
+    _otp_in_use()
     clean_email = body.email.strip().lower()
-    # INTEGRATION (changes.md 6.13): ONE answer for every case - account or
-    # not, sent or throttled (60 s cooldown, 5 per hour, per address). It used
-    # to answer differently for unknown addresses, revealing which exist.
-    answer = {"message": "If the account exists, a verification code has been sent."}
+    # ONE answer for every case - account or not, challenge or not, sent or
+    # throttled (60 s cooldown, 5 per hour, per address; changes.md 6.13).
+    answer = {"message": "If a sign-in or registration is waiting for a code, a new code has been sent."}
     if not throttle.may_send(clean_email):
         return answer
     user = db.query(User).filter(func.lower(User.email) == clean_email).first()
-    if not user:
+    purpose = otp_challenge.pending_purpose(user)
+    if purpose is None:
         create_otp_hash(generate_otp())  # same hashing cost as a real send
         return answer
-
-    otp = generate_otp()
-    user.otp_hash = create_otp_hash(otp)
-    user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
-    db.commit()
-
-    throttle.new_code_issued(user.user_id)
-    EmailService.send_otp_email(user.email, otp, user.full_name)
-    emit("authentication", f"2FA OTP re-dispatched to {clean_email}: user_id={user.user_id}", severity="info", user_id=user.user_id)
+    otp_challenge.issue(db, user, purpose)  # same purpose; never a new kind of challenge
+    emit("authentication", f"2FA OTP re-sent ({purpose}) to {clean_email}: user_id={user.user_id}",
+         severity="info", user_id=user.user_id)
     return answer
 
 
 @router.post(
     "/otp/verify",
     response_model=OTPVerifyResponse,
-    summary="Verify OTP code for 2FA",
+    summary="Redeem the code of a pending sign-in or registration challenge",
 )
 def verify_otp(
     body: OTPVerifyRequest,
     db: Session = Depends(get_db),
 ):
+    _otp_in_use()
     clean_email = body.email.strip().lower()
     clean_otp = body.otp.strip()
+    invalid = "Invalid or expired verification code."
     user = db.query(User).filter(func.lower(User.email) == clean_email).first()
-    if not user or not user.otp_hash or not user.otp_expires_at:
-        emit("authentication", f"OTP verification failed: no active OTP for email {clean_email}", severity="warning")
-        raise AuthInvalidCredentialsException("Invalid or expired verification code.")
+    pending = otp_challenge.pending_purpose(user)
+    if pending is None:
+        if user is not None and user.otp_hash:
+            otp_challenge.clear(db, user)  # expired (or purpose-less legacy) challenge
+        emit("authentication", f"OTP verification failed: no pending challenge for {clean_email}", severity="warning")
+        raise AuthInvalidCredentialsException(invalid)
 
-    # SQLite returns naive datetime; ensure comparison works with UTC
-    expires_at = user.otp_expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    # The code must match AND be redeemed for the purpose it was issued for;
+    # a registration challenge only ever yields a User session.
+    right_purpose = pending == body.purpose and (pending != "register" or user.role == "User")
+    if not verify_otp_hash(clean_otp, user.otp_hash) or not right_purpose:
+        emit("authentication", f"OTP verification failed for user_id={user.user_id} "
+             f"({'purpose mismatch' if not right_purpose else 'code mismatch'})", severity="warning",
+             user_id=user.user_id)
+        if throttle.otp_wrong(user.user_id):  # the 5th wrong attempt kills the code (6.13)
+            otp_challenge.clear(db, user)
+        raise AuthInvalidCredentialsException(invalid)
 
-    if datetime.now(timezone.utc) > expires_at:
-        user.otp_hash = None
-        db.commit()
-        raise AuthInvalidCredentialsException("Verification code has expired. Please request a new one.")
+    if user.account_status != "active":
+        otp_challenge.clear(db, user)
+        raise AuthAccountDisabledException(f"Account is {user.account_status}.")
 
-    if not verify_otp_hash(clean_otp, user.otp_hash):
-        emit("authentication", f"OTP verification failed: code mismatch for user_id={user.user_id}", severity="warning", user_id=user.user_id)
-        # INTEGRATION (changes.md 6.13): the 5th wrong code kills the code.
-        if throttle.otp_wrong(user.user_id):
-            user.otp_hash = None
-            user.otp_expires_at = None
-            db.commit()
-        raise AuthInvalidCredentialsException("Invalid verification code. Please make sure you enter the latest code sent to your email.")
-
-    # OTP is valid
-    user.otp_hash = None
-    user.is_email_verified = True
-    db.commit()
+    # Valid: the challenge is consumed.
+    if pending == "register":
+        user.is_email_verified = True
+    otp_challenge.clear(db, user)
 
     token, issued_at, expires_at_token = create_session_token(user)
     emit("authentication", f"2FA OTP verified successfully: user_id={user.user_id}", severity="info", user_id=user.user_id)

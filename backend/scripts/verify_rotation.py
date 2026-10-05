@@ -23,25 +23,28 @@ REPO = BACKEND.parent
 def _connects(url: str) -> bool:
     from sqlalchemy import create_engine
 
-    engine = create_engine(url, connect_args={"connect_timeout": 5})
-    try:
+    engine = None
+    try:  # create_engine itself can raise with the URL in its message
+        engine = create_engine(url, connect_args={"connect_timeout": 5})
         engine.connect().close()
         return True
     except Exception:  # noqa: BLE001 - the message may contain the URL; never shown
         return False
     finally:
-        engine.dispose()
+        if engine is not None:
+            engine.dispose()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--old", default=str(BACKEND / ".env.before-rotation"))
+    parser.add_argument("--new", default=str(BACKEND / ".env"))
     parser.add_argument("--api", default="http://127.0.0.1:8000")
     args = parser.parse_args()
 
     from dotenv import dotenv_values
 
-    new = dotenv_values(BACKEND / ".env")
+    new = dotenv_values(args.new)
     old = dotenv_values(args.old)
     checks: dict[str, bool] = {}
 
@@ -58,7 +61,7 @@ def main() -> int:
 
     # Container environment: only POSTGRES_*, never the JWT key or DATABASE_URL.
     try:
-        cid = subprocess.run(["docker", "compose", "--env-file", str(BACKEND / ".env"), "ps", "-q", "db"],
+        cid = subprocess.run(["docker", "compose", "--env-file", args.new, "ps", "-q", "db"],
                              cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
         env = subprocess.run(["docker", "inspect", cid, "--format", "{{range .Config.Env}}{{println .}}{{end}}"],
                              capture_output=True, text=True, check=True).stdout.splitlines()
@@ -92,4 +95,10 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.path.insert(0, str(BACKEND))
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except BaseException as exc:  # noqa: BLE001 - never a traceback: it could quote a value
+        print(f"verify_rotation: could not run ({type(exc).__name__}); no value shown")
+        raise SystemExit(2)

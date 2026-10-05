@@ -181,9 +181,22 @@ def test_admin_cannot_alter_own_status(client, admin_auth_headers, sample_admin)
     assert res.json()["error"]["code"] == "ADM_ACTION_NOT_PERMITTED"
 
 
-def test_otp_send_and_verify_flow(client, sample_user, db_session):
-    """2FA Enhancement: Send OTP and verify code."""
-    # 1. Request OTP
+def test_otp_send_and_verify_flow(client, sample_user, db_session, monkeypatch):
+    """2FA Enhancement: Send OTP and verify code.
+
+    INTEGRATION (changes.md 6.15): a code now exists only inside a challenge
+    that a correct password created, and only with 2FA on - /otp/send alone
+    (the email-only path this test used) no longer starts one. So: 2FA on,
+    password sign-in first, then the test's original send/verify steps.
+    """
+    from app.m1_access import router_auth
+
+    monkeypatch.setattr(router_auth, "REQUIRE_2FA", True, raising=False)
+    login_res = client.post("/api/v1/auth/login",
+                            json={"email": sample_user.email, "password": "SecretPassword123"})
+    assert login_res.status_code == 200 and login_res.json()["requires_otp"] is True
+
+    # 1. Request OTP (re-sends the pending sign-in challenge)
     send_res = client.post("/api/v1/auth/otp/send", json={"email": sample_user.email})
     assert send_res.status_code == 200
 

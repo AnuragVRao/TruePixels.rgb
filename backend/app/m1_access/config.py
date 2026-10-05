@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+
+def is_production() -> bool:
+    """Read at call time (tests vary it). Anything but 'development' is production."""
+    return os.getenv("ENVIRONMENT", "development").strip().lower() != "development"
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Security & JWT

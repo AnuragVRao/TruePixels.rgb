@@ -64,7 +64,7 @@ def throttle_rows() -> list[str]:
     db = SessionLocal()
     try:
         return [r.event_detail for r in db.query(LogEntry)
-                if "throttled" in r.event_detail or "invalidated" in r.event_detail]
+                if "throttle" in r.event_detail or "invalidated" in r.event_detail]
     finally:
         db.close()
 
@@ -140,18 +140,27 @@ def test_throttle_events_reach_d6_at_most_once_per_minute_per_key(clock):
 
 # ---- OTP codes --------------------------------------------------------------
 
+def verify(email, code, purpose):
+    return client.post("/api/v1/auth/otp/verify", json={"email": email, "otp": code, "purpose": purpose})
+
+
 def test_fifth_wrong_code_invalidates_the_code(clock, codes):
-    email = register()
+    email = register()                       # registration challenge
     good = codes[-1]
     wrong = "000000" if good != "000000" else "111111"
     for attempt in range(throttle.OTP_MAX_WRONG):
-        r = client.post("/api/v1/auth/otp/verify", json={"email": email, "otp": wrong})
+        r = verify(email, wrong, "register")
         assert r.status_code == 401, (attempt, r.text)
-    dead = client.post("/api/v1/auth/otp/verify", json={"email": email, "otp": good})
+    dead = verify(email, good, "register")
     assert dead.status_code == 401, "the right code must not work after 5 wrong ones"
     assert any("invalidated after" in d for d in throttle_rows())
+    # /otp/send cannot revive it: no pending challenge -> nothing is sent.
+    sent = len(codes)
     client.post("/api/v1/auth/otp/send", json={"email": email})
-    fresh = client.post("/api/v1/auth/otp/verify", json={"email": email, "otp": codes[-1]})
+    assert len(codes) == sent
+    # A new challenge needs the password again.
+    assert login(email, PASSWORD).json()["requires_otp"] is True
+    fresh = verify(email, codes[-1], "login")
     assert fresh.status_code == 200 and fresh.json()["token"]
 
 
@@ -160,14 +169,14 @@ def test_four_wrong_codes_then_the_right_one_still_works(clock, codes):
     good = codes[-1]
     wrong = "000000" if good != "000000" else "111111"
     for _ in range(throttle.OTP_MAX_WRONG - 1):
-        client.post("/api/v1/auth/otp/verify", json={"email": email, "otp": wrong})
-    assert client.post("/api/v1/auth/otp/verify", json={"email": email, "otp": good}).status_code == 200
+        verify(email, wrong, "register")
+    assert verify(email, good, "register").status_code == 200
 
 
 # ---- /otp/send ---------------------------------------------------------------
 
 def test_send_cooldown_and_hourly_cap_with_identical_answers(clock, codes):
-    real, ghost = register(), f"ghost-{next(_n)}@example.com"
+    real, ghost = register(), f"ghost-{next(_n)}@example.com"  # real has a pending registration challenge
     sent_before = len(codes)
     bodies = set()
     for email in (real, ghost):
@@ -196,4 +205,61 @@ def test_memory_is_bounded(clock, monkeypatch):
     monkeypatch.setattr(throttle, "MAX_KEYS", 50)
     for i in range(500):
         throttle.login_failed(throttle.login_key(f"spray{i}@example.com", "203.0.113.1"))
-    assert len(throttle._login) <= 50
+    assert len(throttle._pairs) <= 50 and len(throttle._accounts) <= 50
+
+
+# ---- per-account counter (independent of the client address) ---------------------
+
+def test_account_counter_catches_address_rotation_without_locking_out(clock):
+    email = register()
+    for i in range(throttle.ACCOUNT_FREE_FAILURES):  # one failure per address: no pair counter trips
+        r = TestClient(app, client=(f"198.51.100.{i + 1}", 40000)).post(
+            "/api/v1/auth/login", json={"email": email, "password": "wrong-password-1"})
+        assert r.status_code == 401
+    fresh_ip = TestClient(app, client=("192.0.2.200", 40000))
+    assert fresh_ip.post("/api/v1/auth/login", json={"email": email, "password": "wrong-password-1"}).status_code == 401
+    blocked = fresh_ip.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    assert blocked.status_code == 429 and blocked.headers["Retry-After"] == "1"  # delay, not lockout
+    clock.advance(1)
+    ok = fresh_ip.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    assert ok.status_code == 200  # the owner gets in after the wait; success clears both counters
+    assert not throttle._accounts.get(email.lower())
+
+
+# ---- eviction: flooding other keys cannot reset an existing counter --------------
+
+def test_flooding_other_keys_cannot_reset_an_active_counter(clock, monkeypatch):
+    monkeypatch.setattr(throttle, "MAX_KEYS", 50)
+    victim = throttle.login_key("victim@example.com", "203.0.113.5")
+    for _ in range(throttle.PAIR_FREE_FAILURES + 3):  # victim's pair counter now enforces a delay
+        throttle.login_failed(victim)
+    before = list(throttle._pairs["victim@example.com|203.0.113.5"])
+    for i in range(throttle.MAX_KEYS * 4):  # 200 fresh keys through a 50-key table
+        throttle.login_failed(throttle.login_key(f"flood{i}@example.com", f"10.0.{i // 250}.{i % 250}"))
+    assert throttle._pairs["victim@example.com|203.0.113.5"] == before
+    with pytest.raises(throttle.RateLimited):
+        throttle.check_login(victim)
+
+
+def test_flooding_evicts_lighter_entries_before_a_heavier_one(clock, monkeypatch):
+    """Below the delay threshold a counter is not protected outright, but fresh
+    flood keys (1 failure) always go before it (2 failures)."""
+    monkeypatch.setattr(throttle, "MAX_KEYS", 50)
+    victim = throttle.login_key("slow@example.com", "203.0.113.6")
+    throttle.login_failed(victim)
+    throttle.login_failed(victim)
+    for i in range(throttle.MAX_KEYS * 4):
+        throttle.login_failed(throttle.login_key(f"f{i}@example.com", "10.1.1.1"))
+    assert throttle._pairs["slow@example.com|203.0.113.6"][0] == 2
+
+
+def test_a_table_full_of_active_delays_does_not_track_new_keys(clock, monkeypatch):
+    monkeypatch.setattr(throttle, "MAX_KEYS", 5)
+    for i in range(5):
+        key = throttle.login_key(f"busy{i}@example.com", "10.2.2.2")
+        for _ in range(throttle.PAIR_FREE_FAILURES + 1):
+            throttle.login_failed(key)
+    held = dict(throttle._pairs)
+    throttle.login_failed(throttle.login_key("newcomer@example.com", "10.3.3.3"))
+    assert dict(throttle._pairs) == held  # nobody evicted; the newcomer is simply not tracked
+    assert any("table is full" in d for d in throttle_rows())
