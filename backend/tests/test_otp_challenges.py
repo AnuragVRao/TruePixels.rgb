@@ -205,3 +205,72 @@ def test_production_never_falls_back_to_console_when_smtp_fails(monkeypatch, cap
     assert r.status_code == 503 and r.json()["error"]["code"] == "OTP_DELIVERY_UNAVAILABLE"
     assert row(email).otp_hash is None and row(email).otp_purpose is None
     assert "code=" not in capsys.readouterr().out
+
+
+# ---- challenge hashes do not outlive the challenge ---------------------------------
+
+def test_consumed_and_expired_challenges_leave_no_hash_behind(sent):
+    from datetime import datetime, timedelta, timezone
+
+    from app.m1_access import otp_challenge
+
+    used, stale, live = make_user(), make_user(), make_user()
+    for email in (used, stale, live):
+        login(email)
+    codes = {email: code for email, code in sent}
+    assert verify(used, codes[used]).status_code == 200            # consumed -> cleared at once
+    db = SessionLocal()
+    try:
+        db.query(User).filter(User.email == stale).update(
+            {User.otp_expires_at: datetime.now(timezone.utc) - timedelta(seconds=1)})
+        db.commit()
+        cleared = otp_challenge.purge_expired(db)                  # what the lifespan runs every minute
+    finally:
+        db.close()
+    assert cleared == 1
+    for email in (used, stale):
+        r = row(email)
+        assert (r.otp_hash, r.otp_expires_at, r.otp_purpose) == (None, None, None), email
+    assert row(live).otp_hash is not None and row(live).otp_purpose == "login"  # unexpired: untouched
+
+
+def test_wrong_attempt_invalidation_clears_the_row(sent):
+    email = make_user()
+    login(email)
+    code = sent[-1][1]
+    wrong = "000000" if code != "000000" else "111111"
+    for _ in range(5):
+        verify(email, wrong)
+    r = row(email)
+    assert (r.otp_hash, r.otp_expires_at, r.otp_purpose) == (None, None, None)
+
+
+def test_the_app_lifespan_runs_the_purge(sent):
+    from datetime import datetime, timedelta, timezone
+
+    email = make_user()
+    login(email)
+    db = SessionLocal()
+    try:
+        db.query(User).filter(User.email == email).update(
+            {User.otp_expires_at: datetime.now(timezone.utc) - timedelta(minutes=1)})
+        db.commit()
+    finally:
+        db.close()
+    with TestClient(app):  # startup purges once, then every PURGE_INTERVAL_S
+        pass
+    assert row(email).otp_hash is None
+
+
+def test_unverified_account_needs_a_mailbox_code_to_get_any_session(sent):
+    """Registration code never redeemed: the password alone gives NO session;
+    sign-in sends a login code to the same mailbox, and redeeming it both
+    signs in and marks the address verified."""
+    email = f"unverified-{next(_n)}@example.com"
+    client.post("/api/v1/auth/register", json={"full_name": "Unv", "email": email, "password": PASSWORD})
+    assert row(email).is_email_verified is False
+    r = login(email)
+    assert r.status_code == 200 and r.json()["requires_otp"] is True and not r.json()["token"]
+    assert client.get("/api/v1/history").status_code == 401  # nothing usable yet
+    ok = verify(email, sent[-1][1], "login")
+    assert ok.status_code == 200 and row(email).is_email_verified is True

@@ -84,6 +84,27 @@ def pending_purpose(user: User | None) -> str | None:
     return user.otp_purpose if datetime.now(timezone.utc) <= expires else None
 
 
+PURGE_INTERVAL_S = 60
+
+
+def purge_expired(db: Session) -> int:
+    """Clear every EXPIRED challenge (hash, expiry, purpose) in one UPDATE.
+
+    Consumed challenges and those killed by wrong attempts are cleared on the
+    spot (``clear``); this removes the ones nobody came back for, so no stale
+    code hash outlives its expiry by more than PURGE_INTERVAL_S. Run at
+    startup and periodically from the app lifespan. Returns rows cleared.
+    """
+    from sqlalchemy import update
+
+    result = db.execute(update(User)
+                        .where(User.otp_expires_at.isnot(None),
+                               User.otp_expires_at < datetime.now(timezone.utc))
+                        .values(otp_hash=None, otp_expires_at=None, otp_purpose=None))
+    db.commit()
+    return result.rowcount or 0
+
+
 def clear(db: Session, user: User) -> None:
     user.otp_hash = None
     user.otp_expires_at = None

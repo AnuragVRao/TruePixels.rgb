@@ -263,3 +263,37 @@ def test_a_table_full_of_active_delays_does_not_track_new_keys(clock, monkeypatc
     throttle.login_failed(throttle.login_key("newcomer@example.com", "10.3.3.3"))
     assert dict(throttle._pairs) == held  # nobody evicted; the newcomer is simply not tracked
     assert any("table is full" in d for d in throttle_rows())
+
+
+def test_untracked_keys_fall_back_to_per_ip_then_global_limits(clock, monkeypatch):
+    """Table saturated with enforcing counters: newcomers are NOT unthrottled."""
+    monkeypatch.setattr(throttle, "MAX_KEYS", 5)
+    for i in range(5):  # fill every table with active delays
+        key = throttle.login_key(f"busy{i}@example.com", f"10.9.9.{i}")
+        for _ in range(throttle.ACCOUNT_FREE_FAILURES + 1):
+            throttle.login_failed(key)
+    for i in range(5):  # fallback-IP table full of active delays too
+        for _ in range(throttle.FALLBACK_IP_FREE_FAILURES + 1):
+            throttle.login_failed(throttle.login_key(f"x{i}@example.com", f"10.8.8.{i}"))
+    # A newcomer whose own keys cannot be tracked is limited by the global window.
+    newcomer = throttle.login_key("new@example.com", "10.7.7.7")
+    for _ in range(throttle.GLOBAL_UNTRACKED_PER_MIN):
+        throttle.login_failed(newcomer)
+    with pytest.raises(throttle.RateLimited):
+        throttle.check_login(newcomer)
+    clock.advance(61)  # the window slides; nothing is locked for good
+    throttle.check_login(newcomer)
+
+
+def test_untracked_key_is_limited_per_ip_while_the_fallback_table_has_room(clock, monkeypatch):
+    monkeypatch.setattr(throttle, "MAX_KEYS", 5)
+    for i in range(5):
+        key = throttle.login_key(f"busy{i}@example.com", f"10.9.9.{i}")
+        for _ in range(throttle.ACCOUNT_FREE_FAILURES + 1):
+            throttle.login_failed(key)
+    newcomer = throttle.login_key("solo@example.com", "10.6.6.6")
+    for _ in range(throttle.FALLBACK_IP_FREE_FAILURES + 1):
+        throttle.login_failed(newcomer)
+    assert "10.6.6.6" in throttle._fallback_ips and "solo@example.com|10.6.6.6" not in throttle._pairs
+    with pytest.raises(throttle.RateLimited):
+        throttle.check_login(newcomer)

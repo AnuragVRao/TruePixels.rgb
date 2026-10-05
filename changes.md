@@ -1190,3 +1190,24 @@ changed:
     (sentinel test);
   - tag `pre-m1-cleanup` marks `b0a9597`, the commit before the M1
     deletion.
+
+### 6.17 OTP and throttle follow-ups (M1)
+
+- **Expired challenges no longer keep their hash in D1.**
+  `otp_challenge.purge_expired()` clears hash, expiry and purpose in one
+  `UPDATE`. `main.py` runs it at startup and every 60 s in a background task
+  that is cancelled on shutdown. Redeemed challenges and those killed by
+  wrong attempts were already cleared on the spot. Tested, including that the
+  lifespan runs the purge.
+- **Any redeemed code marks the address verified.** With 2FA on, an account
+  whose registration code was never redeemed still gets no session without
+  a mailbox code. The sign-in code now also sets `is_email_verified`; before
+  this, the flag stayed False for such accounts. With 2FA off (the default),
+  verification is optional and never checked; this is documented.
+- **Throttle fallback.** A sign-in attempt that cannot get its own counter
+  (every slot enforcing) falls back to a per-IP counter, then to a global
+  window of 30 untracked failures a minute, instead of no throttling.
+  Capacity is 10,000 keys per table. Tested.
+- **Documented in `docs/auth-hardening.md`:** a crash loop resets the
+  in-memory throttle state. The registration-squatting residual risk is
+  reported, not fixed.

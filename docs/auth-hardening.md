@@ -49,6 +49,33 @@ password.
   *before* the account is created, and an SMTP failure never falls back to
   printing the code. Console delivery is development only.
 
+- **No stale hashes.** A challenge's hash, expiry and purpose are cleared
+  when it is redeemed, when it is killed by wrong attempts, and when it
+  **expires**. The app lifespan purges expired challenges at startup and
+  every 60 s, so no code hash outlives its expiry by more than a minute.
+
+## Accounts whose registration code was never redeemed
+
+- **2FA on (`REQUIRE_2FA=True`).**
+  - The account has **no session** until a code is redeemed.
+  - Signing in with the password does not give a session either: it sends
+    a *login* code to the same mailbox.
+  - Redeeming either code proves control of the mailbox, so it also sets
+    `is_email_verified`.
+  - In effect, every session already implies a verified address, so login
+    is **not** gated separately on the registration code.
+- **2FA off (`REQUIRE_2FA=False`, the default in `m1_access/config.py`).**
+  - Email ownership is **never** checked.
+  - Accounts are created with `is_email_verified=True`, meaning
+    "verification not required in this mode", not "verified".
+  - Verification is **optional** and off in this configuration.
+- **Residual risk (reported, not fixed).** With 2FA on, someone can
+  register another person's address and never redeem the code. The real
+  owner then gets "email already taken" and has no way to recover the
+  address: there is no password reset, and admins cannot reassign it.
+  Mitigations for later: let a new registration take over an *unverified*
+  account after a grace period, or add an admin action.
+
 ## Throttling (in memory)
 
 | Limit | Key | Rule |
@@ -77,7 +104,15 @@ password.
 
   So flooding with fresh keys cannot reset a counter that matters. This is
   tested, and a plain-LRU version fails those tests.
-- **State resets on restart.** All throttle state lives **in this process's
+- **Capacity and fallback.** Each table holds 10,000 keys; all tables
+  together take a few MB. If an attempt cannot get its own counter (every
+  slot is enforcing a delay), it is **not** left unthrottled:
+  - it falls back to a per-IP counter (3 free failures, then doubling);
+  - if that table is saturated too, it falls back to one global window of
+    30 untracked failures a minute.
+
+  OTP sends that cannot be tracked are refused, not sent.
+- **State resets on restart, and on a crash loop.** All throttle state lives **in this process's
   memory**: a restart forgets every counter. With several workers, each
   counts separately. The app runs one worker on purpose (the GPU). This
   slows online guessing; it is not a distributed rate limiter.

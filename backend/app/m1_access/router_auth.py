@@ -331,9 +331,10 @@ def verify_otp(
         otp_challenge.clear(db, user)
         raise AuthAccountDisabledException(f"Account is {user.account_status}.")
 
-    # Valid: the challenge is consumed.
-    if pending == "register":
-        user.is_email_verified = True
+    # Valid: the challenge is consumed. Redeeming ANY code proves control of
+    # the mailbox, so a sign-in code also completes an unfinished
+    # registration verification (changes.md 6.17).
+    user.is_email_verified = True
     otp_challenge.clear(db, user)
 
     token, issued_at, expires_at_token = create_session_token(user)

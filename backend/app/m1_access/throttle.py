@@ -34,9 +34,23 @@ at a full table:
 2. otherwise the entry with the LOWEST weight goes (fewest failures / sends;
    the least recently used first among equals) - but an entry that is
    currently ENFORCING a delay or a cap is never evicted;
-3. if every entry is enforcing, the new key is not tracked (logged once a
-   minute). Flooding with fresh keys therefore cannot reset a counter that
-   matters: fresh keys weigh 1, and active counters are protected.
+3. if every entry is enforcing, the new key cannot get its own counter
+   (logged once a minute). Flooding with fresh keys therefore cannot reset
+   a counter that matters: fresh keys weigh 1, and active counters are
+   protected.
+
+Fallback for sign-in attempts that could not be tracked (step 3): they are
+counted per client IP (``FALLBACK_IP_FREE_FAILURES`` free, then the same
+doubling), and - if even that table is saturated - in one GLOBAL window: at
+most ``GLOBAL_UNTRACKED_PER_MIN`` untracked failures a minute, after which
+every untracked attempt waits for the window. Tracked keys are unaffected by
+the global window. OTP sends that cannot be tracked are refused (fail closed).
+
+Capacity: ``MAX_KEYS`` = 10,000 keys per table (address pairs, accounts,
+fallback IPs, sends, OTP counters, log suppression) - a few MB in total.
+
+In-memory state is lost on every restart - including a crash loop, which
+therefore also resets every counter.
 
 Throttle events reach D6 at most once per ``LOG_INTERVAL_S`` per key.
 ``clock`` is injectable (tests replace it; nothing here sleeps).
@@ -111,6 +125,10 @@ def _counter_table() -> _Table:
 
 _pairs = _counter_table()     # "email|ip" -> counter
 _accounts = _counter_table()  # "email"    -> counter
+_fallback_ips = _counter_table()  # "ip" -> counter, only for attempts that could not be tracked
+_global_untracked: deque = deque()  # times of untracked failures nothing else could hold
+FALLBACK_IP_FREE_FAILURES = 3
+GLOBAL_UNTRACKED_PER_MIN = 30
 _otp_wrong = _Table(expired=lambda v, now: False, weight=lambda v: v, enforcing=lambda v, now: False)
 _sends = _Table(expired=lambda v, now: not v or now - v[-1] >= 3600, weight=lambda v: len(v),
                 enforcing=lambda v, now: bool(v) and (now - v[-1] < SEND_COOLDOWN_S or len(v) >= SEND_HOURLY_CAP))
@@ -121,8 +139,9 @@ _logged = _Table(expired=lambda v, now: v is None or now - v >= LOG_INTERVAL_S, 
 def reset() -> None:
     """Tests only."""
     with _lock:
-        for table in (_pairs, _accounts, _otp_wrong, _sends, _logged):
+        for table in (_pairs, _accounts, _fallback_ips, _otp_wrong, _sends, _logged):
             table.clear()
+        _global_untracked.clear()
 
 
 def _log_once(key: str, detail: str, user_id: int | None = None) -> None:
@@ -158,7 +177,17 @@ def check_login(key: tuple[str, str]) -> None:
     with _lock:
         pair_wait = _wait(_pairs, f"{email}|{ip}", now)
         account_wait = _wait(_accounts, email, now)
-    wait = max(pair_wait, account_wait)
+        fallback_wait = _wait(_fallback_ips, ip, now)
+        global_wait = 0.0
+        if f"{email}|{ip}" not in _pairs:  # untracked attempts only
+            while _global_untracked and now - _global_untracked[0] >= 60:
+                _global_untracked.popleft()
+            if len(_global_untracked) >= GLOBAL_UNTRACKED_PER_MIN:
+                global_wait = 60 - (now - _global_untracked[0])
+    wait = max(pair_wait, account_wait, fallback_wait, global_wait)
+    if wait > 0 and max(fallback_wait, global_wait) >= max(pair_wait, account_wait):
+        _log_once("login:fallback", "Sign-in throttled by the untracked-key fallback")
+        raise RateLimited(wait)
     if wait > 0:
         which = "account" if account_wait >= pair_wait else "address"
         _log_once(f"login:{which}:{email}|{ip if which == 'address' else '*'}",
@@ -184,8 +213,12 @@ def login_failed(key: tuple[str, str]) -> None:
     with _lock:
         tracked = _fail(_pairs, f"{email}|{ip}", PAIR_FREE_FAILURES, now)
         tracked = _fail(_accounts, email, ACCOUNT_FREE_FAILURES, now) and tracked
+        if not tracked:  # coarse fallback instead of no throttling
+            if not _fail(_fallback_ips, ip, FALLBACK_IP_FREE_FAILURES, now):
+                _global_untracked.append(now)
     if not tracked:
-        _log_once("table-full", "Sign-in throttle table is full of active delays; a new key was not tracked")
+        _log_once("table-full", "Sign-in throttle table is full of active delays; a new key fell back "
+                  "to the per-IP / global limit")
 
 
 def login_succeeded(key: tuple[str, str]) -> None:
@@ -193,6 +226,7 @@ def login_succeeded(key: tuple[str, str]) -> None:
     with _lock:
         _pairs.pop(f"{email}|{ip}", None)
         _accounts.pop(email, None)
+        _fallback_ips.pop(ip, None)
 
 
 # ---- OTP codes ------------------------------------------------------------

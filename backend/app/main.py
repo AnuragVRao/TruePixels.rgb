@@ -71,7 +71,31 @@ async def lifespan(_: FastAPI):
         warmup.warm_up()
     else:
         warmup.mark_disabled()
-    yield
+
+    # Expired OTP challenges: cleared now and every minute (changes.md 6.17),
+    # so no code hash stays in D1 after it can no longer be used.
+    import asyncio
+
+    from app.m1_access import otp_challenge
+
+    def purge_once() -> None:
+        try:
+            with SessionLocal() as purge_session:
+                otp_challenge.purge_expired(purge_session)
+        except Exception:  # noqa: BLE001 - housekeeping must never stop the server
+            logging.getLogger("uvicorn.error").exception("OTP challenge purge failed")
+
+    async def purge_forever() -> None:
+        while True:
+            await asyncio.sleep(otp_challenge.PURGE_INTERVAL_S)
+            await asyncio.to_thread(purge_once)
+
+    purge_once()
+    purger = asyncio.create_task(purge_forever())
+    try:
+        yield
+    finally:
+        purger.cancel()
 
 
 app = FastAPI(
