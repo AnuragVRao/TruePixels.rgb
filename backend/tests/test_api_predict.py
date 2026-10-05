@@ -191,10 +191,13 @@ def test_confidence_follows_the_inversion_rule_over_http(sample_png, auth):
     """AC-05, asserted from outside the module - the same check M3 runs."""
     body = predict(upload(sample_png, auth), auth).json()
 
-    if body["predicted_class"] == "AI Generated":
-        assert body["confidence_score"] == pytest.approx(body["fusion_score"])
-    else:
-        assert body["confidence_score"] == pytest.approx(1.0 - body["fusion_score"])
+    # Confidence in the PREDICTED class, measured from the active threshold
+    # (changes.md 6.21); never below one half.
+    from app.m2_analysis.fusion import confidence_in_prediction
+
+    expected = confidence_in_prediction(body["fusion_score"], config.FUSION_TAU, body["predicted_class"])
+    assert body["confidence_score"] == pytest.approx(expected)
+    assert body["confidence_score"] >= 0.5
 
 
 def test_the_activation_bundle_never_crosses_the_http_boundary(sample_png, auth):

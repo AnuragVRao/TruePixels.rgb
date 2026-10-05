@@ -34,7 +34,8 @@ class PredictionResponse(BaseModel):
     confidence_score: float = Field(
         description=(
             "Confidence IN predicted_class, not P(AI Generated). "
-            "fusion_score 0.08 means class 'Real' with confidence 0.92."
+            "measured from the decision threshold tau (0.5 at tau, 1.0 at the far end, never "
+            "below 0.5); at tau 0.7558, fusion_score 0.08 means 'Real' with confidence 0.95."
         )
     )
     semantic_score: float = Field(

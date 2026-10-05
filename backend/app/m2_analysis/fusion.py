@@ -65,11 +65,11 @@ def combine(
     Returns:
         (fusion_score, predicted_class, confidence_score)
 
-    THE INVERSION (PRD2 section 8.3, Contract C2 section 5.2). Three of the
+THE INVERSION (PRD2 section 8.3, Contract C2 section 5.2). Three of the
     four score fields - semantic, frequency, fusion - are P("AI Generated").
     ``confidence_score`` is the odd one out: it is confidence in whichever
-    class was actually predicted. A fusion_score of 0.08 yields "Real" with
-    confidence 0.92.
+    class was actually predicted - see ``confidence_in_prediction``. At
+    tau = 0.5 a fusion_score of 0.08 yields "Real" with confidence 0.92.
 
     PRD2 FR-04 names this the single most likely integration bug in the whole
     project, because it fails quietly and plausibly: a confidently-real image
@@ -94,8 +94,33 @@ def combine(
     predicted_class: PredictedClass = (
         "AI Generated" if fusion_score >= model.tau else "Real"
     )
-    confidence_score = (
-        fusion_score if predicted_class == "AI Generated" else 1.0 - fusion_score
-    )
+    confidence_score = confidence_in_prediction(fusion_score, model.tau, predicted_class)
 
     return fusion_score, predicted_class, confidence_score
+
+
+def confidence_in_prediction(fusion_score: float, tau: float, predicted_class: str) -> float:
+    """Confidence in the PREDICTED class, measured from the decision threshold.
+
+    0.5 exactly at tau, rising linearly to 1.0 at the far end of the predicted
+    side (2026-10-05, changes.md 6.21):
+
+        AI Generated:  0.5 + 0.5 * (fusion - tau) / (1 - tau)
+        Real:          0.5 + 0.5 * (tau - fusion) / tau
+
+    Why not PRD2 FR-04's ``fusion`` / ``1 - fusion``: that rule assumes
+    tau = 0.5. With the operating point tau = 0.7558 (chosen on a validation
+    split to hold false positives down), every fused score in [0.5, tau) is
+    called "Real" while ``1 - fusion`` is below 0.5 - a verdict displayed as
+    e.g. "Real, 47.7 %", which contradicts itself. This formula can never
+    fall below 0.5, is monotonic, and at tau = 0.5 reduces EXACTLY to the old
+    rule (so FR-04's "0.08 -> Real at 0.92" still holds there).
+
+    It is a margin from the threshold, not a calibrated probability: the
+    detectors' outputs are uncalibrated (MM2.5 is missed).
+    """
+    if predicted_class == "AI Generated":
+        margin = (fusion_score - tau) / (1.0 - tau) if tau < 1.0 else 1.0
+    else:
+        margin = (tau - fusion_score) / tau if tau > 0.0 else 1.0
+    return min(1.0, max(0.5, 0.5 + 0.5 * margin))

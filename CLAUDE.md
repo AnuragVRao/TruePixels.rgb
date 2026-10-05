@@ -485,14 +485,25 @@ Four things it established:
 
 ```python
 predicted_class  = "AI Generated" if fusion_score >= tau else "Real"
-confidence_score = fusion_score if predicted_class == "AI Generated" else 1.0 - fusion_score
+# confidence in the PREDICTED class, measured from the threshold (changes.md 6.21)
+if predicted_class == "AI Generated":
+    confidence_score = 0.5 + 0.5 * (fusion_score - tau) / (1 - tau)
+else:
+    confidence_score = 0.5 + 0.5 * (tau - fusion_score) / tau
 ```
 
 `semantic_score`, `frequency_score` and `fusion_score` are all
 **P(AI Generated)**. `confidence_score` is the odd one out — it is confidence
 in whichever class was *actually predicted*.
 
-A `fusion_score` of 0.08 means **"Real" with 0.92 confidence**.
+Confidence is 0.5 exactly at the threshold and 1.0 at the far end, so a
+verdict can never show less than 50 %. At tau = 0.5 this is exactly PRD2
+FR-04's `fusion` / `1 - fusion` (0.08 means **"Real" at 0.92**). At the
+operating point tau = 0.7558, FR-04's rule would show a fused score of 0.52 as
+"Real, 48 %", so it was replaced on 2026-10-05; 0.52 now reads "Real, 65 %"
+and 0.08 reads "Real, 95 %". It is a margin from the threshold, **not** a
+calibrated probability (MM2.5 is missed). Stored predictions were recomputed
+by migration 0004.
 
 PRD2 FR-04 calls this the most likely integration bug in the project because
 it fails quietly: a confidently-real image rendered at 8% looks like a weak

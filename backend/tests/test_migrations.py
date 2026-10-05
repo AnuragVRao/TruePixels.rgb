@@ -229,3 +229,64 @@ def test_scratch_reset_refuses_the_development_databases():
                 "postgresql+psycopg://u:p@127.0.0.1:5433/truepixels_regression",
                 "sqlite:///C:/tmp/scratch.db"):
         db.refuse_unless_scratch(make_url(url))  # does not raise
+
+
+def test_0004_recomputes_confidence_from_the_threshold_and_downgrades_exactly():
+    """Stored confidences follow the new rule after 0004; 0003 restores the old one."""
+    from alembic import command
+    from alembic.config import Config
+
+    from app.m1_access.models import Image
+    from app.m2_analysis.models import Prediction
+
+    s = db.SessionLocal()
+    try:
+        user = User(full_name="Mig", email="mig-0004@example.com", password_hash="x", role="User",
+                    account_status="active", is_email_verified=True)
+        s.add(user)
+        s.flush()
+        image = Image(user_id=user.user_id, file_reference="uploads/m.png", content_sha256="2" * 64,
+                      file_format="PNG", file_size=1, width=64, height=64, validation_status="valid")
+        model = ModelRegistry(model_name="mig fusion", model_version="t0004", model_type="fusion-configuration",
+                              artifact_ref="test", is_active=False,
+                              hyperparameters={"strategy": "weighted_average", "weight_semantic": 0.25,
+                                               "weight_frequency": 0.75, "tau": 0.7558, "temperature": 1.0})
+        s.add_all([image, model])
+        s.flush()
+        cases = [(0.5233, "Real"), (0.10, "Real"), (0.80, "AI Generated"), (0.99, "AI Generated")]
+        ids = []
+        for fusion, cls in cases:
+            old = fusion if cls == "AI Generated" else 1.0 - fusion
+            p = Prediction(image_id=image.image_id, model_id=model.model_id, predicted_class=cls,
+                           confidence_score=old, semantic_score=fusion, frequency_score=fusion,
+                           fusion_score=fusion, latency_ms=1)
+            s.add(p)
+            s.flush()
+            ids.append(p.prediction_id)
+        s.commit()
+    finally:
+        s.close()
+
+    cfg = Config(str(db.BACKEND_DIR / "alembic.ini"))
+    cfg.attributes["configure_logger"] = False
+
+    def confidences():
+        with db.engine.connect() as c:
+            rows = c.execute(text("SELECT prediction_id, confidence_score FROM predictions")).fetchall()
+        return {pid: conf for pid, conf in rows if pid in ids}
+
+    with db.engine.begin() as connection:  # back to 0003 = the old rule
+        cfg.attributes["connection"] = connection
+        command.downgrade(cfg, "0003")
+    old = confidences()
+    assert old[ids[0]] == pytest.approx(1 - 0.5233)  # the reported "Real, 47.7 %"
+    with db.engine.begin() as connection:
+        cfg.attributes["connection"] = connection
+        command.upgrade(cfg, "0004")
+    new = confidences()
+    tau = 0.7558
+    for pid, (fusion, cls) in zip(ids, cases):
+        margin = (fusion - tau) / (1 - tau) if cls == "AI Generated" else (tau - fusion) / tau
+        assert new[pid] == pytest.approx(0.5 + 0.5 * margin)
+        assert new[pid] >= 0.5
+    assert new[ids[0]] == pytest.approx(0.6538, abs=1e-3)

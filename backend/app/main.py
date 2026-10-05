@@ -132,7 +132,7 @@ app = FastAPI(
         "benchmark on a labelled test set, and the upstream self-reported "
         "numbers were measured on the authors' own splits.\n\n"
         "Note that `confidence_score` is confidence in the *predicted class*, "
-        "not P(AI Generated). A `fusion_score` of 0.08 means **Real** at 0.92 "
+        "not P(AI Generated), measured from the decision threshold (never below 0.5). At the operating point a `fusion_score` of 0.08 means **Real** at 0.95 "
         "confidence."
     ),
 )

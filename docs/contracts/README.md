@@ -34,11 +34,18 @@ predicted:
 
 ```
 predicted_class  = "AI Generated" if fusion_score >= tau else "Real"
-confidence_score = fusion_score if predicted_class == "AI Generated" else 1.0 - fusion_score
+# confidence in the PREDICTED class, measured from the threshold (changes.md 6.21)
+if predicted_class == "AI Generated":
+    confidence_score = 0.5 + 0.5 * (fusion_score - tau) / (1 - tau)
+else:
+    confidence_score = 0.5 + 0.5 * (tau - fusion_score) / tau
 ```
 
-A `fusion_score` of 0.08 is **"Real" at 0.92 confidence**. M3 is expected to
-assert this independently from its own side.
+Never below 0.5. At tau = 0.5 it equals the original `fusion` / `1 - fusion`
+(0.08 is **"Real" at 0.92**). At the operating point tau = 0.7558, 0.08 is
+"Real" at 0.95 and 0.52 is "Real" at 0.65, not the self-contradicting 0.48 the
+original rule gave (changes.md 6.21, 2026-10-05). M3 is expected to assert this
+independently from its own side.
 
 ## C1 — PreprocessedImage (M1 → M2): unchanged, but one field is now dead
 

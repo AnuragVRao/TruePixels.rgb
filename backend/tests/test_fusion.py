@@ -118,3 +118,43 @@ def test_temperature_above_one_softens_confidence():
     softened, _, _ = combine(0.95, 0.95, config(temperature=2.0))
 
     assert 0.5 < softened < raw
+
+
+# ---- confidence measured from the threshold (2026-10-05, changes.md 6.21) -----------
+
+OPERATING_TAU = 0.7558  # the active operating point
+
+
+def test_a_real_verdict_never_shows_below_half_confidence_at_the_operating_point():
+    """The reported case: fused 0.5233 at tau 0.7558 was 'Real, 47.7 %'."""
+    fusion_score, predicted_class, confidence = combine(0.837, 0.419, config(tau=OPERATING_TAU, weight=0.25))
+    assert predicted_class == "Real"
+    assert fusion_score == pytest.approx(0.25 * 0.837 + 0.75 * 0.419)
+    assert confidence == pytest.approx(0.5 + 0.5 * (OPERATING_TAU - fusion_score) / OPERATING_TAU)
+    assert confidence > 0.5 and confidence == pytest.approx(0.6538, abs=1e-3)
+
+
+@pytest.mark.parametrize("tau", [0.3, 0.5, 0.6, OPERATING_TAU, 0.9])
+@pytest.mark.parametrize("score", [0.0, 0.1, 0.29, 0.3, 0.45, 0.5, 0.52, 0.6, 0.75, 0.7558, 0.8, 0.95, 1.0])
+def test_confidence_is_at_least_half_for_every_threshold(tau, score):
+    _, predicted_class, confidence = combine(score, score, config(tau=tau))
+    assert 0.5 - 1e-12 <= confidence <= 1.0
+    # 0.5 exactly at the threshold, 1.0 at the far ends.
+    if score == tau:
+        assert confidence == pytest.approx(0.5)
+    if score in (0.0, 1.0):
+        assert confidence == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("tau", [0.3, OPERATING_TAU, 0.9])
+def test_confidence_grows_with_distance_from_the_threshold(tau):
+    reals = [combine(s, s, config(tau=tau))[2] for s in (tau - 0.01, tau / 2, 0.0)]
+    ais = [combine(s, s, config(tau=tau))[2] for s in (tau, (tau + 1) / 2, 1.0)]
+    assert reals == sorted(reals) and ais == sorted(ais)
+
+
+@pytest.mark.parametrize("score", [0.0, 0.08, 0.3, 0.49, 0.5, 0.7, 0.92, 1.0])
+def test_at_tau_one_half_it_is_exactly_the_original_fr04_rule(score):
+    fusion_score, predicted_class, confidence = combine(score, score, config(tau=0.5))
+    expected = fusion_score if predicted_class == "AI Generated" else 1.0 - fusion_score
+    assert confidence == pytest.approx(expected)
