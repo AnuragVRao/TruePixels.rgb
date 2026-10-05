@@ -113,7 +113,18 @@ Write-Host 'API is ready.'
 
 # ---- 4. Front-end build ---------------------------------------------------
 $dist = Join-Path $Repo 'frontend\dist\index.html'
-if ($Build -or -not (Test-Path $dist)) {
+$stale = $false
+if (Test-Path $dist) {
+  # Rebuild whenever any front-end source is newer than the last build, so
+  # https://localhost always shows the current code.
+  $builtAt = (Get-Item $dist).LastWriteTime
+  $fe = Join-Path $Repo 'frontend'
+  $sources = @(Get-ChildItem -Path (Join-Path $fe 'src'), (Join-Path $fe 'public') -Recurse -File -ErrorAction SilentlyContinue) +
+             @(Get-Item (Join-Path $fe 'index.html'), (Join-Path $fe 'package.json'), (Join-Path $fe 'vite.config.ts'), (Join-Path $fe 'tailwind.config.js') -ErrorAction SilentlyContinue)
+  $newer = $sources | Where-Object { $_.LastWriteTime -gt $builtAt }
+  if ($newer) { $stale = $true; Write-Host "Front-end sources changed since the last build ($(@($newer).Count) file(s))." }
+}
+if ($Build -or $stale -or -not (Test-Path $dist)) {
   Step 'Building the front end'
   Push-Location (Join-Path $Repo 'frontend')
   npm run build

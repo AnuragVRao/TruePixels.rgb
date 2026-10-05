@@ -143,7 +143,7 @@ run `.\start.ps1`. It:
 | Option | Effect |
 |---|---|
 | `start.cmd -ConsoleCodes` | Print sign-in codes in the API window instead of e-mailing them (needs `ENVIRONMENT=development`) |
-| `start.cmd -Build` | Rebuild the front end first, after changing `frontend/` code |
+| `start.cmd -Build` | Force a front-end rebuild (it already rebuilds automatically when `frontend/` sources are newer than the last build) |
 | `start.cmd -NoBrowser` | Do not open the browser |
 | `stop.cmd -KeepDatabase` | Leave PostgreSQL running |
 
