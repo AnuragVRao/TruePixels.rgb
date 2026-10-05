@@ -125,6 +125,32 @@ cd ..
 
 ## Run
 
+### One command: `start.cmd` / `stop.cmd`
+
+Once setup is done, double-click **`start.cmd`** in the repository root, or
+run `.\start.ps1`. It:
+
+1. starts Docker Desktop if needed, then the database;
+2. applies pending migrations;
+3. opens the API in its own **"TruePixels API"** window and waits for the
+   models (keep that window open);
+4. builds the front end if needed;
+5. starts Caddy and opens **https://localhost**.
+
+**`stop.cmd`** (or `.\stop.ps1`) stops the API, Caddy and the database.
+**Data is kept.**
+
+| Option | Effect |
+|---|---|
+| `start.cmd -ConsoleCodes` | Print sign-in codes in the API window instead of e-mailing them (needs `ENVIRONMENT=development`) |
+| `start.cmd -Build` | Rebuild the front end first, after changing `frontend/` code |
+| `start.cmd -NoBrowser` | Do not open the browser |
+| `stop.cmd -KeepDatabase` | Leave PostgreSQL running |
+
+The manual steps, if you prefer:
+
+### Manually
+
 **API**, from `backend/`. It runs on the host, not in Docker, because it
 needs the GPU.
 
