@@ -45,6 +45,9 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("STORAGE_DIR", str(_SCRATCH / "storage"))
 os.environ.setdefault("EMAIL_BACKEND", "console")
 os.environ.setdefault("REQUIRE_2FA", "False")
+# The app defaults to production (Phase 6); the suite runs the development
+# surface unless a test sets ENVIRONMENT itself.
+os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("WARMUP_ON_STARTUP", "False")  # models load lazily in tests
 
 

@@ -16,8 +16,11 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-BASE = "http://localhost:3000"
-API = "http://localhost:3000/api/v1"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import csp_guard  # noqa: E402  (Phase 6: TP_BASE, HTTPS, CSP watch)
+
+BASE = csp_guard.BASE
+API = csp_guard.API
 OUT = Path(sys.argv[1])
 LOG = Path(sys.argv[2])
 SEED = json.loads((OUT / "seed.json").read_text())
@@ -77,6 +80,7 @@ wrong_ext.write_text("{}")
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
+    csp_guard.install(browser)
     console_errors, image_requests = [], []
 
     def watch(page):
@@ -306,4 +310,8 @@ for n, name, status, detail in results:
     print(f"{n:>3} {status} {name}" + (f"\n      {detail}" if detail else ""))
 unexpected = [e for e in console_errors if "401" not in e and "403" not in e and "409" not in e]
 print("console errors (401/403/409 expected):", len(console_errors), "unexpected:", unexpected[:5])
-sys.exit(0 if all(r[2] == "PASS" for r in results) else 1)
+csp_line, csp_ok = csp_guard.summary()
+print(("PASS  " if csp_ok else "FAIL  ") + csp_line)
+for v in csp_guard.violations[:20]:
+    print("      " + v)
+sys.exit(0 if csp_ok and all(r[2] == "PASS" for r in results) else 1)

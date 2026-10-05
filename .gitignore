@@ -45,3 +45,7 @@ dataset/synthbuster_1k/
 .pytest_cache/
 .mypy_cache/
 .coverage
+
+# Caddy (Phase 6): data/ holds the local CA PRIVATE KEY - never commit
+infra/caddy/data/
+infra/caddy/config/

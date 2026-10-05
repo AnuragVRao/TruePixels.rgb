@@ -205,7 +205,8 @@ cd backend && alembic upgrade head                   # the ONLY way the schema i
 # Server (from backend/, so that `app` is the top-level package)
 cd backend
 python seed_admin.py                                 # once: creates admin@truepixels.rgb (M1's script)
-python -m uvicorn app.main:app --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers   # add --reload while developing
+# HTTPS in front of it (Phase 6): docs/https.md; demo path: readme.md
 ```
 
 Tests never touch the real database or `storage/`:
@@ -225,15 +226,16 @@ a database that is not at head and names the command to run. The old dev
 SQLite data was copied into PostgreSQL with
 `backend/scripts/migrate_sqlite_to_pg.py` (read-only on the source; the
 `.db` file is kept). Copy [backend/.env.example](backend/.env.example) to
-`backend/.env` for database, SMTP and 2FA settings. With no SMTP password,
-OTP codes go to the console. `GET /ready` answers 503 until the model
+`backend/.env` for database, SMTP and 2FA settings. 2FA is optional and off
+by default; with it on and no SMTP password, OTP codes go to the console -
+**only with `ENVIRONMENT=development`** (unset means production, which refuses
+to issue codes without real e-mail). `GET /ready` answers 503 until the model
 warm-up has succeeded; `/health` is liveness only.
 
-Two UIs talk to the same API: **M3's dashboard** at
-http://127.0.0.1:8000/ (sign in, scan, results, history, reports, admin) and
-**M1's React app** in `frontend/` (`npm install && npm run dev` →
-http://localhost:3000, proxied to :8000; registration, OTP, upload, user
-management).
+The interface is the **React app** in `frontend/`: `npm run dev` →
+http://localhost:3000 (proxied to :8000) while developing, or the production
+build behind Caddy at https://localhost (docs/https.md). M3's legacy static
+dashboard is served at http://127.0.0.1:8000/ **in development only**.
 
 ### One-time setup for the frequency branch
 
@@ -373,7 +375,7 @@ module.
 | Calibration (temperature) | ❌ no-op at T=1.0, and **MM2.5 is now measured as missed** — ECE 0.113 on validation, and the best temperature available (T = 0.97) only reaches 0.110 against a ≤ 0.05 target. Temperature scaling alone will not close it |
 | D3/D4 persistence | ✅ every prediction writes D4 and commits before responding; M3 reads it back (asserted end-to-end). SQLite by default |
 | Registry / model management (F.19) | ✅ D3 decides what runs; every D4 row links the semantic, frequency and fusion rows that actually ran (real FKs, RESTRICT). Activation = canary + quality gate (validation-split reference, 100 images; refuse if accuracy −0.05, FPR > 0.20 or AUC −0.02) + locked atomic switch; forced overrides need a reason and are audit-logged; rollback is one call (gate advisory there). Head uploads validated **only with perturbed copies of the published heads** (no training); fusion-config swap is the demonstrated feature. `metrics` stays null |
-| Sign-in / OTP (F.2) | ✅ realised - **not** "exceeds SRS": until 2026-10-05 the OTP feature was an email-only sign-in for any role. Now a code exists only in a challenge created by a correct password (`login`) or registration (`register`, User only); 2FA off refuses the OTP endpoints; production never issues codes without real e-mail. Sign-in and OTP throttled (in memory, resets on restart). See [docs/auth-hardening.md](docs/auth-hardening.md) |
+| Sign-in / OTP (F.2) | ✅ realised, with **optional OTP 2FA, off by default** (`REQUIRE_2FA=False`). Until 2026-10-05 the OTP feature was an email-only sign-in for any role. Now a code exists only in a challenge created by a correct password (`login`) or registration (`register`, User only); 2FA off refuses the OTP endpoints; production never issues codes without real e-mail. Sign-in and OTP throttled (in memory, resets on restart). See [docs/auth-hardening.md](docs/auth-hardening.md) |
 | Authentication / ownership | ✅ M1's JWT sessions on every M2/M3 endpoint; predictions owner-only, `IMG_NOT_FOUND` for not-yours (no id oracle) |
 | Explainability (F.10/F.11/F.14/NF.13) | ✅ **real** — attention recomputed from passively captured inputs (matches eager attention < 1e-4; scores bit-identical, `regression_check --xai` 24/24). Rollout is an **attention-based proxy**. Deletion test (40 validation images, semantic branch only, per-image unit): masking the top-attended 20% beats random by mean +0.071 [0.041, 0.103], **median +0.019**; paired t one-sided p = 4.0e-5 (Wilcoxon 5.8e-8). Better than chance; typical advantage small. Frequency panel is descriptive, **not validated**. Frequency panel = mean spectrum of SPAI's 224 px patches + its r = 16 split; descriptive, not evidence. Cost: +1.2–3.7 s, +7 MB VRAM. See RESULTS.md |
 | **Detection of whole-image synthesis** | ✅ **measured** — Synthbuster vs RAISE-1k, 99 per class, at an operating point chosen on a disjoint validation split: fused accuracy 0.864 [0.81, 0.90], recall 0.838, AUC 0.941 [0.91, 0.97]; SPAI alone AUC 0.967. Confound-controlled. Read the narrow claim, not "accuracy" |
@@ -556,7 +558,34 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-03 (latest) — Phase 5b (admin UI) and pre-5b security fixes
+### 2026-10-05 (latest) — Phase 6 (HTTPS) and the pre-6 auth hardening
+- Pre-6:
+  - OTP is a second factor: challenges are bound to a password or to
+    registration; codes are purged on expiry;
+  - sign-in is throttled per address and per account, with flood-proof
+    eviction and a fallback for keys that cannot be tracked;
+  - the user rotated the database password and the JWT key;
+  - the database container now gets only the `POSTGRES_*` values;
+  - M1's old components were deleted (tag `pre-m1-cleanup`).
+- Phase 6: Caddy runs in Docker in front of uvicorn on the host
+  (127.0.0.1).
+  - `host.docker.internal` reached uvicorn on loopback, but uvicorn sees
+    the proxy as `127.0.0.1`. Forwarded headers are therefore trusted only
+    with a shared secret (`PROXY_SHARED_SECRET`), not by IP.
+  - The CSP has no `unsafe-inline` or `unsafe-eval` for scripts.
+  - Fonts are self-hosted, and Vite's `data:` inlining is off: the first
+    HTTPS run caught `data:` fonts blocked by `font-src`.
+  - `ENVIRONMENT` defaults to production, which turns off `/docs` and the
+    legacy dashboard.
+  - CORS is empty in production unless configured.
+- Evidence:
+  - `infra/check_https.py`: dev 46/46, prod 47/47, TLS verified against
+    Caddy's CA;
+  - Playwright through HTTPS (certificate errors ignored), 0 CSP
+    violations: user flows 17/17, admin flows A1–A8, prod smoke 3/3.
+- **Next:** Phase 7 (performance and concurrency).
+
+### 2026-10-03 — Phase 5b (admin UI) and pre-5b security fixes
 - Pre-5b:
   - console OTP codes no longer reach D6;
   - `dev_otp` removed;

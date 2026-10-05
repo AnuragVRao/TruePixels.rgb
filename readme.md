@@ -72,6 +72,77 @@ python -m pytest backend/tests -q                 # 158 tests: M1 + M2 + M3
 python -m pytest backend/tests -q -m "not slow"   # skip the model-backed ones
 ```
 
+## Demo over HTTPS, without an e-mail server
+
+This walkthrough shows the whole system, the optional OTP sign-in included,
+on one machine. Codes are printed in the API's console instead of being
+e-mailed. That console delivery works **only** with
+`ENVIRONMENT=development`.
+
+1. **One-time setup:**
+   - the database is up and migrated (Quick start above);
+   - the SPAI weights are converted;
+   - Docker Desktop is running.
+2. **In `backend/.env`:**
+
+   ```ini
+   ENVIRONMENT=development      # dev-only surface: console OTP codes, /docs
+   REQUIRE_2FA=True             # turn the optional OTP 2FA ON for the demo
+   EMAIL_BACKEND=console
+   PROXY_SHARED_SECRET=<python -c "import secrets; print(secrets.token_hex(32))">
+   ```
+
+3. **Build the front end:**
+
+   ```powershell
+   cd frontend; npm install; npm run build; cd ..
+   ```
+
+4. **Start the API** on the host. Leave this console open: the codes appear
+   here.
+
+   ```powershell
+   cd backend
+   python seed_admin.py          # once, if there is no admin yet
+   python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
+   ```
+
+5. **Start the HTTPS proxy**, in a second console at the repository root:
+
+   ```powershell
+   docker compose --env-file backend/.env --profile https-dev up -d caddy-dev
+   ```
+
+6. **Open <https://localhost>.** The browser warns about the certificate
+   until you trust Caddy's local CA, on this machine only (see
+   [docs/https.md](docs/https.md)).
+7. **Register.** The page asks for a code. Look in the API console for
+   `2FA OTP simulated in console for you@example.com: code=123456` and enter
+   it.
+   - Sign out and back in: the password first, then a fresh code.
+   - Admins tick "Sign in as administrator", then enter the code printed in
+     the console.
+8. **Analyse an image**, then open History, the PDF report and (as an admin)
+   the Admin screens.
+9. **Stop:**
+
+   ```powershell
+   docker compose --env-file backend/.env --profile https-dev stop caddy-dev
+   ```
+
+   Then stop uvicorn with Ctrl+C.
+
+**Defaults and limits.**
+- **2FA is optional and off by default.** With `REQUIRE_2FA` unset or False:
+  - registration and sign-in need no code;
+  - `/auth/otp/*` answers 403.
+- **Production never issues codes without real e-mail.**
+  - `ENVIRONMENT` unset counts as production.
+  - With `REQUIRE_2FA=True` and no SMTP settings, sign-in and registration
+    answer `503 OTP_DELIVERY_UNAVAILABLE`.
+  - Codes are never printed.
+- How sign-in and OTP work: [docs/auth-hardening.md](docs/auth-hardening.md).
+
 ## What it measures, honestly
 
 Benchmarked on **Synthbuster** (9 generators) versus **RAISE-1k** camera

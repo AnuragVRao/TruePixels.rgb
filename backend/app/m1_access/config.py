@@ -8,12 +8,13 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production")  # Phase 6: production unless stated
 
 
 def is_production() -> bool:
-    """Read at call time (tests vary it). Anything but 'development' is production."""
-    return os.getenv("ENVIRONMENT", "development").strip().lower() != "development"
+    """Read at call time (tests vary it). Anything but an explicit
+    'development' is production - including an unset ENVIRONMENT (Phase 6)."""
+    return os.getenv("ENVIRONMENT", "production").strip().lower() != "development"
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Security & JWT

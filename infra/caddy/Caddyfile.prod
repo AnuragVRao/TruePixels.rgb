@@ -1,0 +1,27 @@
+# Production HTTPS profile (Phase 6).
+#   docker compose --env-file backend/.env --profile https-prod up -d caddy-prod
+#
+# TP_SITE_ADDRESS  the public host name, e.g. truepixels.example.com
+#                  (default "localhost", for testing this profile locally)
+# TP_TLS           "internal" (Caddy's local CA - local testing only), or an
+#                  e-mail address to obtain a real certificate via ACME
+#                  (Let's Encrypt); the host name must then resolve to this
+#                  machine and ports 80/443 must be reachable from the internet.
+# The API must run with ENVIRONMENT=production (the default): no /docs, no
+# legacy dashboard. See docs/https.md.
+{
+	admin off
+	http_port {$TP_HTTP_PORT:80}
+	https_port {$TP_HTTPS_PORT:443}
+	servers {
+		protocols h1 h2
+	}
+}
+
+import /etc/caddy/common.caddy
+
+{$TP_SITE_ADDRESS:localhost} {
+	tls {$TP_TLS:internal}
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	import site_common
+}

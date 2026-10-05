@@ -13,10 +13,10 @@ was therefore a password-free sign-in, not a second factor. Nothing limited
 guessing: a code survived any number of wrong attempts for 5 minutes, and
 `/otp/send` had no cooldown.
 
-**For the requirements matrix.** F.2 (authentication) is *realised*. It must
-**not** be described as "exceeding the SRS" because of the OTP feature: until
-2026-10-05 that feature weakened F.2, since it added a path that skipped the
-password.
+**For the requirements matrix.** Describe F.2 (authentication) as
+*realised, with optional OTP 2FA, off by default*, and nothing stronger.
+Until 2026-10-05 the OTP feature weakened F.2, because it added a path that
+skipped the password.
 
 ## The challenge model now
 
@@ -110,6 +110,12 @@ password.
   - it falls back to a per-IP counter (3 free failures, then doubling);
   - if that table is saturated too, it falls back to one global window of
     30 untracked failures a minute.
+
+  The global window is a **last resort**:
+  - it applies only to attempts that no other counter could hold;
+  - it counts **failures only** (successful sign-ins do not consume it);
+  - it cannot tell attackers from legitimate newcomers, so while it is full
+    a real user whose key is untracked waits too, for at most a minute.
 
   OTP sends that cannot be tracked are refused, not sent.
 - **State resets on restart, and on a crash loop.** All throttle state lives **in this process's

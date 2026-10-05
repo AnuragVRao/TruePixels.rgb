@@ -34,6 +34,13 @@ EXPLAINABILITY_DIR = STORAGE_ROOT / "explainability"
 MODELS_DIR = REPO_ROOT / "storage" / "models"
 
 
+def is_development() -> bool:
+    """Phase 6: ENVIRONMENT defaults to PRODUCTION. Only an explicit
+    ENVIRONMENT=development enables the dev-only surface (API docs, the legacy
+    dashboard, console OTP delivery). Read at call time."""
+    return os.getenv("ENVIRONMENT", "production").strip().lower() == "development"
+
+
 def ensure_storage_dirs() -> None:
     """Create the local storage layout if it is missing.
 
@@ -60,16 +67,22 @@ def ensure_storage_dirs() -> None:
 # CORS at all). Add deployment origins through the environment, comma
 # separated, rather than widening the default:
 #     TRUEPIXELS_CORS_ORIGINS=https://truepixels.example.com
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "TRUEPIXELS_CORS_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,"
-        "http://localhost:5173,http://127.0.0.1:5173,"
-        "http://localhost:8000,http://127.0.0.1:8000",
-    ).split(",")
-    if origin.strip()
-]
+#
+# Phase 6: the React app is same-origin behind Caddy (and behind Vite's dev
+# proxy), so it needs NO CORS. In production the default list is therefore
+# EMPTY - set TRUEPIXELS_CORS_ORIGINS to the HTTPS origin(s) that really need
+# cross-origin access. The plain-http dev origins are a development default only.
+_DEV_CORS_DEFAULT = ("http://localhost:3000,http://127.0.0.1:3000,"
+                     "http://localhost:5173,http://127.0.0.1:5173,"
+                     "http://localhost:8000,http://127.0.0.1:8000")
+
+
+def cors_allowed_origins() -> list[str]:
+    """Read at call time (after .env is loaded)."""
+    raw = os.getenv("TRUEPIXELS_CORS_ORIGINS")
+    if raw is None:
+        raw = _DEV_CORS_DEFAULT if is_development() else ""
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 # --------------------------------------------------------------------------

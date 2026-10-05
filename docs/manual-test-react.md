@@ -101,3 +101,22 @@ database (`truepixels_regression`), with all 8 checks passing:
 - a naturally expired 8-hour token;
 - browsers other than Chromium;
 - real phones.
+
+## Through HTTPS (Phase 6, 2026-10-05)
+
+Both suites also ran through Caddy at `https://localhost` (`TP_BASE`), in
+headless Chromium. **Certificate errors were ignored**, because the browser
+does not trust Caddy's local CA. Any CSP or mixed-content console message
+fails the run (`frontend/e2e/csp_guard.py`).
+
+| Run | Result |
+|---|---|
+| user flows (dev profile, 2FA on, console codes) | 17/17, 0 CSP violations |
+| admin flows A1–A8 (dev profile) | 8/8, 0 CSP violations |
+| production smoke (`run_prod_smoke.py`, prod profile, 2FA off) | 3/3, 0 CSP violations, HSTS on every document |
+
+The first HTTPS run of the admin flows found 456 violations. Vite had
+inlined small font files as `data:` URIs, which `font-src 'self'` blocks.
+This was fixed in the build, not by loosening the policy. The first user-flow
+run hit the test harness's own `eval` (`wait_for_function`), which was
+replaced by locator waits.

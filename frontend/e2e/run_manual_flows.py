@@ -18,7 +18,10 @@ import numpy as np
 from PIL import Image
 from playwright.sync_api import expect, sync_playwright
 
-BASE = "http://localhost:3000"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import csp_guard  # noqa: E402  (Phase 6: TP_BASE, HTTPS, CSP watch)
+
+BASE = csp_guard.BASE
 OUT = Path(sys.argv[1])
 LOG = Path(sys.argv[2])
 REPO = Path(sys.argv[3])
@@ -65,6 +68,7 @@ password = "ReactTest12345"
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
+    csp_guard.install(browser)
     ctx = browser.new_context(viewport={"width": 1280, "height": 900}, accept_downloads=True)
     page = ctx.new_page()
     console_errors = []
@@ -133,7 +137,9 @@ with sync_playwright() as p:
         expect(page.get_by_text("SPAI patch spectrum")).to_be_visible()
         expect(page.get_by_text("attention-based proxy")).to_be_visible()   # backend caption, as text
         expect(page.get_by_text("Models that produced this result")).to_be_visible()
-        page.wait_for_function("document.querySelectorAll('img[src^=\"blob:\"]').length >= 3", timeout=30000)
+        # A locator wait, not wait_for_function: the latter evals a string in the
+        # page, which the production CSP (no 'unsafe-eval') rightly blocks.
+        expect(page.locator('img[src^="blob:"]').nth(2)).to_be_attached(timeout=30000)
         page.screenshot(path=str(OUT / "08-results.png"), full_page=True)
         xai_result["id"] = page.url.rsplit("/", 1)[-1]
     step(7, "analyse with xai: progress then results (panels, captions, models, blob images)", s7_8)
@@ -184,7 +190,9 @@ with sync_playwright() as p:
         expect(page.get_by_role("heading", name="Your results")).to_be_visible()
         expect(page.get_by_text("Page 1 of 3 · 28 results")).to_be_visible(timeout=30000)
         assert page.locator("li").count() == 10, page.locator("li").count()
-        page.wait_for_function("document.querySelectorAll('img[src^=\"blob:\"]').length >= 10", timeout=30000)
+        # A locator wait, not wait_for_function: the latter evals a string in the
+        # page, which the production CSP (no 'unsafe-eval') rightly blocks.
+        expect(page.locator('img[src^="blob:"]').nth(9)).to_be_attached(timeout=30000)
         page.screenshot(path=str(OUT / "12-history.png"), full_page=True)
         page.get_by_role("button", name="Next").click()
         expect(page.get_by_text("Page 2 of 3 · 28 results")).to_be_visible()
@@ -287,3 +295,8 @@ with sync_playwright() as p:
 for n, name, status, detail in results:
     print(f"{n:>2} {status}  {name}" + (f"  -- {detail}" if detail else ""))
 print("console errors:", [e for e in console_errors if "401" not in e and "404" not in e][:10])
+csp_line, csp_ok = csp_guard.summary()
+print(("PASS  " if csp_ok else "FAIL  ") + csp_line)
+for v in csp_guard.violations[:20]:
+    print("      " + v)
+sys.exit(0 if csp_ok and all(r[2] == "PASS" for r in results) else 1)

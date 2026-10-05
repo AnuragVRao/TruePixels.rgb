@@ -1,0 +1,19 @@
+# Development HTTPS profile (Phase 6): https://localhost with Caddy's LOCAL CA.
+#   docker compose --env-file backend/.env --profile https-dev up -d caddy-dev
+# No HSTS here on purpose: HSTS on "localhost" would pin every other local
+# project on this browser to HTTPS. See docs/https.md.
+{
+	admin off
+	http_port {$TP_HTTP_PORT:80}
+	https_port {$TP_HTTPS_PORT:443}
+	servers {
+		protocols h1 h2
+	}
+}
+
+import /etc/caddy/common.caddy
+
+localhost {
+	tls internal
+	import site_common
+}

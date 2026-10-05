@@ -1211,3 +1211,43 @@ changed:
 - **Documented in `docs/auth-hardening.md`:** a crash loop resets the
   in-memory throttle state. The registration-squatting residual risk is
   reported, not fixed.
+
+### 6.18 Phase 6: HTTPS, environment default, proxy trust
+
+- **M1 `config.py`:** `ENVIRONMENT` and `is_production()` now default to
+  **production** when the variable is unset. Only an explicit
+  `ENVIRONMENT=development` enables console OTP delivery. The test conftest
+  sets `development`; production tests set it themselves.
+- **`main.py`:**
+  - `/docs`, `/redoc` and `/openapi.json`, plus M3's legacy dashboard (`/`,
+    `/api-tester`, `/developer`, `/playground`), exist only in development;
+  - CORS comes from `config.cors_allowed_origins()`, which is empty in
+    production unless `TRUEPIXELS_CORS_ORIGINS` is set;
+  - `TrustedProxyMiddleware` is added.
+- **New `shared/proxy.py`.** Forwarded headers are trusted only with the
+  proxy's shared secret (constant-time compare); otherwise they are
+  stripped. The reason: behind Docker Desktop, every proxied request reaches
+  uvicorn from `127.0.0.1` (measured). uvicorn therefore runs with
+  `--no-proxy-headers`. Unit tests are in `test_proxy_trust.py`. A first
+  version kept the header keys as bytes, so trust never applied; the live
+  positive control caught it and a unit test now covers it.
+- **Frontend:**
+  - Google Fonts were replaced by `@fontsource` packages, bundled and
+    same-origin (privacy and CSP);
+  - `vite.config.ts` sets `assetsInlineLimit: 0`, so no asset ships as a
+    `data:` URI;
+  - new `public/favicon.svg` (the old `vite.svg` link pointed at a missing
+    file).
+- **E2E:**
+  - `csp_guard.py`: `TP_BASE`, `ignore_https_errors` over HTTPS, and a
+    CSP/mixed-content watch that fails the run;
+  - the two `wait_for_function` waits became locator waits: Playwright's
+    string predicates use page-side `eval`, which the CSP blocks;
+  - new `run_prod_smoke.py`.
+- **Infra:**
+  - `infra/caddy/{common.caddy, Caddyfile.dev, Caddyfile.prod}`;
+  - `caddy-dev` and `caddy-prod` compose profiles;
+  - `infra/check_https.py`;
+  - `infra/caddy/data/` and `config/` are gitignored (local CA private key);
+  - `PROXY_SHARED_SECRET` was added to `backend/.env` (generated, never
+    printed) and to `.env.example`.

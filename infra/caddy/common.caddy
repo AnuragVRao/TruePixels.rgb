@@ -1,0 +1,66 @@
+# Shared by Caddyfile.dev and Caddyfile.prod (Phase 6). See docs/https.md.
+
+# Forward to uvicorn on the HOST (never containerised: it needs the GPU),
+# bound to 127.0.0.1 and run with --no-proxy-headers. Docker Desktop relays
+# this connection through the host loopback, so uvicorn sees 127.0.0.1 - the
+# API therefore trusts X-Forwarded-For only alongside the shared secret set
+# here (app/shared/proxy.py), never because of the peer address.
+(api_upstream) {
+	reverse_proxy {$TP_UPSTREAM:host.docker.internal:8000} {
+		# Overwrites any client-supplied copy of the header.
+		header_up X-TruePixels-Proxy {$PROXY_SHARED_SECRET}
+		# Caddy trusts no proxy in front of it, so it REPLACES any incoming
+		# X-Forwarded-For with the real peer address (its default).
+		transport http {
+			dial_timeout 10s
+			response_header_timeout 180s
+			read_timeout 180s
+			write_timeout 180s
+		}
+	}
+}
+
+(site_common) {
+	encode zstd gzip
+
+	header {
+		# No inline or eval script, ever. Inline style ATTRIBUTES only (recharts
+		# and React style={...}); no inline <style> elements.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+	}
+
+	# The API (and its health/readiness probes). Body limits sit just above the
+	# app's own caps: images 10 MB (12 MB here), model artefacts up to 64 MB
+	# (70 MB here). The app still enforces its exact limits.
+	@api path /api/* /health /ready
+	handle @api {
+		handle /api/v1/models* {
+			request_body {
+				max_size 70MB
+			}
+			import api_upstream
+		}
+		handle {
+			request_body {
+				max_size 12MB
+			}
+			import api_upstream
+		}
+	}
+
+	# The React production build (frontend/dist), with SPA fallback.
+	handle {
+		root * /srv
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		header /index.html Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

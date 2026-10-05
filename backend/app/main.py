@@ -98,12 +98,17 @@ async def lifespan(_: FastAPI):
         purger.cancel()
 
 
+# Phase 6: the interactive API docs and the OpenAPI schema exist only in
+# development (ENVIRONMENT defaults to production).
+_DEV = config.is_development()
+
 app = FastAPI(
     lifespan=lifespan,
     title="TruePixels.rgb API",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if _DEV else None,
+    redoc_url="/redoc" if _DEV else None,
+    openapi_url="/openapi.json" if _DEV else None,
     description=(
         "AI-generated image detection.\n\n"
         "- **Accounts and uploads** - `/api/v1/auth`, `/api/v1/images`, "
@@ -138,11 +143,17 @@ app = FastAPI(
 # combination hands any website a signed-in user's session.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.CORS_ALLOWED_ORIGINS,
+    allow_origins=config.cors_allowed_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+# Decides the real client address / scheme before any route reads them (the
+# sign-in throttle keys on it). Only the request-id middleware below wraps it,
+# and that reads neither. See app/shared/proxy.py.
+from app.shared.proxy import TrustedProxyMiddleware  # noqa: E402
+
+app.add_middleware(TrustedProxyMiddleware)
 
 
 @app.middleware("http")
@@ -186,7 +197,8 @@ app.include_router(reports_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 
 
-@app.get("/", include_in_schema=False)
+# M3's legacy static dashboard and API tester: development only (Phase 6).
+# In production these paths do not exist; the React app is the interface.
 def serve_frontend_dashboard():
     """Serves the interactive Module M3 web application."""
     index_path = M3_DASHBOARD_DIR / "index.html"
@@ -195,15 +207,18 @@ def serve_frontend_dashboard():
     return {"message": "TruePixels.rgb API is live. See /docs."}
 
 
-@app.get("/api-tester", include_in_schema=False)
-@app.get("/developer", include_in_schema=False)
-@app.get("/playground", include_in_schema=False)
 def serve_api_tester_console():
     """Serves M3's Developer & API Seam Testing Console."""
     tester_path = M3_DASHBOARD_DIR / "api_tester.html"
     if tester_path.exists():
         return FileResponse(tester_path)
     return {"message": "API Tester Console not found."}
+
+
+if _DEV:
+    app.add_api_route("/", serve_frontend_dashboard, methods=["GET"], include_in_schema=False)
+    for _path in ("/api-tester", "/developer", "/playground"):
+        app.add_api_route(_path, serve_api_tester_console, methods=["GET"], include_in_schema=False)
 
 
 @app.get("/api/v1/health", tags=["Health"])
