@@ -10,146 +10,306 @@ over the same picture and fusing their verdicts:
   (CVPR 2025), which ignores content and asks *does this pixel grid carry the
   spectral signature of a synthesis pipeline*.
 
-The argument for running both is that a generator which defeats one kind of
-evidence has no particular reason to have defeated the other. Measurements
-below show where that holds and where it does not.
+A generator that defeats one kind of evidence has no particular reason to
+have defeated the other. The measurements below show where that holds and
+where it does not.
 
-> ### This project never trains, fine-tunes or retrains a model
->
-> Not deferred — permanently out of scope. Every score comes from a
-> third-party checkpoint used exactly as published, and there is no randomly
-> initialised weight anywhere in the inference path. Where the PRDs call for a
-> trained component, the architecture was changed to use pretrained weights
-> instead, and the supersession is recorded in `CLAUDE.md` §8.
+> **This project never trains, fine-tunes or retrains a model.** Every score
+> comes from a third-party checkpoint used exactly as published. Where the
+> PRDs call for a trained component, the architecture uses pretrained weights
+> instead; the supersessions are recorded in `CLAUDE.md` §8.
 
-## Quick start
+**Contents:** [Requirements](#requirements) · [Setup](#setup) ·
+[Database](#database-postgresql--migrations) · [Run](#run) · [HTTPS](#https) ·
+[Tests](#tests) · [Demo](#demo) · [What it measures](#what-it-measures-honestly) ·
+[Project structure](#project-structure) · [Documentation](#documentation) ·
+[Licences](#licences)
 
-Requires **Python 3.13** (the pinned torch wheel does not exist for 3.14).
+---
 
-```bash
-python -m venv .venv && .venv\Scripts\Activate.ps1      # Windows
+## Requirements
+
+| | |
+|---|---|
+| Python | **3.13**. The pinned torch wheel does not exist for 3.14. |
+| Node.js | 20 or newer, for the React front end |
+| Docker Desktop | PostgreSQL 16 and the Caddy HTTPS proxy run in containers |
+| GPU (optional) | An NVIDIA card with CUDA 12.6 drivers. About 25× faster than the CPU; developed on an RTX 4050 (6 GB). |
+| Disk | About 2 GB for model weights (SPAI 560 MB, SigLIP 2 about 370 MB) |
+
+The commands below are written for **Windows PowerShell**, the development
+platform. On Linux or macOS, use `source .venv/bin/activate` and `cp`.
+
+## Setup
+
+**1. Python environment**, from the repository root:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r backend/requirements.txt
-
-# GPU (optional but ~25x faster): pip's default index serves the CPU-only
-# build, so the +cu126 tag must be explicit or pip thinks the pin is satisfied.
-pip install --index-url https://download.pytorch.org/whl/cu126 \
-    "torch==2.13.0+cu126" "torchvision==0.28.0+cu126"
+# GPU: pip's default index only has the CPU build, so name the +cu126 build explicitly.
+pip install --index-url https://download.pytorch.org/whl/cu126 "torch==2.13.0+cu126" "torchvision==0.28.0+cu126"
+python -c "import torch; print(torch.cuda.is_available())"   # True with a working GPU
 ```
 
-**One-time: the SPAI weights.** They are published on Google Drive, which
+**2. Front end:**
+
+```powershell
+cd frontend; npm install; cd ..
+```
+
+**3. SPAI weights (one-time).** They are published on Google Drive, which
 cannot be fetched reproducibly by URL, so nothing downloads them for you.
-Download `spai.pth` (935 MB) from the link in
-`config.DETECTOR_FREQUENCY_SOURCE_URL` into `storage/models/`, then:
 
-```bash
-cd backend && python scripts/convert_spai_checkpoint.py
+1. Download `spai.pth` (935 MB) from the link in
+   `config.DETECTOR_FREQUENCY_SOURCE_URL` (`backend/app/shared/config.py`)
+   into `storage/models/`.
+2. Convert it:
+
+   ```powershell
+   cd backend; python scripts/convert_spai_checkpoint.py; cd ..
+   ```
+
+The converter:
+- verifies the upstream SHA-256;
+- extracts only the tensors, under a restricted unpickler;
+- writes `storage/models/spai.safetensors` and prints its digest.
+
+The server then loads that file **strictly** (all 324 weights) and checks it
+against the pinned digest. SigLIP 2 downloads itself from Hugging Face the
+first time the server starts.
+
+**4. Configuration.**
+
+```powershell
+Copy-Item backend\.env.example backend\.env
 ```
 
-That verifies the upstream SHA-256, extracts the model tensors under a
-restricted unpickler, and writes a tensors-only `spai.safetensors` (560 MB).
-The server loads only that file, checks it against a pinned digest of the
-weights, and loads it **strictly** — a partial load is refused, never
-tolerated.
+Then edit `backend/.env`. It is gitignored: **never commit it**.
 
-```bash
+| Key | What to set |
+|---|---|
+| `ENVIRONMENT` | `development` for local work. **Unset means production**: no `/docs`, no legacy dashboard, and no OTP codes printed to the console. |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Database credentials. Generate the password with `python -c "import secrets; print(secrets.token_hex(32))"`. |
+| `DATABASE_URL` | `postgresql+psycopg://<user>:<password>@127.0.0.1:5433/<db>`, using the same three values |
+| `JWT_SECRET_KEY` | Session signing key: `python -c "import secrets; print(secrets.token_hex(48))"` |
+| `PROXY_SHARED_SECRET` | Shared with Caddy, which the API trusts for client addresses: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `REQUIRE_2FA` | `True` to require an e-mailed one-time code at sign-in. Optional, **off by default**. |
+| `EMAIL_BACKEND`, `SMTP_*` | `smtp` with a Gmail **app password** (16 letters) for real e-mail. `console` prints codes in the API window, in development only. |
+| `TRUEPIXELS_CORS_ORIGINS` | Leave unset; the app is same-origin. Set it only for a genuine cross-origin client, HTTPS origins only. |
+
+Rotating secrets later: [docs/rotate-secrets.md](docs/rotate-secrets.md).
+
+## Database: PostgreSQL + migrations
+
+```powershell
+docker compose --env-file backend/.env up -d db      # PostgreSQL 16 on 127.0.0.1:5433, data in a named volume
 cd backend
-cp .env.example .env            # set JWT_SECRET_KEY before deploying
-python seed_admin.py            # creates the first admin account
-python -m uvicorn app.main:app --reload
+alembic upgrade head                                  # the ONLY way the schema is created or changed
+python seed_admin.py                                  # once: creates admin@truepixels.rgb
+cd ..
 ```
 
-The primary interface is the React app in `frontend/` (`npm install && npm run dev`,
-then <http://localhost:3000>): analysis, results, history, PDF reports, and
-the admin screens (overview, logs, users, models).
-<http://127.0.0.1:8000/> still serves M3's original static dashboard. It is
-**legacy**, kept for reference and quick checks only: it has no user or
-model management, and new features land only in the React app. `/docs`
-lists the API.
-`GET /health` reports the device, both checkpoints and whether each is loaded.
+- **`--env-file backend/.env` is required** on every `docker compose` command.
+  Compose refuses to run without it, rather than start a database with a
+  guessable password.
+- **Admin password:** `seed_admin.py` uses `SEED_ADMIN_PASSWORD` if it is
+  set; otherwise it generates one and prints it once.
+- **Out-of-date schema:** the server refuses to start on a database that is
+  not at the latest migration, and names the command to run.
+- **Stopping:** `docker compose --env-file backend/.env down`. **Never add
+  `-v`**, which deletes the data volume.
+- **SQLite instead of Docker:** set `DATABASE_URL=sqlite:///./truepixels.db`
+  and run `alembic upgrade head` as above.
 
-```bash
-python -m pytest backend/tests -q                 # 158 tests: M1 + M2 + M3
-python -m pytest backend/tests -q -m "not slow"   # skip the model-backed ones
+## Run
+
+**API**, from `backend/`. It runs on the host, not in Docker, because it
+needs the GPU.
+
+```powershell
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
 ```
 
-## Demo over HTTPS, without an e-mail server
+- **Start-up:** both models load and warm up first (about 10–20 s). `GET /ready`
+  answers 503 until they are ready, then 200.
+- **One worker on purpose:** each extra worker would load its own copy of
+  the models (about 3.4 GB of VRAM).
+- **`--no-proxy-headers` is deliberate:** client addresses are trusted only
+  from Caddy, by shared secret ([docs/https.md](docs/https.md)).
 
-This walkthrough shows the whole system, the optional OTP sign-in included,
-on one machine. Codes are printed in the API's console instead of being
-e-mailed. That console delivery works **only** with
-`ENVIRONMENT=development`.
+**Front end for development** (hot reload; `/api` is proxied to :8000):
 
-1. **One-time setup:**
-   - the database is up and migrated (Quick start above);
-   - the SPAI weights are converted;
-   - Docker Desktop is running.
-2. **In `backend/.env`:**
+```powershell
+cd frontend; npm run dev        # http://localhost:3000
+```
 
-   ```ini
-   ENVIRONMENT=development      # dev-only surface: console OTP codes, /docs
-   REQUIRE_2FA=True             # turn the optional OTP 2FA ON for the demo
-   EMAIL_BACKEND=console
-   PROXY_SHARED_SECRET=<python -c "import secrets; print(secrets.token_hex(32))">
-   ```
+The interface works like this:
+- **Signed out:** a landing page with **Create Account**, **Sign In** and
+  **Admin Login** (the Administrator Portal).
+- **Signed in:** four tabs:
+  1. Forensic Detection;
+  2. User Scan History;
+  3. Admin Dashboard & Analytics;
+  4. 1-Click Verification.
 
-3. **Build the front end:**
+With `ENVIRONMENT=development`, M3's legacy static dashboard is also served
+at <http://127.0.0.1:8000/>, and the API reference at `/docs`.
 
-   ```powershell
-   cd frontend; npm install; npm run build; cd ..
-   ```
+## HTTPS
 
-4. **Start the API** on the host. Leave this console open: the codes appear
-   here.
+Caddy runs in Docker in front of the API and serves the production build of
+the front end.
 
-   ```powershell
-   cd backend
-   python seed_admin.py          # once, if there is no admin yet
-   python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
-   ```
+```powershell
+cd frontend; npm run build; cd ..                     # once per front-end change
+docker compose --env-file backend/.env --profile https-dev up -d caddy-dev
+# open https://localhost  (HTTP redirects to HTTPS)
+docker compose --env-file backend/.env --profile https-dev stop caddy-dev
+```
 
-5. **Start the HTTPS proxy**, in a second console at the repository root:
+| Profile | Certificate | Listens on | HSTS |
+|---|---|---|---|
+| `https-dev` | Caddy's local CA | 127.0.0.1:80/443 | no |
+| `https-prod` | `TP_TLS=internal`, or an e-mail address for a real Let's Encrypt certificate (`TP_SITE_ADDRESS` = your domain) | all interfaces | yes |
 
-   ```powershell
-   docker compose --env-file backend/.env --profile https-dev up -d caddy-dev
-   ```
+- **Run one profile at a time.** If ports 80/443 are taken, set
+  `TP_HTTP_PORT` and `TP_HTTPS_PORT`.
+- **Browser warning:** stop it by trusting the local CA **on this machine
+  only**:
 
-6. **Open <https://localhost>.** The browser warns about the certificate
-   until you trust Caddy's local CA, on this machine only (see
-   [docs/https.md](docs/https.md)).
-7. **Register.** The page asks for a code. Look in the API console for
-   `2FA OTP simulated in console for you@example.com: code=123456` and enter
-   it.
-   - Sign out and back in: the password first, then a fresh code.
-   - Admins use **Admin Login** (the Administrator Portal, `/admin/login`), then enter the code printed in
-     the console.
-8. **Analyse an image**, then open History, the PDF report and (as an admin)
-   the Admin screens.
-9. **Stop:**
+  ```powershell
+  certutil -user -addstore Root infra\caddy\data\dev\caddy\pki\authorities\local\root.crt
+  ```
 
-   ```powershell
-   docker compose --env-file backend/.env --profile https-dev stop caddy-dev
-   ```
+  The CA's private key lives in `infra/caddy/data/`, which is gitignored.
+  Never commit it or share it.
+- **Security headers:** Caddy sets a strict CSP (no inline or eval scripts),
+  `nosniff`, `no-referrer`, `DENY` and `Permissions-Policy`, and caps
+  request bodies.
 
-   Then stop uvicorn with Ctrl+C.
+Removing trust, the ACME path and the reasoning behind each choice are in
+[docs/https.md](docs/https.md).
 
-**Defaults and limits.**
-- **2FA is optional and off by default.** With `REQUIRE_2FA` unset or False:
-  - registration and sign-in need no code;
-  - `/auth/otp/*` answers 403.
-- **Production never issues codes without real e-mail.**
-  - `ENVIRONMENT` unset counts as production.
-  - With `REQUIRE_2FA=True` and no SMTP settings, sign-in and registration
-    answer `503 OTP_DELIVERY_UNAVAILABLE`.
-  - Codes are never printed.
-- How sign-in and OTP work: [docs/auth-hardening.md](docs/auth-hardening.md).
+## Tests
+
+**Backend**, from the repository root:
+
+```powershell
+python -m pytest backend/tests -q                  # everything (SQLite scratch DB); ~7 min with the GPU
+python -m pytest backend/tests -q -m "not slow"    # skip the model-backed tests
+python -m pytest backend/tests/m1 -q               # M1's own suite
+python -m pytest backend/tests/m3 -q               # M3's own suite
+```
+
+The same suite runs on PostgreSQL. The database name must end in `_test`,
+because the suite empties every table. Built from `.env`, the password is
+never typed:
+
+```powershell
+$u = (Select-String -Path backend\.env -Pattern '^DATABASE_URL=(.*)/[^/]*$').Matches[0].Groups[1].Value
+$env:TEST_DATABASE_URL = "$u/truepixels_test"; python -m pytest backend/tests -q; Remove-Item Env:TEST_DATABASE_URL
+```
+
+- **Isolation:** tests never touch the real database or `storage/`. Scratch
+  databases (`*_test`, `*_regression`) are created when missing; any other
+  name is refused.
+- **Last run (2026-10-05):** SQLite 416 passed and 7 skipped (the skips are
+  PostgreSQL-only tests); PostgreSQL 423 passed.
+
+**Front end:**
+
+```powershell
+cd frontend; npm run typecheck; npm run lint; npm run build
+```
+
+**Browser (Playwright, headless Chromium).** The suites drive the real app.
+**Run them only against a scratch API and database**, because they create
+accounts:
+
+```powershell
+pip install playwright==1.55.0; python -m playwright install chromium
+```
+
+The scripts are in `frontend/e2e/`:
+- `run_manual_flows.py`: the user flows;
+- `run_admin_flows.py`: the admin flows;
+- `run_prod_smoke.py`: a production-profile smoke test.
+
+Set `TP_BASE` to choose the target (`http://localhost:3000` or
+`https://localhost`). Any CSP or mixed-content message in the browser fails
+the run. Steps and arguments: [docs/manual-test-react.md](docs/manual-test-react.md).
+
+**HTTPS acceptance checks**, with TLS verified against Caddy's CA. They
+cover the redirect, headers, CORS, client-address spoofing and body limits:
+
+```powershell
+python infra/check_https.py --profile dev --api http://127.0.0.1:8000
+```
+
+**Score regression (NF.5):** every score is compared bit for bit, through the
+real HTTP path:
+
+```powershell
+python ml/evaluation/regression_check.py --compare
+```
+
+## Demo
+
+The whole system on one machine. Set up as above, then:
+
+1. **Codes.** In `backend/.env`, set `REQUIRE_2FA=True`. Then choose one:
+   - real e-mail: `EMAIL_BACKEND=smtp` with a Gmail app password;
+   - no mail server: `ENVIRONMENT=development` and `EMAIL_BACKEND=console`.
+     Codes then appear in the API window as
+     `2FA OTP simulated in console for you@example.com: code=123456`.
+2. **Start.** Run the API (keep its window visible), build the front end, and
+   start `caddy-dev` (see [Run](#run) and [HTTPS](#https)). Open
+   **https://localhost**.
+3. **Create Account,** then enter the code. You land on **1. Forensic
+   Detection**.
+4. **Analyse an image** (drag and drop or choose a file; JPG/PNG, at most
+   10 MB). Show:
+   - the verdict, the confidence and its band;
+   - the three scores: semantic, frequency and fused;
+   - the two explanation panels: the SigLIP 2 attention rollout and the SPAI
+     patch spectrum;
+   - **PDF report**.
+
+   Confidence is always in the predicted class and never below 50 %.
+5. **Good images to try**, from the evaluation set: a DALL·E 2 image, a real
+   camera photo, and a real photo the system gets **wrong** (to show its
+   limits).
+6. **2. User Scan History:** past results, then **Test Security Barrier**,
+   which proves another user's result cannot be opened.
+7. **4. 1-Click Verification → Run Verification:** live checks against every
+   seam.
+8. **Sign Out** (it asks first). Then **Admin Login** → **3. Admin Dashboard
+   & Analytics**:
+   - an overview of figures that all come from the API;
+   - logs;
+   - users (disable or enable, with a confirmation);
+   - models: register a fusion configuration, check its quality gate, see a
+     bad one refused, and roll back.
+9. **Stop:** `docker compose --env-file backend/.env --profile https-dev stop caddy-dev`,
+   then press Ctrl+C in the API window.
+
+**Defaults and limits:**
+- 2FA is optional and off by default. Without it, the `/auth/otp/*`
+  endpoints answer 403.
+- Production never prints a code, and refuses to issue one without real
+  e-mail.
+- Details: [docs/auth-hardening.md](docs/auth-hardening.md).
 
 ## What it measures, honestly
 
-Benchmarked on **Synthbuster** (9 generators) versus **RAISE-1k** camera
-originals, 99 images per class, scene-paired, with 95 % intervals. The fusion
+Benchmarked on **Synthbuster** (9 generators) against **RAISE-1k** camera
+originals: 99 images per class, scene-paired, with 95 % intervals. The fusion
 weight and threshold (w = 0.25, τ = 0.7558) were chosen on a **separate
-validation split** of 198 images per class that shares no scene with this one,
-so these are held-out figures:
+validation split** that shares no scene with this one, so these are held-out
+figures:
 
 | branch | accuracy | recall | false positives on real | AUC |
 |---|---|---|---|---|
@@ -161,60 +321,67 @@ so these are held-out figures:
 from 2022–23 generators versus pristine Nikon RAW-derived TIFFs, 99 images per
 class.* It is not "the accuracy of the system".
 
-What else the benchmark established, including the inconvenient parts:
-
 - **Resizing breaks this system; recompression barely touches it.** JPEG q75
-  on both classes costs 0.019 AUC; halving both takes SPAI's recall from
-  0.939 to 0.616. Do not downscale before analysis.
-- **Fusion buys robustness, not peak accuracy.** On pristine images fusion is
-  *worse* than SPAI alone; under degradation it is better.
-- **The false-positive target is still missed, narrowly** — 0.111 against a
-  ≤ 0.10 requirement, after choosing the operating point specifically to meet
-  it. The validation split predicted 0.096; the held-out set came in worse,
-  which is what two constants chosen on 198 images per class buys you.
-- **Behaviour on post-2023 generators is unknown**, and the one modern image
-  tried was missed outright with full confidence.
-- **Real photographs that have been through a learned enhancer** — phone
-  camera pipelines, upscalers — look synthetic to the frequency branch.
+  costs 0.019 AUC. Halving both classes takes SPAI's recall from 0.939 to
+  0.616. Never downscale before analysis.
+- **Fusion buys robustness, not peak accuracy.** On pristine images it is
+  worse than SPAI alone; under degradation it is better.
+- **The false-positive target is still missed, narrowly:** 0.111 against a
+  requirement of ≤ 0.10.
+- **Scores are uncalibrated.** A confidence of 0.93 is not a 93 % chance of
+  being right.
+- **Behaviour on post-2023 generators is unknown.** Real photos that went
+  through a learned enhancer (phone pipelines, upscalers) look synthetic to
+  the frequency branch.
 
-Full results, every control and degradation arm, and the per-generator
-breakdown: **[ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md)**.
+Every control, degradation arm and per-generator figure:
+**[ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md)**.
 
 ## Project structure
 
 ```text
-backend/app/
-  m1_access/     M1 — accounts, sessions, upload, validation, preprocessing
-  m2_analysis/   M2 — the two detectors, fusion, prediction records, registry
-    vendor/spai/ SPAI's model code as published (Apache-2.0) + LICENSE + NOTICE
-  m3_results/    M3 — results, history, PDF reports, administration, logging
-  shared/        config, database, and the C1–C5 contracts between modules
-backend/tests/   M2's suite plus M1's and M3's, unchanged
-frontend/        the React app (primary UI); m3_dashboard/ is M3's legacy static dashboard
-ml/evaluation/   evaluate.py, select_threshold.py, and RESULTS.md
-ml/datasets/     fetch scripts for the evaluation sets (no images committed)
-storage/         local artefacts: uploads, model weights (all gitignored)
-docs/            contracts, decisions, session-log archive
-PRD*.md          the four product requirement documents
+backend/
+  app/m1_access/     M1 - accounts, sign-in + OTP, throttling, upload validation, storage
+  app/m2_analysis/   M2 - the two detectors, fusion, explainability, model registry
+    vendor/spai/     SPAI's model code as published (Apache-2.0) + LICENSE + NOTICE
+  app/m3_results/    M3 - results, history, PDF reports, administration, audit log
+  app/shared/        config, database, proxy trust, the C1-C5 module contracts
+  migrations/        Alembic - the schema
+  scripts/           SPAI conversion, gate reference set, SQLite->PG copy, rotation check
+  tests/             M1 + M2 + M3 suites
+frontend/
+  src/               the React app (pages/, pages/admin/, components/, api/)
+  e2e/               Playwright suites
+  m3_dashboard/      M3's legacy static dashboard (development only)
+infra/               Caddyfiles (dev/prod) and the HTTPS acceptance checks
+ml/evaluation/       benchmark, threshold selection, regression check, RESULTS.md
+ml/datasets/         fetch scripts for the evaluation sets (no images committed)
+storage/             runtime files: uploads, panels, model weights (gitignored)
+docs/                contracts, HTTPS, auth hardening, secret rotation, manual tests
+PRD*.md, SRS.pdf     requirements
 ```
 
 ## Documentation
 
 | File | What it is for |
 |---|---|
-| **[CLAUDE.md](CLAUDE.md)** | Working notes: the models, the rules that are easy to break, how to run, milestones, what is real and what is not. Read this before changing anything. |
+| **[CLAUDE.md](CLAUDE.md)** | Working notes: the models, the rules that are easy to break, what is real and what is not. Read this before changing anything. |
 | [changes.md](changes.md) | Every edit made to M1's and M3's code during integration, and why |
-| [ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md) | Every measurement, with its intervals and its limits |
-| [docs/contracts/](docs/contracts/) | The C1–C5 module seams, and the documented deviations from PRD4 |
+| [ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md) | Every measurement, with its intervals and limits |
+| [docs/contracts/](docs/contracts/) | The C1–C5 module seams and the documented deviations from PRD4 |
+| [docs/https.md](docs/https.md) | The HTTPS setup, proxy trust, CSP, local CA, ACME |
+| [docs/auth-hardening.md](docs/auth-hardening.md) | Sign-in, OTP challenges, throttling |
+| [docs/rotate-secrets.md](docs/rotate-secrets.md) | Rotating the database password and the JWT key without printing them |
+| [docs/manual-test-react.md](docs/manual-test-react.md) | Manual and automated browser test steps |
 
 ## Licences
 
-The application code is this project's. Two third-party components carry their
-own terms, and both matter:
+The application code is this project's. Two third-party components carry
+their own terms:
 
-- **SPAI** (`backend/app/m2_analysis/vendor/spai/`) — Apache-2.0, code and
-  weights. See its `NOTICE` for the list of local modifications, none of which
-  change the arithmetic.
-- **Synthbuster**, used only as evaluation data and never committed —
-  **CC-BY-NC-SA-4.0, non-commercial**. RAISE-1k is research-use. Neither is
-  redistributed here; `ml/datasets/fetch_*.py` fetch them on request.
+- **SPAI** (`backend/app/m2_analysis/vendor/spai/`): Apache-2.0, code and
+  weights. Its `NOTICE` lists the local modifications, none of which change
+  the arithmetic.
+- **Synthbuster**, used only as evaluation data and never committed:
+  **CC-BY-NC-SA-4.0, non-commercial**. RAISE-1k is research-use only.
+  Neither is redistributed here.

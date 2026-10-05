@@ -1,12 +1,13 @@
-# Runtime Storage
+# Runtime storage
 
-Local-development layout for file references used by the backend. Production deployments should map these paths to managed or shared persistent storage.
+Files the backend writes at run time. **Everything here is gitignored.**
 
-## Folders
+- `uploads/`: validated originals, EXIF-stripped, stored under their content
+  hash.
+- `explainability/`: the explanation panels (PNG) for each prediction.
+- `models/`: `spai.safetensors`, uploaded model heads, and the quality gate's
+  reference cache.
+- `tensors/`: no longer written (M1's old CLIP tensor). It can be empty.
 
-- `uploads/`: validated original image files and temporary upload workspace.
-- `tensors/`: deterministic `.npy` tensors produced by M1.
-- `models/`: registered model artefacts used by M2.
-- `explainability/`: visualisations produced by M3.
-
-Do not commit user images, model binaries, tensors, or generated reports.
+Never commit user images or model files. Tests use a scratch directory
+(`STORAGE_DIR`), never this one.
