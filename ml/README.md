@@ -18,4 +18,8 @@ Runtime inference code lives in `backend/app/m2_analysis/detectors.py`
   weights and reporting numbers is not training. `evaluate.py` runs a labelled
   set through the production path; `select_threshold.py` picks the decision
   threshold on a validation split; **`RESULTS.md` holds every measurement**.
+- `calibration/`: fits the two constants per map that turn the combined score
+  into the displayed P(AI) (`fit_calibration.py`, validation split only), and
+  pre-registers the certainty band. Constants land in
+  `backend/app/shared/config.py`; no model weight is involved.
 - `notebooks/`: exploratory analysis of detector behaviour.

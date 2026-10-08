@@ -56,6 +56,7 @@ class DetectorConfig:
     role: str  # "primary"
     revision: str | None = None
     head: dict | None = None  # uploaded head spec; None = the checkpoint's own
+    artifact_sha256: str | None = None  # the D3 row's; keys the P(AI) map (calibration.py)
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ class SpectralDetectorConfig:
     resize_to: int | None
     feature_batch: int
     head: dict | None = None
+    artifact_sha256: str | None = None  # the D3 row's; keys the P(AI) map (calibration.py)
 
 
 @dataclass(frozen=True)
@@ -139,10 +141,12 @@ def baseline() -> ActiveModelSet:
             ai_is_positive=config.DETECTOR_FREQUENCY_AI_IS_POSITIVE,
             resize_to=config.DETECTOR_FREQUENCY_RESIZE_TO,
             feature_batch=config.DETECTOR_FREQUENCY_FEATURE_BATCH,
+            artifact_sha256=config.DETECTOR_FREQUENCY_WEIGHTS_DIGEST,
         )
     return ActiveModelSet(
         primary=DetectorConfig(model_id=None, checkpoint=config.DETECTOR_PRIMARY, role="primary",
-                               revision=config.DETECTOR_PRIMARY_REVISION),
+                               revision=config.DETECTOR_PRIMARY_REVISION,
+                               artifact_sha256=semantic_weights_digest()),
         frequency_detector=frequency,
         spectral_features=_spectral_features(),
         fusion=FusionModelConfig(model_id=None, strategy=config.FUSION_STRATEGY,
@@ -259,11 +263,11 @@ def _set_from_rows(rows: dict) -> ActiveModelSet:
             model_id=fr.model_id, name=fr.model_name, filename=fh["weights_file"],
             weights_digest=fh["weights_digest"], ai_is_positive=fh["ai_is_positive"],
             resize_to=fh.get("resize_to"), feature_batch=config.DETECTOR_FREQUENCY_FEATURE_BATCH,
-            head=fh.get("head"))
+            head=fh.get("head"), artifact_sha256=fr.artifact_sha256)
     return ActiveModelSet(
         primary=DetectorConfig(model_id=sem.model_id, checkpoint=sem.hyperparameters["checkpoint"],
                                role="primary", revision=sem.hyperparameters["revision"],
-                               head=sem.hyperparameters.get("head")),
+                               head=sem.hyperparameters.get("head"), artifact_sha256=sem.artifact_sha256),
         frequency_detector=frequency,
         spectral_features=_spectral_features(),
         fusion=FusionModelConfig(model_id=fus.model_id, strategy=h["strategy"],

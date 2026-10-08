@@ -16,6 +16,89 @@ and summary JSON land in `ml/outputs/`.
 
 ---
 
+### The displayed P(AI): fit and certainty band on validation, 2026-10-08
+
+**What was fitted.** Two constants per map, a and b, in
+P(AI) = sigmoid(a·logit(S) + b), with logit clipped at 1e-6. The output is shown capped
+to [0.01, 0.99]. The maps were fitted on the validation split, 198 real and 198
+generated images from scenes 99–296. They are disjoint from the test set. The inputs
+were the per-image scores already on disk in `sbr_val_20261001T071305Z.csv`; S was
+recomputed at w = 0.25 from the stored branch scores. No model weight was touched.
+
+- Script: `ml/calibration/fit_calibration.py`.
+- Output: `ml/outputs/calibration_fit_20261008T093111Z.json` and
+  `reliability_val_20261008T093111Z.png`.
+- AFTER figures come from 5-fold stratified cross-validated predictions (seed 20260907),
+  so each image is scored by a map that did not see it. Intervals are 95 % stratified
+  bootstraps; proportions use Wilson intervals.
+
+| map | a | b | near-MLE a, b | separation warning |
+|---|---|---|---|---|
+| fused (S at w = 0.25) | 0.9294 | −0.2230 | 0.9373, −0.2264 | none |
+| semantic-only (proxy) | 0.2292 | 0.0320 | 0.2296, 0.0321 | none |
+
+**Fused score: the map is close to the identity and buys nothing measurable.**
+
+| | raw S | P(AI), CV | CV − raw |
+|---|---|---|---|
+| Brier | 0.1003 [0.080, 0.121] | 0.1022 [0.082, 0.122] | +0.0019 [−0.0003, +0.0042] |
+| log loss | 0.352 [0.284, 0.423] | 0.350 [0.291, 0.414] | −0.002 [−0.013, +0.009] |
+| ECE, equal-count, 10 bins | 0.056 [0.039, 0.092] | 0.052 [0.041, 0.093] | |
+| mean P − AI fraction | +0.026 [0.003, 0.049] | +0.000 [−0.023, +0.023] | |
+
+- The only clear effect is calibration-in-the-large: raw S over-predicts AI by
+  2.6 points on average, and the map removes that.
+- The reliability curve is under-confident just above τ (bin mean S 0.76 → 82.5 % AI)
+  and over-confident near the top (bin mean S 0.97 → 87 % AI). A single monotone
+  sigmoid cannot correct both ends.
+- **Honest wording:** the combined score at w = 0.25 is *approximately* calibrated on
+  validation. P(AI) is a near-identity mapping of it, plus a cap.
+- The 0.113 "ECE" quoted earlier in this file and in the docs is a different number:
+  top-label ECE, equal-width bins, at w = 0.5. It does not describe what runs now.
+- ECE at n = 396 has a noise floor of a few points. Brier and log loss are the primary
+  measures.
+
+**Semantic-only: the map matters.**
+
+- CV Brier drops from 0.282 to 0.229 (difference −0.053 [−0.074, −0.032]).
+- CV log loss drops from 0.934 to 0.650 (difference −0.285 [−0.384, −0.194]).
+- ECE drops from 0.224 to 0.055.
+- The map is very flat. P = 0.1 needs a semantic score of 6e-5, and P = 0.9 needs
+  0.9999. No validation semantic score came that close (range 0.0032–0.9997), so
+  coverage is 0/396 and in practice every semantic-only result is inconclusive.
+- Every validation image is ≥ 256 px, so this is a **proxy** fitted on the semantic
+  scores of full-size images. It is untested on the sub-224 px uploads it actually
+  serves.
+- Clip sensitivity: 0 of 396 semantic scores sit at the clip bound at eps = 1e-6,
+  1e-9 or 1e-12, and a_sem and b_sem are identical at all three. The clip does not
+  drive the fit.
+
+**Sanity checks.**
+
+- Both maps are monotonic increasing (a > 0).
+- The fused map gives **P(AI | S = τ = 0.7558) = 0.696 [0.640, 0.766]**, so not below
+  0.5. τ sits above even odds because it was pushed up to hold FPR ≤ 10 %.
+- On the fused map, P = 0.1, 0.5 and 0.9 are reached at S = 0.107, 0.560 and 0.931.
+- Consequence: Real verdicts with S in [0.560, 0.7558) display P(AI) > 0.5. That is
+  36 of the 219 Real verdicts on validation. The UI words these as "leans AI, below
+  the detection threshold".
+
+**Certainty band, pre-registered at 0.90 before the fit was first run.** An image is
+"confident" iff P(AI) ≥ 0.90 or ≤ 0.10. Figures below come from the CV predictions:
+
+| | value |
+|---|---|
+| coverage (confident) | 0.452 [0.404, 0.501], 179 / 396 |
+| τ-verdict accuracy, confident | **0.950 [0.907, 0.973]** |
+| τ-verdict accuracy, inconclusive | 0.770 [0.709, 0.821] |
+
+In-sample figures are 0.462 coverage and 0.951 accuracy. **The revised AC2 is met on
+validation.** It requires τ-verdict accuracy within 'confident' ≥ 85 %, and both the
+point estimate (0.950) and the Wilson lower bound (0.907) clear it. This is
+in-distribution; the frozen-map pilot on the test set is the shift test.
+
+---
+
 ### Explainability: faithfulness and cost, 2026-10-03
 
 **What the semantic map is.** It is an attention rollout of the SigLIP 2

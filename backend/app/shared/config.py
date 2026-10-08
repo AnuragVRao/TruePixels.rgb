@@ -326,21 +326,79 @@ FUSION_WEIGHT = 0.25
 # false-positive rate of 0.162 against a 0.10 target. tau belongs with
 # FUSION_WEIGHT above: changing either without the other invalidates both.
 #
-# What it is NOT: an operating point chosen to satisfy MM2.6. PRD2 FR-03 wants
-# tau selected on a validation split to hold the false-positive rate on real
-# photographs at or below 0.10. MEASURED 2026-09-30 (ml/evaluation/RESULTS.md):
-# at this tau the FPR is 0.162 [0.10, 0.25] on pristine camera TIFFs, so
-# **MM2.6 is missed**. Raising tau trades recall for it - tau = 0.99 gave
-# FPR 0.051 at recall 0.798 on the test set - but choosing tau from the set you
-# then report is fitting on the test set. Use ml/evaluation/select_threshold.py
-# on a disjoint validation split instead.
+# Held out (RESULTS.md, 2026-10-01): FPR 0.111 [0.06, 0.19] on the test set,
+# so MM2.6 is still narrowly missed. Re-tuning tau on the test set is not the
+# fix; a larger fresh validation split is.
 FUSION_TAU = 0.7558
 
-# Temperature scaling (PRD2 FR-04). A no-op at 1.0: nothing is fitted here.
-# MEASURED 2026-09-30: expected calibration error is 0.097 (SPAI) and 0.089
-# (fused) against MM2.5's <= 0.05, so **the fused score is not calibrated and
-# MM2.5 is missed**. A temperature fitted on a disjoint validation split would
-# close it, but T and tau are coupled - combine() scales the fused score and
-# only then compares it to tau - so adopting a T means re-selecting tau
-# underneath it, and changes every confidence figure shown to a user.
+# Temperature scaling (PRD2 FR-04). A no-op at 1.0 and kept only because it is
+# part of the D3 fusion-configuration schema and upload format. It is applied
+# BEFORE tau, so a T != 1 would move every verdict. The displayed P(AI) comes
+# from the separate map below, which is applied AFTER the verdict and never
+# changes it.
 CALIBRATION_TEMPERATURE = 1.0
+
+
+# --------------------------------------------------------------------------
+# P(AI) shown to the user, and the certainty band (2026-10-08)
+# --------------------------------------------------------------------------
+#
+# P(AI) = clip(sigmoid(a * logit(S) + b + log(prior / (1 - prior))), P_MIN, P_MAX)
+#
+# S is the combined score (or the semantic score alone when SPAI has no
+# evidence). Two constants per map, fitted by ml/calibration/fit_calibration.py
+# on the validation split (scenes 99-296, disjoint from the test set). No model
+# weight is touched (section 0). The verdict is still "AI iff S >= tau": this
+# map only decides the number shown next to it.
+#
+# What the fit found: on the combined score at w = 0.25 the map is close to the
+# identity (a = 0.93, b = -0.22), because S is already approximately calibrated
+# on validation (ECE 0.056, with a noise floor of a few points at n = 396).
+# Cross-validated, it changes Brier by +0.002 [-0.000, +0.004] and log loss by
+# -0.002 [-0.013, +0.009]: no measurable gain. The semantic-only map does
+# matter (Brier 0.282 -> 0.229, log loss 0.934 -> 0.650). The semantic-only map is
+# fitted on full-size images: no validation image is below 224 px, so it is a
+# proxy for the tiny uploads it serves.
+#
+# A map is valid only for the configuration it was fitted on. The fused map
+# needs the active fusion weight AND both detectors' D3 artifact_sha256 to
+# match the CALIBRATION_FIT_* values (plus SPAI's sign and resize setting,
+# which change scores without changing the weights' hash); the semantic-only
+# map needs the semantic hash. Otherwise P(AI) is null - never a stale number.
+CALIBRATION_LOGIT_EPS = 1e-6
+# n ~ 400 cannot establish error rates finer than about 1 %: never show more.
+CALIBRATION_P_MIN = 0.01
+CALIBRATION_P_MAX = 0.99
+# Prior odds of AI among submitted images. The fit used a BALANCED split (198 /
+# 198), so 0.5 adds nothing. Any other value shifts the logit by
+# log(prior / (1 - prior)) AND VOIDS the validated certainty coverage, the
+# accuracy-within-confident figure and AC2: they were measured at 0.5. It is
+# an API parameter, deliberately not exposed in the UI.
+CALIBRATION_PRIOR = 0.5
+
+# Certainty: "confident" iff P(AI) >= CERTAINTY_CONFIDENT_P or
+# <= 1 - CERTAINTY_CONFIDENT_P, otherwise "inconclusive". Pre-registered at
+# 0.90 before the fit was run. On validation (5-fold CV): 45 % of images are
+# confident, and the tau-verdict is right on 95.0 % [90.7, 97.3] of them
+# (AC2 >= 85 %: met) vs 77.0 % [70.9, 82.1] of the inconclusive ones.
+# The semantic-only map is so flat that "confident" needs a semantic score
+# <= ~6e-5 or >= ~0.9999; no validation image came that close (0.0032 -
+# 0.9997), so in practice a semantic-only result is inconclusive.
+CERTAINTY_CONFIDENT_P = 0.90
+
+# ---- written by ml/calibration/fit_calibration.py; do not edit by hand ----
+CALIBRATION_FIT_SOURCE = "ml/outputs/sbr_val_20261001T071305Z.csv"
+CALIBRATION_FIT_FILES_SHA256 = "c88bd77ebf14237d7417ed89fb13b4a2fcbd2d189aeb3ef02c02d7d6634d7735"
+CALIBRATION_FIT_N = 396
+CALIBRATION_FIT_DATE = "2026-10-08"
+CALIBRATION_FIT_WEIGHT = 0.25
+CALIBRATION_FIT_SEMANTIC_SHA256 = "8560c44d0f9fbe9a939a3dbbff4c2d88047b073beeb1410e7afc2b567e6628f4"
+CALIBRATION_FIT_FREQUENCY_SHA256 = "0151f7570b540c305fcbdae0221bccad9399998a6c3938c9c384c323e5dfb42e"
+CALIBRATION_FIT_FREQUENCY_AI_IS_POSITIVE = True
+CALIBRATION_FIT_FREQUENCY_RESIZE_TO = None
+CALIBRATION_FUSED_A = 0.9293583950623755
+CALIBRATION_FUSED_B = -0.22303485583043137
+CALIBRATION_FUSED_REF = "platt-a26b43d86be6"
+CALIBRATION_SEMANTIC_ONLY_A = 0.22919994124762147
+CALIBRATION_SEMANTIC_ONLY_B = 0.03200240755463338
+CALIBRATION_SEMANTIC_ONLY_REF = "platt-23a4d25095bf"
