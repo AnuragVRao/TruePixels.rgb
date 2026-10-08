@@ -173,22 +173,35 @@ arm that differs from validation.
 - The map again makes no measurable difference to Brier or log loss versus raw S. What it
   does fix is the average: CITL drops from +0.030 to +0.005.
 
-**AC2.**
+**AC2, as pre-registered (pooled): met.** The τ-verdict is right on 0.980 [0.929, 0.994]
+of confident results, against a target of ≥ 0.85.
 
-- Pooled, it is met: 0.980, Wilson lower bound 0.929.
-- On the confident-AI side alone, the point estimate clears 0.85 (0.955), but the Wilson
-  lower bound is 0.849, one hair below. That matches validation, where the lower bound
-  was 0.821.
-- The confident-AI side is where the system's errors live: genuine photographs shown at
+**Limitation: the confident-AI side alone.** The 85 % target is met by the point
+estimate but is **not established** at the Wilson-lower-bound level:
+
+| set | confident-AI right | accuracy |
+|---|---|---|
+| validation (CV) | 75 / 83 | 0.904 [0.821, 0.950] |
+| pilot | 42 / 44 | 0.955 [0.849, 0.987] |
+| *both, pooled (exploratory, not pre-registered)* | *117 / 127* | *0.921 [0.861, 0.957]* |
+
+- Every error on this side is a genuine photograph shown as AI Generated with
   P(AI) ≥ 0.90.
+- Across both sets that happened to 10 of 297 genuine photographs:
+  0.034 [0.018, 0.061].
+- The 0.90 cutoff stays frozen. The pilot has now been seen, so any change to the band
+  would need a fresh held-out set.
 
-**Native vs cropped reals: not material** by the pre-registered rule. The CITL gap is
-0.023, against a threshold of 0.05, and the Brier intervals overlap. Cropping the reals to
-1024² moves things in the expected direction:
+**Native vs cropped reals.** Cropping raised Brier by 0.022 and confident-AI false alarms
+from 2 to 4. It was **not flagged by the pre-registered rule**: the CITL gap was 0.023
+against a threshold of 0.05, and the unpaired Brier intervals overlap.
 
-- Brier worsens by 0.022;
-- confident-AI false positives rise from 2 to 4;
-- the generated class is identical in both arms, so per-generator figures repeat.
+- *Descriptive supplement, added after the verdict and not changing it:* a paired
+  bootstrap over the 198 scene-matched images (stratified, 2000 resamples, seed 20260907)
+  puts the Brier difference, cropped minus native, at **+0.022 [+0.002, +0.043]**.
+- With pairing the interval excludes zero, so the effect is small but probably real.
+- The generated class is identical in both arms, so the difference comes entirely from
+  the reals, and per-generator figures repeat.
 
 **Per generator (n = 11 each, indicative only).** Mean P(AI) on the generated images is
 lowest for DALL·E 3 (0.67, 6/11 detected) and highest for SD 1.4 (0.92). No generated
