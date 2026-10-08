@@ -177,7 +177,7 @@ def run(database_url: str | None = None, xai: bool = False) -> dict:
 
 
 def latest() -> Path:
-    files = sorted(OUTPUT_DIR.glob("*.json"))
+    files = sorted(OUTPUT_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime)  # newest by time, not name
     if not files:
         raise SystemExit(f"no baseline in {OUTPUT_DIR}; run with --record first")
     return files[-1]

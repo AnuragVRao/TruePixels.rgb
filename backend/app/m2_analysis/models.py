@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -101,7 +102,16 @@ class Prediction(Base):
                                                     name="fk_predictions_frequency_model"), nullable=True)
     branch_model_ids = Column(JSON, nullable=True)  # kept in sync: {"semantic": id, "frequency": id|null}
     predicted_class = Column(String(14), nullable=False)  # 'Real', 'AI Generated'
+    # LEGACY (C2 v1): confidence in the predicted class, a margin from tau.
+    # Still written (dual-write) so M3 keeps working until it reads p_ai; a
+    # later migration drops it. Nothing new may read it.
     confidence_score = Column(Float, nullable=False)
+    # C2 v2 (migration 0006): P(AI) for EITHER verdict, its certainty label,
+    # and which fitted map produced it. All three NULL together when the
+    # active configuration was not the one the map was fitted on.
+    p_ai = Column(Float, nullable=True)
+    certainty = Column(String(12), nullable=True)  # 'confident' | 'inconclusive'
+    calibration_ref = Column(String(32), nullable=True)
     semantic_score = Column(Float, nullable=False)
     # Nullable on purpose: the frequency branch legitimately produces no
     # score when it is switched off, or when the image is below SPAI's 224px
@@ -126,6 +136,11 @@ class Prediction(Base):
 
     __table_args__ = (
         Index("idx_pred_time", prediction_timestamp.desc()),
+        CheckConstraint("p_ai IS NULL OR (p_ai >= 0.01 AND p_ai <= 0.99)", name="chk_pred_p_ai_range"),
+        CheckConstraint("(certainty IS NULL) = (p_ai IS NULL) AND "
+                        "(certainty IS NULL OR certainty IN ('confident', 'inconclusive'))",
+                        name="chk_pred_certainty"),
+        CheckConstraint("(calibration_ref IS NULL) = (p_ai IS NULL)", name="chk_pred_calibration_ref"),
     )
 
 

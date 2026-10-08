@@ -169,9 +169,12 @@ async def run_detection(
             frequency_model_id=frequency_model_id,
             branch_model_ids={"semantic": models.primary.model_id, "frequency": frequency_model_id},
             predicted_class=predicted_class,
-            # Legacy NOT NULL column, dropped by the next migration; nothing displays it.
+            # Legacy NOT NULL column (dual-write until it is dropped); nothing new reads it.
             confidence_score=fusion.legacy_confidence_score(fusion_score, models.fusion.tau,
                                                             predicted_class),
+            p_ai=shown.p_ai,
+            certainty=shown.certainty,
+            calibration_ref=shown.ref,
             semantic_score=semantic_score,
             frequency_score=frequency_score,
             fusion_score=fusion_score,
