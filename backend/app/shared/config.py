@@ -381,9 +381,9 @@ CALIBRATION_PRIOR = 0.5
 # 0.90 before the fit was run. On validation (5-fold CV): 45 % of images are
 # confident, and the tau-verdict is right on 95.0 % [90.7, 97.3] of them
 # (AC2 >= 85 %: met) vs 77.0 % [70.9, 82.1] of the inconclusive ones.
-# The semantic-only map is so flat that "confident" needs a semantic score
-# <= ~6e-5 or >= ~0.9999; no validation image came that close (0.0032 -
-# 0.9997), so in practice a semantic-only result is inconclusive.
+# Semantic-only results are ALWAYS "inconclusive" (calibration.calibrated):
+# the map's band edges, semantic score <= ~6e-5 or >= ~0.9999, lie outside the
+# validated range 0.0032-0.9997, so a "confident" there would be unmeasured.
 CERTAINTY_CONFIDENT_P = 0.90
 
 # ---- written by ml/calibration/fit_calibration.py; do not edit by hand ----

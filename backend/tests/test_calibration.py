@@ -112,6 +112,14 @@ def test_the_semantic_only_map_is_confident_only_at_the_extremes():
     assert calibration.certainty(calibration.p_ai(0.0, semantic_only=True)) == "confident"
 
 
+@pytest.mark.parametrize("score", [0.0, 3e-5, 0.0032, 0.5, 0.9997, 0.99995, 1.0])
+def test_a_semantic_only_result_is_always_inconclusive(fitted_set, score):
+    """Even where the map crosses the band edges (outside the validated range)."""
+    out = calibration.calibrated(fitted_set, score, semantic_only=True)
+    assert out.p_ai == calibration.p_ai(score, semantic_only=True)
+    assert out.certainty == "inconclusive"
+
+
 def test_the_fitted_configuration_is_calibrated(fitted_set):
     out = calibration.calibrated(fitted_set, 0.9, semantic_only=False)
     assert out.p_ai == calibration.p_ai(0.9, semantic_only=False)

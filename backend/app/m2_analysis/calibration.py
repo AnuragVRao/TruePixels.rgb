@@ -20,8 +20,8 @@ weight is involved. Two maps:
   gain. What it adds is the cap and the provenance check.
 - semantic-only: SPAI had no evidence (image under 224 px), so S is the
   semantic score alone - a weaker, differently distributed score (AUC 0.67 on
-  validation). Its own map is much flatter: "confident" needs a semantic
-  score <= ~6e-5 or >= ~0.9999, which no validation image reached.
+  validation). Its own map is much flatter, and its certainty is ALWAYS
+  "inconclusive" (see ``calibrated``).
 
 Both are measured on unprocessed images (pristine camera TIFFs vs 2022-23
 generators). They say nothing about resized images, on which SPAI misses far
@@ -123,5 +123,12 @@ def calibrated(models: ActiveModelSet, fusion_score: float, *, semantic_only: bo
     if not applies(models, semantic_only=semantic_only):
         return NOT_CALIBRATED
     p = p_ai(fusion_score, semantic_only=semantic_only)
-    ref = config.CALIBRATION_SEMANTIC_ONLY_REF if semantic_only else config.CALIBRATION_FUSED_REF
-    return Calibrated(p_ai=p, certainty=certainty(p), ref=ref)
+    if semantic_only:
+        # Forced, not computed. The map would call a semantic score <= ~6e-5 or
+        # >= ~0.9999 "confident", but every validation semantic score lies in
+        # 0.0032-0.9997, so those band edges are outside anything measured and
+        # no accuracy figure exists for a confident semantic-only result. On
+        # validation the map put 0 of 396 images outside the band, and the
+        # tau-verdict on the semantic score alone was right on 0.593 of them.
+        return Calibrated(p_ai=p, certainty="inconclusive", ref=config.CALIBRATION_SEMANTIC_ONLY_REF)
+    return Calibrated(p_ai=p, certainty=certainty(p), ref=config.CALIBRATION_FUSED_REF)

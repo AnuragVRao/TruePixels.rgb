@@ -95,7 +95,41 @@ recomputed at w = 0.25 from the stored branch scores. No model weight was touche
 In-sample figures are 0.462 coverage and 0.951 accuracy. **The revised AC2 is met on
 validation.** It requires τ-verdict accuracy within 'confident' ≥ 85 %, and both the
 point estimate (0.950) and the Wilson lower bound (0.907) clear it. This is
-in-distribution; the frozen-map pilot on the test set is the shift test.
+in-distribution.
+
+**Split by side** (CV), because the pooled figure hides an asymmetry:
+
+| | n | τ-verdict right | accuracy | ≥ 0.85? |
+|---|---|---|---|---|
+| confident-AI (P ≥ 0.90) | 83 | 75 | 0.904 [0.821, 0.950] | point yes, **Wilson lower bound no** |
+| confident-Real (P ≤ 0.10) | 96 | 95 | 0.990 [0.943, 0.998] | yes, both |
+
+The 8 errors among confident-AI are genuine photographs that the system called AI
+Generated with P(AI) ≥ 0.90. That is the confident end of the MM2.6 false-positive
+problem. Pooled AC2 holds; on the AI side alone it is not established.
+
+**"Leans AI, below threshold".** Of the 36 Real verdicts with in-sample P(AI) > 0.5,
+22 are in fact AI (0.61 [0.45, 0.75]; with CV P(AI), 23 of 36). Their S range is
+0.562–0.756. The "leans AI" wording is earned: these are mostly misses that τ lets
+through to hold the FPR down.
+
+**Semantic-only certainty is forced to "inconclusive".** The map's band edges are a
+semantic score ≤ ~6e-5 or ≥ ~0.9999. Both lie outside the validated range 0.0032–0.9997,
+so no accuracy figure exists for a "confident" semantic-only result. On validation the
+map put 0 of 396 outside the band, and the τ-verdict on the semantic score alone was
+right on 0.593.
+
+**What the pilot can and cannot show.** The test set (scenes 0–98) and validation
+(scenes 99–296) share no scene. Otherwise they come from the same population:
+
+- the same nine generators, in equal numbers;
+- the same RAISE camera originals, with the same sizes and therefore the same Nikon
+  bodies;
+- the same formats: PNG fakes, including RGBA from Glide, and TIFF reals.
+
+The pilot is therefore a **held-out, same-distribution test, not a distribution-shift
+test**. Its cropped-reals arm, where the reals are centre-cropped to 1024², is the only
+arm that differs from validation.
 
 ---
 
