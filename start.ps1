@@ -4,7 +4,13 @@
 
 .DESCRIPTION
   1. Docker Desktop (started if it is not running) and the PostgreSQL container.
-  2. Pending database migrations (alembic upgrade head).
+  2. Pending database migrations (backend/scripts/migrate_with_backup.ps1).
+     Whenever any are pending, a timestamped backup of the database being
+     migrated (pg_dump, or a file copy for SQLite) is taken FIRST, to
+     -BackupDir, and verified; if it fails, the start stops and nothing is
+     migrated. Migrations marked ATTENDED_ONLY
+     (destructive contract steps) are never applied by this script on its
+     own: it stops and names them, unless -ApplyAttendedMigration lists them.
   3. The API in its own window, "TruePixels API". Keep it open: closing it
      stops the API, and OTP codes appear there when e-mail is not used.
   4. The front-end build, if frontend/dist does not exist yet (or -Build).
@@ -22,14 +28,25 @@
 .PARAMETER NoBrowser
   Do not open the browser at the end.
 
+.PARAMETER BackupDir
+  Where the pre-migration pg_dump goes. Default: TruePixels-backups in your
+  home folder (outside the repository). Also read from TRUEPIXELS_BACKUP_DIR.
+
+.PARAMETER ApplyAttendedMigration
+  Revision id(s) of ATTENDED_ONLY migrations you have decided to apply now,
+  e.g. -ApplyAttendedMigration 0007. Without it they are never applied.
+
 .EXAMPLE
   .\start.ps1
   .\start.ps1 -ConsoleCodes -Build
+  .\start.ps1 -ApplyAttendedMigration 0007
 #>
 param(
   [switch]$ConsoleCodes,
   [switch]$Build,
-  [switch]$NoBrowser
+  [switch]$NoBrowser,
+  [string]$BackupDir = $(if ($env:TRUEPIXELS_BACKUP_DIR) { $env:TRUEPIXELS_BACKUP_DIR } else { Join-Path $HOME 'TruePixels-backups' }),
+  [string[]]$ApplyAttendedMigration = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -75,12 +92,12 @@ if (-not $healthy) { Fail 'The database did not become healthy in 2 minutes.' }
 Write-Host 'Database is healthy.'
 
 # ---- 2. Migrations --------------------------------------------------------
+# A verified, timestamped backup of the database being migrated is taken
+# before ANY pending migration, and attended-only (destructive) migrations are
+# never applied unless named with -ApplyAttendedMigration. See the script.
 Step 'Database migrations'
-Push-Location (Join-Path $Repo 'backend')
-& $Python -m alembic upgrade head
-$code = $LASTEXITCODE
-Pop-Location
-if ($code -ne 0) { Fail 'alembic upgrade head failed (see the output above).' }
+& (Join-Path $Repo 'backend\scripts\migrate_with_backup.ps1') -BackupDir $BackupDir -ApplyAttendedMigration $ApplyAttendedMigration -Python $Python
+if ($LASTEXITCODE -ne 0) { Fail 'Migrations were not applied (see above). Nothing else was started.' }
 
 # ---- 3. API ---------------------------------------------------------------
 Step 'API (http://127.0.0.1:8000, in its own window)'
