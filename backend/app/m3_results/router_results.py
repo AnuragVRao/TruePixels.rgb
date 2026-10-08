@@ -29,7 +29,8 @@ def _likelihood_fields(shown) -> dict:
     return dict(p_ai=shown.p_ai, p_ai_percentage=shown.p_ai_percentage, p_ai_display=shown.p_ai_display,
                 certainty=shown.certainty, certainty_label=shown.certainty_label,
                 semantic_only=shown.semantic_only, leans_ai_below_threshold=shown.leans_ai_below_threshold,
-                likelihood_headline=shown.headline, likelihood_notes=shown.notes)
+                likelihood_headline=shown.headline, likelihood_notes=shown.notes,
+                calibration_ref=shown.calibration_ref)
 
 @router.get("/results/{prediction_id}", response_model=PredictionResultView)
 def get_prediction_result(

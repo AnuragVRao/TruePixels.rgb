@@ -28,11 +28,17 @@
 
 .PARAMETER Python
   The interpreter. Default: the repository's .venv.
+
+.PARAMETER BackupOnly
+  Take and verify the backup of the database Alembic would migrate, even when
+  nothing is pending, then stop. Never migrates. Use it to check that backups
+  work with the real credentials, or to take a guard backup on demand.
 #>
 param(
   [string]$BackupDir = $(if ($env:TRUEPIXELS_BACKUP_DIR) { $env:TRUEPIXELS_BACKUP_DIR } else { Join-Path $HOME 'TruePixels-backups' }),
   [string[]]$ApplyAttendedMigration = @(),
-  [string]$Python = ''
+  [string]$Python = '',
+  [switch]$BackupOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,16 +55,16 @@ if ($code -ne 0) { Stop-Migration "Could not read the migration state: $raw" }
 $state = $raw | ConvertFrom-Json
 $pending = @($state.pending)
 
-if ($pending.Count -eq 0) {
+if ($pending.Count -eq 0 -and -not $BackupOnly) {
   Write-Host "Database is at head ($($state.head)); nothing to migrate."
   exit 0
 }
-Write-Host ("Pending on $($state.dialect) database '$($state.database)': " +
-            (($pending | ForEach-Object { $_.revision }) -join ', ') + " (current: $($state.current))")
+if ($pending.Count -gt 0) { Write-Host ("Pending on $($state.dialect) database '$($state.database)': " +
+            (($pending | ForEach-Object { $_.revision }) -join ', ') + " (current: $($state.current))") }
 
 # ---- attended-only migrations are never applied unattended ----------------
 $notAllowed = @($pending | Where-Object { $_.attended_only -and ($ApplyAttendedMigration -notcontains $_.revision) })
-if ($notAllowed.Count -gt 0) {
+if ($notAllowed.Count -gt 0 -and -not $BackupOnly) {
   $list = ($notAllowed | ForEach-Object { "$($_.revision) - $($_.title)" }) -join "`n  "
   $ids = ($notAllowed | ForEach-Object { $_.revision }) -join ','
   Stop-Migration ("These migrations change data irreversibly and are never applied automatically:`n  $list`n" +
@@ -69,11 +75,11 @@ if ($notAllowed.Count -gt 0) {
 # ---- verified backup of the database being migrated -------------------------
 New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
 $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
-$target = $pending[-1].revision
+$target = if ($BackupOnly) { 'backup-only' } elseif ($pending.Count -gt 0) { $pending[-1].revision } else { $state.head }
 $from = if ($state.current) { $state.current } else { 'empty' }
 
 if ($state.dialect -eq 'postgresql') {
-  $name = "$($state.database)_pre-${target}_from-${from}_$stamp.dump"
+  $name = if ($BackupOnly) { "$($state.database)_backup-only_at-${from}_$stamp.dump" } else { "$($state.database)_pre-${target}_from-${from}_$stamp.dump" }
   $backup = Join-Path $BackupDir $name
   $inContainer = "/tmp/$name"
   Write-Host "Backing up '$($state.database)' to $backup ..."
@@ -85,7 +91,8 @@ if ($state.dialect -eq 'postgresql') {
   if ($copied -ne 0 -or -not (Test-Path $backup)) { Stop-Migration 'Could not copy the dump out of the container - nothing was migrated.' }
   $magic = 'PGDMP'
 } elseif ($state.dialect -eq 'sqlite' -and $state.sqlite_path) {
-  $name = "$([System.IO.Path]::GetFileNameWithoutExtension($state.sqlite_path))_pre-${target}_from-${from}_$stamp.db"
+  $stem = [System.IO.Path]::GetFileNameWithoutExtension($state.sqlite_path)
+  $name = if ($BackupOnly) { "${stem}_backup-only_at-${from}_$stamp.db" } else { "${stem}_pre-${target}_from-${from}_$stamp.db" }
   $backup = Join-Path $BackupDir $name
   Write-Host "Backing up $($state.sqlite_path) to $backup ..."
   Copy-Item -LiteralPath $state.sqlite_path -Destination $backup
@@ -101,6 +108,7 @@ if ($size -le 0 -or $header -ne $magic) { Stop-Migration "The backup at $backup 
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $backup).Hash.ToLower()
 Set-Content -LiteralPath "$backup.sha256" -Value "$hash *$name" -Encoding ascii
 Write-Host "Backup OK: $size bytes, sha256 $hash"
+if ($BackupOnly) { Write-Host "Backup-only: nothing migrated. Backup: $backup"; exit 0 }
 
 # ---- migrate ------------------------------------------------------------------
 Push-Location $Backend

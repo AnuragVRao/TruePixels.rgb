@@ -87,9 +87,10 @@ def test_frequency_spectrum_panel_generation():
         assert img.size[0] > 100 and img.size[1] > 100
 
 
-def _pred(p_ai, certainty, predicted_class="Real", frequency_score=0.1):
+def _pred(p_ai, certainty, predicted_class="Real", frequency_score=0.1, calibration_ref=None):
     return SimpleNamespace(p_ai=p_ai, certainty=certainty, predicted_class=predicted_class,
-                           frequency_score=frequency_score)
+                           frequency_score=frequency_score,
+                           calibration_ref=calibration_ref if p_ai is None or calibration_ref else "platt-test")
 
 
 def test_likelihood_wording_replaces_the_confidence_bands():
@@ -102,7 +103,7 @@ def test_likelihood_wording_replaces_the_confidence_bands():
 
     capped_low = likelihood.describe(_pred(0.01, "confident"))
     capped_high = likelihood.describe(_pred(0.99, "confident", "AI Generated"))
-    assert (capped_low.p_ai_display, capped_high.p_ai_display) == ("1 % or less", "99 % or more")
+    assert (capped_low.p_ai_display, capped_high.p_ai_display) == ("≤ 1 %", "≥ 99 %")
 
 
 def test_a_real_verdict_above_half_leans_ai_below_the_threshold():
@@ -120,7 +121,8 @@ def test_null_p_ai_is_said_to_be_not_calibrated_never_a_number():
     shown = likelihood.describe(_pred(None, None))
     assert (shown.p_ai, shown.p_ai_percentage, shown.p_ai_display, shown.certainty) == (None, None, None, None)
     assert shown.headline == likelihood.NOT_CALIBRATED
-    assert "not calibrated for the active model configuration" in shown.headline
+    assert "not calibrated for the model configuration used for this prediction" in shown.headline
+    assert shown.calibration_ref is None
 
 
 def test_interpretive_caption_presence(client: TestClient, seeded_db):

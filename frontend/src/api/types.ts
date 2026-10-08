@@ -73,6 +73,8 @@ export interface Likelihood {
   leans_ai_below_threshold: boolean;
   likelihood_headline: string;
   likelihood_notes: string[];
+  /** The fitted P(AI) map that produced p_ai (D4); null with p_ai. */
+  calibration_ref: string | null;
 }
 
 export interface ModelRef {

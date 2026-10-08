@@ -479,6 +479,14 @@ Four things it established:
     activations would make the gate grade its own homework. Revisiting τ, if
     ever, means a larger *fresh* validation split. Future work.
 
+### Known issues (recorded, not fixed)
+
+- **Legacy M3 dashboard: the History tab is broken.** `frontend/m3_dashboard/index.html`
+  calls `loadHistory()` (tab switch, refresh button, after a scan) but defines it
+  nowhere, so the tab never loads. Found 2026-10-08 during the C2 v2 work; pre-existing.
+  The dashboard is dev-only (`ENVIRONMENT=development`) and superseded by the React app,
+  whose History page works. No fix planned unless the legacy dashboard is kept.
+
 ---
 
 ## 7. The confidence inversion

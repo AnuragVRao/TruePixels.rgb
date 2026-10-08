@@ -6,7 +6,7 @@ High / Moderate / Low bands (PRD3: 85 / 65 cutoffs, no empirical basis) with:
 
 - p_ai: the likelihood that the image is AI-generated, for EITHER verdict,
   stored in D4 by M2 and capped to [1 %, 99 %] - 400 validation images cannot
-  support finer figures, so the ends read "1 % or less" / "99 % or more";
+  support finer figures, so the ends read "≤ 1 %" / "≥ 99 %";
 - certainty: 'confident' (p_ai >= 90 % or <= 10 %) or 'inconclusive',
   thresholds measured on the validation split, not chosen by eye.
 
@@ -23,7 +23,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-NOT_CALIBRATED = ("Likelihood not available: not calibrated for the active model configuration.")
+# A STORED row: the configuration that produced it is what matters, not what
+# is active now. (M2's live POST response speaks of the active configuration.)
+NOT_CALIBRATED = ("Likelihood not available: not calibrated for the model configuration used for "
+                  "this prediction.")
 LEANS_AI = "Leans AI, below detection threshold."
 SEMANTIC_ONLY = ("Low reliability: this image is smaller than the frequency detector's 224-pixel "
                  "patch, so the verdict rests on the semantic detector alone, which "
@@ -36,12 +39,13 @@ CERTAINTY_LABEL = {"confident": "Confident", "inconclusive": "Inconclusive"}
 class Likelihood:
     p_ai: float | None
     p_ai_percentage: int | None  # whole percent; the [1, 99] cap makes finer digits meaningless
-    p_ai_display: str | None  # "12 %", "1 % or less", "99 % or more"
+    p_ai_display: str | None  # "12 %", "≤ 1 %", "≥ 99 %"
     certainty: Literal["confident", "inconclusive"] | None
     certainty_label: str | None
     semantic_only: bool
     leans_ai_below_threshold: bool
     headline: str  # one line: "12 % likelihood AI-generated", or the not-calibrated sentence
+    calibration_ref: str | None = None  # which fitted map produced p_ai (D4); None with p_ai
     notes: list[str] = field(default_factory=list)
 
 
@@ -53,11 +57,12 @@ def describe(prediction) -> Likelihood:
     if p is None:
         return Likelihood(p_ai=None, p_ai_percentage=None, p_ai_display=None, certainty=None,
                           certainty_label=None, semantic_only=semantic_only,
-                          leans_ai_below_threshold=False, headline=NOT_CALIBRATED, notes=notes)
+                          leans_ai_below_threshold=False, headline=NOT_CALIBRATED, calibration_ref=None,
+                          notes=notes)
     if p <= 0.01:
-        display = "1 % or less"
+        display = "≤ 1 %"
     elif p >= 0.99:
-        display = "99 % or more"
+        display = "≥ 99 %"
     else:
         display = f"{round(p * 100)} %"
     leans = prediction.predicted_class == "Real" and p > 0.5
@@ -66,4 +71,5 @@ def describe(prediction) -> Likelihood:
     return Likelihood(p_ai=p, p_ai_percentage=round(p * 100), p_ai_display=display,
                       certainty=prediction.certainty, certainty_label=CERTAINTY_LABEL.get(prediction.certainty),
                       semantic_only=semantic_only, leans_ai_below_threshold=leans,
-                      headline=f"{display} likelihood AI-generated", notes=notes)
+                      headline=f"{display} likelihood AI-generated",
+                      calibration_ref=getattr(prediction, "calibration_ref", None), notes=notes)

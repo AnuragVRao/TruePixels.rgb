@@ -23,6 +23,25 @@ from reportlab.lib.units import inch
 from PIL import Image as PILImage
 from app.m3_results.explain import caption_for
 from app.m3_results.likelihood import describe
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import reportlab
+
+# The capped likelihoods read "≤ 1 %" / "≥ 99 %". The standard Helvetica has
+# no glyph for either sign, so just those two characters are set in Vera, a
+# TrueType font that ships inside reportlab itself (no system font needed).
+_RL_FONTS = os.path.join(os.path.dirname(reportlab.__file__), "fonts")
+for _name, _file in (("Vera", "Vera.ttf"), ("VeraBd", "VeraBd.ttf")):
+    if _name not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont(_name, os.path.join(_RL_FONTS, _file)))
+
+
+def _symbols(text: str, bold: bool = False) -> str:
+    """Wrap the ≤ / ≥ signs in a font that has them (Paragraph markup)."""
+    font = "VeraBd" if bold else "Vera"
+    for sign in ("≤", "≥"):
+        text = text.replace(sign, f'<font name="{font}">{sign}</font>')
+    return text
 from app.m3_results.models import Prediction, Explainability
 from app.m3_results.overlay import explainability_path
 from app.shared.errors import AppException
@@ -102,7 +121,7 @@ def build_pdf_report(
     # C2 v2: P(AI) for either verdict + certainty (likelihood.py), not the old
     # "confidence in the predicted class" with High/Moderate/Low bands.
     shown = describe(prediction)
-    likelihood_cell = (f"<b>{shown.p_ai_display}</b> ({shown.certainty_label})"
+    likelihood_cell = (f"<b>{_symbols(shown.p_ai_display, bold=True)}</b> ({shown.certainty_label})"
                        if shown.p_ai is not None else "not available")
     verdict_color = "#dc2626" if verdict == "AI Generated" else "#16a34a"
 
@@ -139,7 +158,7 @@ def build_pdf_report(
     story.append(Spacer(1, 8))
     # The likelihood in words, plus anything that changes how to read it
     # (leans AI below the threshold; semantic-only = low reliability; not calibrated).
-    story.append(Paragraph(f"<b>{shown.headline}</b>", body_style))
+    story.append(Paragraph(f"<b>{_symbols(shown.headline, bold=True)}</b>", body_style))
     for note in shown.notes:
         story.append(Paragraph(note, caveat_style))
     story.append(Paragraph("The semantic and frequency values above are detector scores, not "
@@ -258,6 +277,19 @@ def build_pdf_report(
     ]))
     story.append(caveat_table)
 
-    doc.build(story)
+    # Page footer on every page: which fitted P(AI) map produced the likelihood
+    # (D4 calibration_ref), so a printed report can be traced to its calibration.
+    footer = (f"TruePixels.rgb report #{prediction.prediction_id}  |  P(AI) map: "
+              + (shown.calibration_ref or "none - not calibrated for the model configuration used"))
+
+    def _footer(canvas, document):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7.5)
+        canvas.setFillColor(colors.HexColor("#64748b"))
+        canvas.drawString(document.leftMargin, 22, footer)
+        canvas.drawRightString(document.pagesize[0] - document.rightMargin, 22, f"page {canvas.getPageNumber()}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     buffer.seek(0)
     return buffer

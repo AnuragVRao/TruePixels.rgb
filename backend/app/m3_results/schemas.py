@@ -39,13 +39,14 @@ class PredictionResultView(BaseModel):
     # _band (confidence in the predicted class, High/Moderate/Low).
     p_ai: float | None  # null: not calibrated for the configuration that ran
     p_ai_percentage: int | None
-    p_ai_display: str | None  # "12 %", "1 % or less", "99 % or more"
+    p_ai_display: str | None  # "12 %", "≤ 1 %", "≥ 99 %"
     certainty: Literal["confident", "inconclusive"] | None
     certainty_label: str | None
     semantic_only: bool  # the frequency branch had no evidence (image under 224 px)
     leans_ai_below_threshold: bool  # "Real" verdict with p_ai > 0.5
     likelihood_headline: str
     likelihood_notes: list[str] = []
+    calibration_ref: str | None = None  # the fitted P(AI) map that produced p_ai; null with p_ai
     # Scores, NOT probabilities (higher = more AI-like). The verdict is
     # fusion_score >= tau; only p_ai is a likelihood.
     semantic_score: float
@@ -77,13 +78,14 @@ class HistoryItem(BaseModel):
     # _band (confidence in the predicted class, High/Moderate/Low).
     p_ai: float | None  # null: not calibrated for the configuration that ran
     p_ai_percentage: int | None
-    p_ai_display: str | None  # "12 %", "1 % or less", "99 % or more"
+    p_ai_display: str | None  # "12 %", "≤ 1 %", "≥ 99 %"
     certainty: Literal["confident", "inconclusive"] | None
     certainty_label: str | None
     semantic_only: bool  # the frequency branch had no evidence (image under 224 px)
     leans_ai_below_threshold: bool  # "Real" verdict with p_ai > 0.5
     likelihood_headline: str
     likelihood_notes: list[str] = []
+    calibration_ref: str | None = None  # the fitted P(AI) map that produced p_ai; null with p_ai
     prediction_timestamp: datetime
 
 

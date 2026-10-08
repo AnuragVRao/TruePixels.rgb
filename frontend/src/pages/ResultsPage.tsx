@@ -183,7 +183,8 @@ export const ResultsPage: React.FC = () => {
                            certainty={result.certainty} label={result.certainty_label ?? ''} />
         ) : (
           <div className="max-w-xs rounded-2xl border border-dashed border-border px-5 py-4 text-sm text-muted-foreground">
-            Not calibrated for the active model configuration, so no likelihood is shown. The verdict is unaffected.
+            Not calibrated for the model configuration used for this prediction, so no likelihood is shown.
+            The verdict is unaffected.
           </div>
         )}
       </div>
@@ -237,6 +238,7 @@ export const ResultsPage: React.FC = () => {
           {models.map((m) => (
             <p key={m!.model_id} className="font-mono">#{m!.model_id} {m!.model_name} · {m!.model_version}</p>
           ))}
+          <p className="font-mono">P(AI) map · {result.calibration_ref ?? 'none (not calibrated)'}</p>
         </div>
       )}
       <Link to="/history" className="text-sm text-primary hover:underline">← All results</Link>
