@@ -36,12 +36,26 @@ commits before returning (PRD4 section 4.2.4), so ``prediction_id`` and
 ``model_id`` are ``int`` again, as PRD4 specifies. They had been
 ``int | None`` only because there was no database.
 
-The confidence inversion rule (Contract C2 section 5.2, PRD2 section 8.3) is
-the single most likely integration bug in the project, so it is restated here:
-``semantic_score``, ``frequency_score`` and ``fusion_score`` are all
-P(AI Generated). ``confidence_score`` is the odd one out - it is confidence in
-whichever class was actually predicted. A fusion_score of 0.08 yields
-("Real", 0.92). Never render fusion_score as a confidence figure.
+Revision 4 (2026-10-08), C2 v2: ``confidence_score`` is REMOVED and
+replaced by ``p_ai`` and ``certainty``. C2 v1.0 section 5.2 defined
+confidence_score as confidence IN the predicted class (fusion / 1 - fusion);
+that rule had already been superseded on 2026-10-05 (migration 0004) by a
+margin from tau, which was fitted to no data. Now:
+
+- ``p_ai``: the likelihood that the image is AI-generated, shown for BOTH
+  verdicts ("Real, 12 % likelihood AI-generated"). A near-identity map of the
+  combined score fitted on the validation split, capped to [0.01, 0.99]
+  (app/m2_analysis/calibration.py). None when the active model configuration
+  is not the one the map was fitted on - never a stale number.
+- ``certainty``: "confident" iff p_ai >= 0.90 or <= 0.10, else
+  "inconclusive"; always "inconclusive" for semantic-only results. None with
+  p_ai.
+
+The verdict is unchanged: "AI Generated" iff fusion_score >= tau. tau holds
+false positives at <= 10 %, so a "Real" verdict can carry p_ai > 0.5 (it
+"leans AI, below the detection threshold"). ``semantic_score``,
+``frequency_score`` and ``fusion_score`` are SCORES (higher = more AI-like),
+not probabilities: never display them as one.
 """
 
 from __future__ import annotations
@@ -100,7 +114,10 @@ class InferenceOutput(BaseModel):
     user_id: int
     model_id: int  # the FUSION config row (D3) active at inference
     predicted_class: Literal["Real", "AI Generated"]
-    confidence_score: float  # [0,1], confidence IN predicted_class
+    # P(AI) shown to the user for EITHER verdict, [0.01, 0.99]; None if the
+    # active configuration is not the fitted one (calibration.applies).
+    p_ai: float | None = None
+    certainty: Literal["confident", "inconclusive"] | None = None
     semantic_score: float  # [0,1], P(AI Generated) from the semantic branch
     # P(AI Generated) from the frequency branch - the pretrained SPAI spectral
     # detector. None when that branch had no evidence to give: either it is

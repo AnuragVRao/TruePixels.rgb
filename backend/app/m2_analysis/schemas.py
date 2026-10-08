@@ -31,12 +31,22 @@ class PredictionResponse(BaseModel):
     predicted_class: Literal["Real", "AI Generated"] = Field(
         description="Binary only - never 'uncertain', never a third class (AC-01)."
     )
-    confidence_score: float = Field(
+    p_ai: float | None = Field(
+        default=None,
         description=(
-            "Confidence IN predicted_class, not P(AI Generated). "
-            "measured from the decision threshold tau (0.5 at tau, 1.0 at the far end, never "
-            "below 0.5); at tau 0.7558, fusion_score 0.08 means 'Real' with confidence 0.95."
-        )
+            "Likelihood the image is AI-generated, for EITHER verdict, in [0.01, 0.99]. "
+            "A near-identity map of fusion_score fitted on the validation split; measured "
+            "only on unprocessed images. A 'Real' verdict may carry p_ai > 0.5 (leans AI, "
+            "below the detection threshold). Null when the active model configuration is "
+            "not the one it was fitted on."
+        ),
+    )
+    certainty: Literal["confident", "inconclusive"] | None = Field(
+        default=None,
+        description=(
+            "'confident' iff p_ai >= 0.90 or <= 0.10, else 'inconclusive'; always "
+            "'inconclusive' when the frequency branch had no evidence. Null with p_ai."
+        ),
     )
     semantic_score: float = Field(
         description=(

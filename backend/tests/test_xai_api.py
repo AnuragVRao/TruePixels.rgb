@@ -69,7 +69,7 @@ def _d5(prediction_id: int) -> list[Explainability]:
         db.close()
 
 
-SCORE_FIELDS = ("predicted_class", "confidence_score", "semantic_score", "frequency_score", "fusion_score")
+SCORE_FIELDS = ("predicted_class", "p_ai", "certainty", "semantic_score", "frequency_score", "fusion_score")
 
 
 def test_xai_on_and_off_give_bit_identical_predictions():

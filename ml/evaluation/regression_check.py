@@ -41,7 +41,7 @@ BACKEND_ROOT = REPO_ROOT / "backend"
 DATASETS = REPO_ROOT / "ml" / "datasets"
 LIST_FILE = Path(__file__).with_name("regression_images.json")
 OUTPUT_DIR = REPO_ROOT / "ml" / "outputs" / "regression"
-FIELDS = ("predicted_class", "confidence_score", "semantic_score", "frequency_score", "fusion_score")
+FIELDS = ("predicted_class", "p_ai", "certainty", "semantic_score", "frequency_score", "fusion_score")
 
 # Synthetic images: (name, width, height, seed). 128 px is below one SPAI
 # patch, so it exercises the semantic-only path (frequency_score null).
@@ -215,18 +215,33 @@ def main() -> int:
     if baseline["device"] != current["device"]:
         print(f"WARNING: baseline device {baseline['device']} != current {current['device']}; "
               "last-bit differences are expected across devices")
+    # A field added or retired since the baseline (C2 v2, 2026-10-08: p_ai and
+    # certainty replaced confidence_score) is NAMED, not compared: only fields
+    # both runs carry can be bit-identical. Re-record to baseline the new ones.
+    def fields(results):
+        return set().union(*(r.keys() for r in results.values())) if results else set()
+
+    shared = fields(baseline["results"]) & fields(current["results"])
+    added = sorted(fields(current["results"]) - shared)
+    retired = sorted(fields(baseline["results"]) - shared)
+    if added or retired:
+        print(f"fields compared: {sorted(shared)}; new (not compared): {added}; retired: {retired}")
     diffs = []
     for name in sorted(set(baseline["results"]) | set(current["results"])):
         old, new = baseline["results"].get(name), current["results"].get(name)
-        if old != new:
+        if old is None or new is None:
             diffs.append((name, old, new))
+            continue
+        old_s, new_s = ({f: r[f] for f in shared} for r in (old, new))
+        if old_s != new_s:
+            diffs.append((name, old_s, new_s))
     if diffs:
         print(f"MISMATCH against {path.name}: {len(diffs)} of {len(baseline['results'])} images differ")
         for name, old, new in diffs:
             print(f"  {name}\n    baseline {old}\n    current  {new}")
         return 1
     print(f"IDENTICAL: all {len(current['results'])} images bit-identical to {path.name} "
-          f"({len(FIELDS)} fields each, device {current['device']}, "
+          f"({len(shared)} shared fields each, device {current['device']}, "
           f"database {current.get('database', '?')}; baseline database "
           f"{baseline.get('database', 'sqlite')})")
     return 0

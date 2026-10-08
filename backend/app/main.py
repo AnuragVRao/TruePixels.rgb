@@ -133,9 +133,10 @@ app = FastAPI(
         "No accuracy figure is claimed for this system: we have run no "
         "benchmark on a labelled test set, and the upstream self-reported "
         "numbers were measured on the authors' own splits.\n\n"
-        "Note that `confidence_score` is confidence in the *predicted class*, "
-        "not P(AI Generated), measured from the decision threshold (never below 0.5). At the operating point a `fusion_score` of 0.08 means **Real** at 0.95 "
-        "confidence."
+        "`p_ai` is the likelihood that the image is AI-generated, shown for "
+        "**either** verdict; `certainty` is `confident` or `inconclusive`. The "
+        "verdict itself is `fusion_score >= tau`, and the branch scores are "
+        "scores, not probabilities."
     ),
 )
 

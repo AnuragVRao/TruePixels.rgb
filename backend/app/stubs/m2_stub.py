@@ -61,12 +61,12 @@ def run_detection(
     tau = active_model.hyperparameters.get("tau", 0.50) if active_model.hyperparameters else 0.50
 
     # Decision rule
-    if fusion_score >= tau:
-        predicted_class = "AI Generated"
-        confidence_score = fusion_score
-    else:
-        predicted_class = "Real"
-        confidence_score = 1.0 - fusion_score  # Inversion rule (Contract C2 §5.2)
+    predicted_class = "AI Generated" if fusion_score >= tau else "Real"
+    # C2 v2: p_ai is P(AI) for EITHER verdict. The stub has no fitted map; it
+    # reports its own fake score, capped like the real one.
+    p_ai = min(0.99, max(0.01, fusion_score))
+    certainty = "confident" if p_ai >= 0.90 or p_ai <= 0.10 else "inconclusive"
+    legacy_confidence = fusion_score if predicted_class == "AI Generated" else 1.0 - fusion_score
 
     semantic_score = min(1.0, max(0.0, fusion_score + ((h % 20) - 10) / 100.0))
     frequency_score = min(1.0, max(0.0, fusion_score + ((h % 30) - 15) / 100.0))
@@ -77,7 +77,7 @@ def run_detection(
         model_id=active_model.model_id,
         branch_model_ids={"semantic": 1, "frequency": 2},
         predicted_class=predicted_class,
-        confidence_score=round(confidence_score, 4),
+        confidence_score=round(legacy_confidence, 4),  # legacy D4 column until it is dropped
         semantic_score=round(semantic_score, 4),
         frequency_score=round(frequency_score, 4),
         fusion_score=round(fusion_score, 4),
@@ -127,7 +127,8 @@ def run_detection(
         user_id=prepared.user_id,
         model_id=active_model.model_id,
         predicted_class=predicted_class,
-        confidence_score=confidence_score,
+        p_ai=p_ai,
+        certainty=certainty,
         semantic_score=semantic_score,
         frequency_score=frequency_score,
         fusion_score=fusion_score,

@@ -13,7 +13,7 @@ persistence.
        +--> 2.2 frequency branch (SPAI, spectral)     -> frequency_score ---+--> 2.3 fusion
        |                                                                          |
        +--> [xai only] attention + SPAI-patch spectrum -> ActivationBundle         v
-                                                                  2.4 prediction & confidence
+                                                 2.4 verdict (S >= tau) + displayed P(AI)
                                                                                   |
                                                                                   v
                                        persist D4 (with the active D3 row ids) -> commit
@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.m2_analysis import detectors, frequency_detector, fusion, heads, registry
+from app.m2_analysis import calibration, detectors, frequency_detector, fusion, heads, registry
 from app.m2_analysis.models import Prediction
 from app.shared.contracts.c1 import PreprocessedImage
 from app.shared.contracts.c2 import ActivationBundle, InferenceOutput
@@ -129,10 +129,13 @@ async def run_detection(
             except frequency_detector.SpectralBranchUnavailable:
                 frequency_score = None
 
-        # Fusion, thresholding, and the confidence inversion.
-        fusion_score, predicted_class, confidence_score = fusion.combine(
+        # Fusion and the verdict (S >= tau), then the displayed P(AI) and its
+        # certainty - computed from S, never altering the verdict, and None
+        # when the active configuration is not the one the map was fitted on.
+        fusion_score, predicted_class = fusion.combine(
             semantic_score, frequency_score, models.fusion
         )
+        shown = calibration.calibrated(models, fusion_score, semantic_only=frequency_score is None)
     except InferenceError:
         if owns_session:
             session.close()
@@ -166,7 +169,9 @@ async def run_detection(
             frequency_model_id=frequency_model_id,
             branch_model_ids={"semantic": models.primary.model_id, "frequency": frequency_model_id},
             predicted_class=predicted_class,
-            confidence_score=confidence_score,
+            # Legacy NOT NULL column, dropped by the next migration; nothing displays it.
+            confidence_score=fusion.legacy_confidence_score(fusion_score, models.fusion.tau,
+                                                            predicted_class),
             semantic_score=semantic_score,
             frequency_score=frequency_score,
             fusion_score=fusion_score,
@@ -191,7 +196,8 @@ async def run_detection(
         user_id=prepared.user_id,
         model_id=model_id,
         predicted_class=predicted_class,
-        confidence_score=confidence_score,
+        p_ai=shown.p_ai,
+        certainty=shown.certainty,
         semantic_score=semantic_score,
         frequency_score=frequency_score,
         fusion_score=fusion_score,

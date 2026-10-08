@@ -58,7 +58,7 @@ if str(BACKEND_ROOT) not in sys.path:
 import numpy as np  # noqa: E402
 from sklearn.metrics import roc_auc_score, roc_curve  # noqa: E402
 
-from app.m2_analysis import detectors, frequency_detector, fusion, registry  # noqa: E402
+from app.m2_analysis import calibration, detectors, frequency_detector, fusion, registry  # noqa: E402
 from app.shared import config  # noqa: E402
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
@@ -203,7 +203,8 @@ def main() -> int:
     started = time.perf_counter()
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[
-            "path", "label", "semantic", "frequency", "fusion", "predicted", "t_semantic_s", "t_frequency_s"])
+            "path", "label", "semantic", "frequency", "fusion", "predicted", "p_ai", "certainty",
+            "t_semantic_s", "t_frequency_s"])
         writer.writeheader()
         for index, (path, label) in enumerate(items, 1):
             t = time.perf_counter()
@@ -219,13 +220,15 @@ def main() -> int:
                 # as 0.0, or aborting the run, would both misreport the system.
                 frequency = None
             t_f = time.perf_counter() - t
-            fused, predicted_class, _ = fusion.combine(semantic, frequency, models.fusion)
+            fused, predicted_class = fusion.combine(semantic, frequency, models.fusion)
+            shown = calibration.calibrated(models, fused, semantic_only=frequency is None)
             row = {
                 "path": str(path.relative_to(args.root)), "label": label,
                 "semantic": f"{semantic:.6f}",
                 "frequency": "" if frequency is None else f"{frequency:.6e}",
                 "fusion": f"{fused:.6f}",
                 "predicted": 1 if predicted_class == "AI Generated" else 0,
+                "p_ai": "" if shown.p_ai is None else f"{shown.p_ai:.6f}", "certainty": shown.certainty or "",
                 "t_semantic_s": f"{t_s:.3f}", "t_frequency_s": f"{t_f:.3f}",
             }
             writer.writerow(row)

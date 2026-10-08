@@ -103,7 +103,8 @@ async def create_prediction(
     emit(
         "prediction-request",
         f"Prediction {result.prediction_id} for image_id={body.image_id}: "
-        f"{result.predicted_class} (confidence {result.confidence_score:.3f})",
+        f"{result.predicted_class} (p_ai "
+        f"{'null' if result.p_ai is None else f'{result.p_ai:.3f}'}, {result.certainty})",
         severity="info",
         user_id=session.user_id,
     )

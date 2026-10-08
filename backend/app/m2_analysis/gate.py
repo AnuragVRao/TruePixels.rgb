@@ -146,7 +146,7 @@ def _metrics(semantic: np.ndarray, frequency: np.ndarray, fusion_cfg, labels: np
 
     fused, predicted = [], []
     for s, f in zip(semantic, frequency):
-        score, cls, _ = fusion.combine(float(s), float(f), fusion_cfg)
+        score, cls = fusion.combine(float(s), float(f), fusion_cfg)
         fused.append(score)
         predicted.append(1 if cls == "AI Generated" else 0)
     fused, predicted = np.array(fused), np.array(predicted)

@@ -121,7 +121,8 @@ def test_upload_returns_a_complete_prediction(sample_png, auth):
         "image_id",
         "user_id",
         "predicted_class",
-        "confidence_score",
+        "p_ai",
+        "certainty",
         "semantic_score",
         "frequency_score",
         "fusion_score",
@@ -130,13 +131,14 @@ def test_upload_returns_a_complete_prediction(sample_png, auth):
     ):
         assert field in body, f"missing C2 field: {field}"
     assert "secondary_score" not in body
+    assert "confidence_score" not in body  # C2 v2 (2026-10-08)
 
     # AC-01: binary only, never 'uncertain', never a third class.
     assert body["predicted_class"] in {"Real", "AI Generated"}
 
     # AC-02: both branch scores present even when one would have decided.
     for field in (
-        "confidence_score",
+        "p_ai",
         "semantic_score",
         "frequency_score",
         "fusion_score",
@@ -187,17 +189,18 @@ def test_fusion_is_the_documented_average_of_the_two_branches(sample_png, auth):
     assert body["fusion_score"] == pytest.approx(expected, abs=1e-6)
 
 
-def test_confidence_follows_the_inversion_rule_over_http(sample_png, auth):
-    """AC-05, asserted from outside the module - the same check M3 runs."""
+def test_p_ai_is_the_fitted_map_of_the_fusion_score_over_http(sample_png, auth):
+    """C2 v2, asserted from outside the module: p_ai is P(AI) for EITHER verdict,
+    the verdict is still fusion_score >= tau, and certainty follows the band."""
+    from app.m2_analysis import calibration
+
     body = predict(upload(sample_png, auth), auth).json()
-
-    # Confidence in the PREDICTED class, measured from the active threshold
-    # (changes.md 6.21); never below one half.
-    from app.m2_analysis.fusion import confidence_in_prediction
-
-    expected = confidence_in_prediction(body["fusion_score"], config.FUSION_TAU, body["predicted_class"])
-    assert body["confidence_score"] == pytest.approx(expected)
-    assert body["confidence_score"] >= 0.5
+    semantic_only = body["frequency_score"] is None
+    assert body["p_ai"] == pytest.approx(calibration.p_ai(body["fusion_score"], semantic_only=semantic_only))
+    assert config.CALIBRATION_P_MIN <= body["p_ai"] <= config.CALIBRATION_P_MAX
+    assert body["predicted_class"] == ("AI Generated" if body["fusion_score"] >= config.FUSION_TAU else "Real")
+    expected = "inconclusive" if semantic_only else calibration.certainty(body["p_ai"])
+    assert body["certainty"] == expected
 
 
 def test_the_activation_bundle_never_crosses_the_http_boundary(sample_png, auth):
@@ -243,7 +246,7 @@ def test_prediction_is_persisted_and_readable_through_m3(sample_png, auth):
     view = client.get(f"/api/v1/results/{body['prediction_id']}", headers=auth)
     assert view.status_code == 200, view.text
     stored = view.json()
-    for field in ("predicted_class", "confidence_score", "semantic_score", "frequency_score", "fusion_score"):
+    for field in ("predicted_class", "semantic_score", "frequency_score", "fusion_score"):
         assert stored[field] == pytest.approx(body[field]), field
 
     history = client.get("/api/v1/history", headers=auth).json()

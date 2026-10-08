@@ -13,9 +13,14 @@ other. This is PRD2 section 1.3's independence argument as originally made -
 "learned visual semantics vs physical frequency-domain fingerprints" - now
 realised with two pretrained models rather than two heads we trained.
 
-w = 0.5 is an unweighted average, and tau = 0.5 is the detectors' own decision
-boundary. Neither is fitted - fitting them would need a labelled validation
-split, which is training and therefore out of scope. See shared/config.py.
+w = 0.25 and tau = 0.7558 were selected on a validation split (2026-10-01):
+configuration constants, not model weights - see shared/config.py. tau holds
+the false-positive rate on genuine photographs at <= 10 %, so it sits above
+even odds.
+
+This module decides the VERDICT only. The number shown beside it - P(AI), for
+both verdicts - and its certainty label come from calibration.py and never
+change the verdict.
 """
 
 from __future__ import annotations
@@ -51,8 +56,8 @@ def combine(
     semantic_score: float,
     frequency_score: float | None,
     model: FusionModelConfig,
-) -> tuple[float, PredictedClass, float]:
-    """Fuse the branch scores into a fused score, a label and a confidence.
+) -> tuple[float, PredictedClass]:
+    """Fuse the branch scores into a fused score and a verdict.
 
     Args:
         semantic_score: P(AI Generated) from the semantic branch (SigLIP 2).
@@ -63,18 +68,9 @@ def combine(
         model: the active fusion configuration.
 
     Returns:
-        (fusion_score, predicted_class, confidence_score)
-
-THE INVERSION (PRD2 section 8.3, Contract C2 section 5.2). Three of the
-    four score fields - semantic, frequency, fusion - are P("AI Generated").
-    ``confidence_score`` is the odd one out: it is confidence in whichever
-    class was actually predicted - see ``confidence_in_prediction``. At
-    tau = 0.5 a fusion_score of 0.08 yields "Real" with confidence 0.92.
-
-    PRD2 FR-04 names this the single most likely integration bug in the whole
-    project, because it fails quietly and plausibly: a confidently-real image
-    would display as 8% confident, which reads as a weak model rather than as
-    a wiring error. It is asserted by tests on both sides of the C2 boundary.
+        (fusion_score, predicted_class). fusion_score is a SCORE, higher = more
+        AI-like; it is not a probability. The displayed P(AI) is
+        calibration.calibrated(), applied after this and never altering it.
     """
     if model.strategy != "weighted_average":
         raise InferenceError(f"unsupported fusion strategy: {model.strategy!r}")
@@ -94,16 +90,17 @@ THE INVERSION (PRD2 section 8.3, Contract C2 section 5.2). Three of the
     predicted_class: PredictedClass = (
         "AI Generated" if fusion_score >= model.tau else "Real"
     )
-    confidence_score = confidence_in_prediction(fusion_score, model.tau, predicted_class)
-
-    return fusion_score, predicted_class, confidence_score
+    return fusion_score, predicted_class
 
 
-def confidence_in_prediction(fusion_score: float, tau: float, predicted_class: str) -> float:
-    """Confidence in the PREDICTED class, measured from the decision threshold.
+def legacy_confidence_score(fusion_score: float, tau: float, predicted_class: str) -> float:
+    """DEPRECATED (2026-10-08) - kept ONLY to fill D4's legacy NOT NULL
+    ``confidence_score`` column until the migration that drops it. It is not
+    part of Contract C2 v2, no API returns it and nothing may display it: the
+    user-facing number is P(AI) from calibration.py. Delete with the column.
 
-    0.5 exactly at tau, rising linearly to 1.0 at the far end of the predicted
-    side (2026-10-05, changes.md 6.21):
+    The rule it implements (2026-10-05, changes.md 6.21): 0.5 exactly at tau,
+    rising linearly to 1.0 at the far end of the predicted side:
 
         AI Generated:  0.5 + 0.5 * (fusion - tau) / (1 - tau)
         Real:          0.5 + 0.5 * (tau - fusion) / tau
@@ -116,8 +113,7 @@ def confidence_in_prediction(fusion_score: float, tau: float, predicted_class: s
     fall below 0.5, is monotonic, and at tau = 0.5 reduces EXACTLY to the old
     rule (so FR-04's "0.08 -> Real at 0.92" still holds there).
 
-    It is a margin from the threshold, not a calibrated probability: the
-    detectors' outputs are uncalibrated (MM2.5 is missed).
+    It is a margin from the threshold, fitted to no data.
     """
     if predicted_class == "AI Generated":
         margin = (fusion_score - tau) / (1.0 - tau) if tau < 1.0 else 1.0

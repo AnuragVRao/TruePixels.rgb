@@ -1,6 +1,7 @@
 """
 Contract Verification Tests (Contracts C1, C2, C3, C4, C5).
-Asserts boundaries, schemas, and confidence inversion rules from Interface Contract v1.0.
+Asserts boundaries, schemas, and the C2 v2 p_ai / certainty rule (2026-10-08; C2 v1.0 section 5.2's
+confidence inversion is superseded - see app/shared/contracts/c2.py, revision 4).
 """
 from __future__ import annotations
 from datetime import datetime, timezone
@@ -40,10 +41,10 @@ def test_contract_c1_preprocessed_image_schema(db_session):
     assert prep.source_reference == img.file_reference
 
 
-def test_contract_c2_confidence_score_inversion_rule(db_session):
+def test_contract_c2_p_ai_is_shown_for_either_verdict(db_session):
     """
-    Validates Contract C2 §5.2: Confidence score is the confidence IN the predicted class,
-    not raw fusion_score.
+    C2 v2: p_ai is P(AI) for EITHER verdict (not confidence in the predicted class),
+    within the [0.01, 0.99] cap, and certainty follows the 0.90 band.
     """
     user = create_dummy_user(db_session)
     img = create_dummy_image(db_session, user_id=user.user_id, storage_dir="./uploads/test_images")
@@ -61,14 +62,18 @@ def test_contract_c2_confidence_score_inversion_rule(db_session):
     # Force "Real" class (low fusion score)
     out_real = run_detection(prep, db_session, force_class="Real")
     assert out_real.predicted_class == "Real"
-    assert out_real.confidence_score > 0.50
-    assert abs(out_real.confidence_score - (1.0 - out_real.fusion_score)) < 1e-4
+    assert out_real.p_ai < 0.50
+    assert abs(out_real.p_ai - max(0.01, out_real.fusion_score)) < 1e-4
+    assert not hasattr(out_real, "confidence_score")
 
     # Force "AI Generated" class (high fusion score)
     out_ai = run_detection(prep, db_session, force_class="AI Generated")
     assert out_ai.predicted_class == "AI Generated"
-    assert out_ai.confidence_score >= 0.50
-    assert abs(out_ai.confidence_score - out_ai.fusion_score) < 1e-4
+    assert out_ai.p_ai >= 0.50
+    assert abs(out_ai.p_ai - min(0.99, out_ai.fusion_score)) < 1e-4
+    for out in (out_real, out_ai):
+        assert 0.01 <= out.p_ai <= 0.99
+        assert out.certainty == ("confident" if out.p_ai >= 0.90 or out.p_ai <= 0.10 else "inconclusive")
 
 
 def test_contract_c5_logging_emission(db_session):
