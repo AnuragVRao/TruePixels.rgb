@@ -76,12 +76,14 @@ async def lifespan(_: FastAPI):
     # so no code hash stays in D1 after it can no longer be used.
     import asyncio
 
-    from app.m1_access import otp_challenge
+    from app.m1_access import login_activity, otp_challenge, password_reset
 
     def purge_once() -> None:
         try:
             with SessionLocal() as purge_session:
                 otp_challenge.purge_expired(purge_session)
+                password_reset.purge_expired(purge_session)    # expired reset codes
+                login_activity.purge_older_than(purge_session)  # 90-day retention
         except Exception:  # noqa: BLE001 - housekeeping must never stop the server
             logging.getLogger("uvicorn.error").exception("OTP challenge purge failed")
 

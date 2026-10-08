@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import { postJson } from '../api/client';
-import type { LoginResponse, OtpVerifyResponse, RegisterResponse } from '../api/types';
+import { ApiError, postJson } from '../api/client';
+import type { LoginResponse, MessageResponse, OtpVerifyResponse, RegisterResponse } from '../api/types';
 import { useAuth } from '../context/AuthContext';
 import { ErrorNotice, Notice } from '../components/Feedback';
+import { PasswordRules, passwordOk } from '../components/PasswordRules';
 
 const field =
   'w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2.5 text-sm text-white placeholder-slate-500 ' +
@@ -68,6 +69,7 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const expired = new URLSearchParams(location.search).get('expired') === '1';
+  const wasReset = new URLSearchParams(location.search).get('reset') === '1';
 
   if (isAuthenticated) return <Navigate to={next} replace />;
 
@@ -100,7 +102,13 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
                onChange={(e) => setEmail(e.target.value)} />
       </label>
       <label className="block space-y-1.5 text-sm">
-        <span className="text-slate-300">{admin ? 'Master Password' : 'Password'}</span>
+        <span className="flex items-baseline justify-between">
+          <span className="text-slate-300">{admin ? 'Master Password' : 'Password'}</span>
+          <Link to={`/forgot-password${admin ? '?portal=admin' : ''}`}
+                className={`text-xs hover:underline ${admin ? 'text-amber-400' : 'text-indigo-400'}`}>
+            Forgot password?
+          </Link>
+        </span>
         <input className={admin ? adminField : field} type="password" autoComplete="current-password" required
                value={password} onChange={(e) => setPassword(e.target.value)} />
       </label>
@@ -120,6 +128,7 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
           </div>
         </div>
         {expired && <Notice tone="warning" title="Your session ended. Please sign in again." />}
+        {wasReset && <Notice tone="success" title="Password changed. Sign in with your new password." />}
         <Notice tone="warning" title="Administrators only.">
           This sign-in accepts Admin accounts only. Any other account is refused with AUTH_FORBIDDEN, and the attempt
           is recorded in the audit log.
@@ -141,6 +150,7 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
   return (
     <Card title="Sign in">
       {expired && <Notice tone="warning" title="Your session ended. Please sign in again." />}
+      {wasReset && <Notice tone="success" title="Password changed. Sign in with your new password." />}
       <ErrorNotice error={error} />
       <form onSubmit={submit} className="space-y-4" aria-label="User sign-in">
         {fields}
@@ -169,11 +179,6 @@ export const RegisterPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const rules = [
-    { ok: password.length >= 10, text: 'at least 10 characters' },
-    { ok: /[a-zA-Z]/.test(password), text: 'a letter' },
-    { ok: /[0-9]/.test(password), text: 'a digit' },
-  ];
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -223,14 +228,8 @@ export const RegisterPage: React.FC = () => {
           <input className={field} type="password" autoComplete="new-password" required value={password}
                  onChange={(e) => setPassword(e.target.value)} />
         </label>
-        <ul className="text-xs space-y-1" aria-label="Password rules">
-          {rules.map((rule) => (
-            <li key={rule.text} className={rule.ok ? 'text-emerald-400' : 'text-slate-500'}>
-              {rule.ok ? '✓' : '•'} {rule.text}
-            </li>
-          ))}
-        </ul>
-        <button className={button} disabled={busy || !rules.every((r) => r.ok)} type="submit">
+        <PasswordRules password={password} />
+        <button className={button} disabled={busy || !passwordOk(password)} type="submit">
           {busy && <Loader2 className="w-4 h-4 animate-spin" />} Create account
         </button>
       </form>
@@ -315,6 +314,129 @@ export const VerifyOtpPage: React.FC = () => {
       <button type="button" onClick={resend} className="text-sm text-indigo-400 hover:underline">
         Send a new code
       </button>
+    </Card>
+  );
+};
+
+/**
+ * Forgot password (signed out): e-mail -> 6-digit code + new password -> sign
+ * in again. The server answers the first step the same way whether or not the
+ * account exists, and a reset code never opens a session by itself.
+ */
+export const ForgotPasswordPage: React.FC = () => {
+  const [params] = useSearchParams();
+  const admin = params.get('portal') === 'admin';
+  const signInPath = admin ? '/admin/login' : '/login';
+  const navigate = useNavigate();
+  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [resent, setResent] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const cleanEmail = email.trim().toLowerCase();
+  const mismatch = confirm.length > 0 && confirm !== password;
+
+  const requestCode = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+    setBusy(true);
+    setError(null);
+    setResent(false);
+    try {
+      await postJson<MessageResponse>('/auth/password/forgot', { email: cleanEmail });
+      if (step === 'code') setResent(true);
+      setStep('code');
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await postJson<MessageResponse>('/auth/password/reset',
+        { email: cleanEmail, otp: code.trim(), new_password: password });
+      navigate(`${signInPath}?reset=1`, { replace: true });
+    } catch (err) {
+      // AUTH_INVALID_CREDENTIALS here means the code, not the password.
+      setError(err instanceof ApiError && err.code === 'AUTH_INVALID_CREDENTIALS'
+        ? new Error('That code is wrong or has expired. Check it, or send a new code.') : err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title={admin ? 'Reset administrator password' : 'Reset your password'}>
+      <ErrorNotice error={error} />
+      {step === 'email' ? (
+        <form onSubmit={requestCode} className="space-y-4" aria-label="Request a reset code">
+          <p className="text-sm text-slate-400">
+            Enter the e-mail address of your account. We will send a 6-digit code to choose a new password.
+          </p>
+          <label className="block space-y-1.5 text-sm">
+            <span className="text-slate-300">Email</span>
+            <input className={field} type="email" autoComplete="email" required value={email}
+                   onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <button className={button} disabled={busy} type="submit">
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />} Send reset code
+          </button>
+        </form>
+      ) : (
+        <>
+          <Notice tone="info">
+            If an account exists for <strong>{cleanEmail}</strong>, a 6-digit code has been sent to it. It expires in a
+            few minutes.
+            <br />
+            <span className="text-xs opacity-80">
+              Development servers without email configured print the code to the server console instead.
+            </span>
+          </Notice>
+          {resent && (
+            <Notice tone="success" title="If the account exists, a new code has been sent.">
+              You can request at most one code a minute. A code stops working after 5 wrong entries.
+            </Notice>
+          )}
+          <form onSubmit={reset} className="space-y-4" aria-label="Choose a new password">
+            <label className="block space-y-1.5 text-sm">
+              <span className="text-slate-300">Reset code</span>
+              <input className={`${field} text-center tracking-[0.5em] text-lg font-mono`}
+                     inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required
+                     value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+            </label>
+            <label className="block space-y-1.5 text-sm">
+              <span className="text-slate-300">New password</span>
+              <input className={field} type="password" autoComplete="new-password" required value={password}
+                     onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            <label className="block space-y-1.5 text-sm">
+              <span className="text-slate-300">Confirm new password</span>
+              <input className={field} type="password" autoComplete="new-password" required value={confirm}
+                     onChange={(e) => setConfirm(e.target.value)} />
+            </label>
+            <PasswordRules password={password} />
+            {mismatch && <p className="text-xs text-rose-300">The two passwords do not match.</p>}
+            <button className={button} type="submit"
+                    disabled={busy || code.length !== 6 || !passwordOk(password) || confirm !== password}>
+              {busy && <Loader2 className="w-4 h-4 animate-spin" />} Set new password
+            </button>
+          </form>
+          <button type="button" onClick={() => void requestCode()} disabled={busy}
+                  className="text-sm text-indigo-400 hover:underline disabled:opacity-50">
+            Send a new code
+          </button>
+        </>
+      )}
+      <p className="text-sm text-slate-400">
+        Remembered it? <Link className="text-indigo-400 hover:underline" to={signInPath}>Back to sign in</Link>
+      </p>
     </Card>
   );
 };

@@ -46,6 +46,10 @@ class User(Base):
     # (issued by registration). NULL = no redeemable challenge.
     otp_purpose = Column(String(16), nullable=True)
     is_email_verified = Column(Boolean, default=False, nullable=False)
+    # Migration 0005: every session token carries token_version ("ver"); a
+    # password change or reset increments it, which ends every older session.
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
+    password_changed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     images = relationship("Image", back_populates="user", cascade="all, delete-orphan")
@@ -97,3 +101,50 @@ class Image(Base):
 
     def __repr__(self) -> str:
         return f"<Image(image_id={self.image_id}, sha='{self.content_sha256[:8]}...', status='{self.validation_status}')>"
+
+
+class PasswordReset(Base):
+    """A pending forgot-password code (migration 0005): one per user, hash only.
+
+    Separate from users.otp_*: a reset request never replaces a pending
+    sign-in or registration code, and a reset code is not redeemable at
+    /auth/otp/verify.
+    """
+    __tablename__ = "password_resets"
+
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+    code_hash = Column(String(255), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+LOGIN_PORTALS = ("user", "admin")
+LOGIN_OUTCOMES = ("success", "otp_sent", "wrong_password", "unknown_account", "account_disabled",
+                  "not_admin", "otp_failed", "password_reset", "password_changed")
+
+
+class LoginEvent(Base):
+    """Login activity (migration 0005): one row per sign-in attempt or password change.
+
+    user_id is NULL for attempts on an address with no account; those rows
+    are visible to administrators only.
+    """
+    __tablename__ = "login_events"
+
+    event_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
+    email = Column(String(254), nullable=False)
+    portal = Column(String(8), nullable=False)
+    outcome = Column(String(20), nullable=False)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("portal IN ('user', 'admin')", name="chk_login_event_portal"),
+        CheckConstraint("outcome IN ('success', 'otp_sent', 'wrong_password', 'unknown_account', "
+                        "'account_disabled', 'not_admin', 'otp_failed', 'password_reset', 'password_changed')",
+                        name="chk_login_event_outcome"),
+        Index("ix_login_events_user_created", "user_id", "created_at"),
+        Index("ix_login_events_created", "created_at"),
+    )

@@ -62,6 +62,56 @@ TruePixels.rgb Security Team
 </body>
 </html>"""
 
+        return EmailService._deliver(recipient_email, subject, text_content, html_content, otp_code, "2FA OTP")
+
+    @staticmethod
+    def send_password_reset_email(recipient_email: str, code: str, user_name: Optional[str] = None) -> bool:
+        """Sends the code for a forgot-password request (migration 0005)."""
+        from app.m1_access.config import OTP_EXPIRE_MINUTES
+
+        subject = f"Your TruePixels.rgb password reset code: {code}"
+        display_name = user_name or "TruePixels User"
+        text_content = f"""Hello {display_name},
+
+Someone asked to reset the password of your TruePixels.rgb account. Your reset code is:
+
+    {code}
+
+This code will expire in {OTP_EXPIRE_MINUTES} minutes. If you did not ask for this, ignore this email:
+your password stays as it is.
+
+Best regards,
+TruePixels.rgb Security Team
+"""
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f4f7; padding: 20px; }}
+  .card {{ max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }}
+  .logo {{ font-size: 24px; font-weight: 700; color: #1e293b; margin-bottom: 20px; }}
+  .logo span {{ color: #6366f1; }}
+  .otp-box {{ background-color: #f1f5f9; padding: 18px; font-size: 32px; font-weight: 800; letter-spacing: 6px; text-align: center; color: #312e81; border-radius: 6px; margin: 25px 0; border: 1px dashed #6366f1; }}
+  .footer {{ font-size: 12px; color: #64748b; margin-top: 30px; text-align: center; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">TruePixels<span>.rgb</span></div>
+  <p>Hello <strong>{display_name}</strong>,</p>
+  <p>Someone asked to reset the password of your account. Use this 6-digit code to choose a new password:</p>
+  <div class="otp-box">{code}</div>
+  <p>This code will expire in <strong>{OTP_EXPIRE_MINUTES} minutes</strong>. If you did not ask for this, ignore this email: your password stays as it is.</p>
+  <div class="footer">&copy; TruePixels.rgb — AI-Generated Image Detection System</div>
+</div>
+</body>
+</html>"""
+        return EmailService._deliver(recipient_email, subject, text_content, html_content, code, "Password reset code")
+
+    @staticmethod
+    def _deliver(recipient_email: str, subject: str, text_content: str, html_content: str,
+                 otp_code: str, label: str) -> bool:
+        """SMTP, or the development-only console fallback. ``label`` names the code in logs."""
         import os
         from app.shared.logging import emit
 
@@ -97,7 +147,7 @@ TruePixels.rgb Security Team
                     server.login(smtp_user, smtp_password)
                     server.sendmail(smtp_from, [clean_recipient], msg.as_string())
                     server.quit()
-                    emit("authentication", f"2FA OTP email delivered via Gmail TLS to {clean_recipient}", severity="info")
+                    emit("authentication", f"{label} email delivered via Gmail TLS to {clean_recipient}", severity="info")
                     return True
                 except Exception as e_tls:
                     # Fallback to SSL on 465
@@ -105,7 +155,7 @@ TruePixels.rgb Security Team
                     server.login(smtp_user, smtp_password)
                     server.sendmail(smtp_from, [clean_recipient], msg.as_string())
                     server.quit()
-                    emit("authentication", f"2FA OTP email delivered via Gmail SSL to {clean_recipient}", severity="info")
+                    emit("authentication", f"{label} email delivered via Gmail SSL to {clean_recipient}", severity="info")
                     return True
             except Exception as e:
                 emit("error", f"Gmail SMTP delivery failed to {clean_recipient}: {e}", severity="error")
@@ -114,7 +164,7 @@ TruePixels.rgb Security Team
         from app.m1_access.config import is_production
 
         if is_production():
-            emit("error", f"OTP for {clean_recipient} not delivered: no working e-mail delivery "
+            emit("error", f"{label} for {clean_recipient} not delivered: no working e-mail delivery "
                  "(console delivery is development only)", severity="error")
             return False
 
@@ -125,8 +175,8 @@ TruePixels.rgb Security Team
         # by admins in the log viewer. D6 records only that a code was issued.
         from app.shared.logging import logger as console_only
 
-        console_only.info(f"2FA OTP simulated in console for {clean_recipient}: code={otp_code} "
+        console_only.info(f"{label} simulated in console for {clean_recipient}: code={otp_code} "
                           "[development console only - not stored]")
-        emit("authentication", f"2FA OTP issued (console delivery, code not logged) for {clean_recipient}",
+        emit("authentication", f"{label} issued (console delivery, code not logged) for {clean_recipient}",
              severity="info")
         return True

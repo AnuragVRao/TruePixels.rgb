@@ -62,6 +62,8 @@ const MESSAGES: Record<string, string> = {
   AUTH_TOKEN_INVALID: 'Your session has expired. Please sign in again.',
   AUTH_FORBIDDEN: 'You do not have permission to do that.',
   AUTH_ACCOUNT_DISABLED: 'This account is disabled.',
+  AUTH_CURRENT_PASSWORD_INCORRECT: 'The current password is not correct.',
+  // AUTH_WEAK_PASSWORD: the server's own message names the rule that failed.
   // AUTH_RATE_LIMITED: the server's own message carries the wait in seconds.
   IMG_FORMAT_UNSUPPORTED: 'Only JPG, JPEG and PNG images are accepted.',
   IMG_TOO_LARGE: 'The file is larger than the allowed upload size.',

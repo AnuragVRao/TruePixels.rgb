@@ -122,3 +122,59 @@ skipped the password.
   memory**: a restart forgets every counter. With several workers, each
   counts separately. The app runs one worker on purpose (the GPU). This
   slows online guessing; it is not a distributed rate limiter.
+
+## Forgot password, change password, login activity (2026-10-08, migration 0005)
+
+**Forgot password** (signed out, both portals):
+
+1. `POST /api/v1/auth/password/forgot {email}` e-mails a 6-digit code.
+   - The answer is the same whether or not the account exists.
+   - In production without SMTP it is a 503 for every address, so nothing leaks.
+   - Sends share the `/otp/send` limits per address: 60 s cooldown, 5 an hour.
+2. `POST /api/v1/auth/password/reset {email, otp, new_password}` sets the new password.
+   - It returns **no session**: the user then signs in normally, with 2FA if it is on.
+   - 5 wrong codes delete the code.
+   - It works whether or not 2FA is on.
+
+Reset codes live in their own table, `password_resets`: one row per user, Argon2id hash only.
+They are kept out of `users.otp_*`, so:
+
+- a reset request never replaces a pending sign-in or registration code;
+- a reset code is never redeemable at `/auth/otp/verify`;
+- `/otp/send` never re-sends it.
+
+Widening the `otp_purpose` CHECK was the alternative, but on SQLite that needs a rebuild of
+`users`, and a rebuild drops the `lower(email)` index.
+
+**Change password** (signed in, User or Admin):
+
+- `POST /api/v1/auth/password/change {current_password, new_password}`.
+- A wrong current password is **400** `AUTH_CURRENT_PASSWORD_INCORRECT`, not 401: a 401 would make
+  the client sign the user out over a typo.
+- The check is throttled with the sign-in counters, so a stolen session cannot be used to guess
+  the password.
+- It returns a new token for the calling tab.
+
+**Sessions end on a password change or reset.**
+
+- `users.token_version` is in every token as `ver`, and both operations increment it.
+- Tokens issued before 0005 carry no `ver`, which counts as 0, so they stay valid until the first
+  change.
+
+**Login activity** is stored in `login_events`, one row for each of these:
+
+- every sign-in attempt on either portal;
+- every 2FA code step;
+- every password change or reset.
+
+Each row holds the time, e-mail, portal, outcome, client IP (`request.client.host`, the throttle's
+own source) and user-agent.
+
+- `GET /api/v1/users/me/login-activity` returns your own rows.
+- `GET /api/v1/admin/login-activity` returns every row, including unknown addresses. Viewing it is
+  audited in D6.
+- The recorder never raises.
+- Rows are purged after 90 days.
+- Not recorded:
+  - throttled attempts (429): they are refused before any account lookup;
+  - which portal a 2FA code step came from: the role stands in.

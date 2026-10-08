@@ -33,6 +33,7 @@ export const AdminLayout: React.FC = () => {
         <NavLink to="/admin" end className={tab}>Overview</NavLink>
         <NavLink to="/admin/logs" className={tab}>Logs</NavLink>
         <NavLink to="/admin/users" className={tab}>Users</NavLink>
+        <NavLink to="/admin/login-activity" className={tab}>Login Activity</NavLink>
         <NavLink to="/admin/models" className={tab}>Models</NavLink>
       </nav>
       <Outlet />

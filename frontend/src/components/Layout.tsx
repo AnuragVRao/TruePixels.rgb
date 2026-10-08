@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, CheckCircle, Clock, Lock, LogOut, ScanSearch, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { BarChart3, CheckCircle, Clock, Lock, LogOut, ScanSearch, ShieldAlert, ShieldCheck, UserCog } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -72,14 +72,16 @@ export const Layout: React.FC = () => {
           )}
           {user && (
             <div className="flex items-center gap-2 min-w-0">
-              <span className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 min-w-0">
+              <Link to="/account" title="Account: change password, login activity"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500 text-xs text-slate-300 min-w-0">
+                <UserCog className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                 <span className={`w-2 h-2 rounded-full shrink-0 ${isAdmin ? 'bg-amber-400' : 'bg-emerald-400'}`} />
                 <span className="truncate hidden sm:inline max-w-[14rem]">{user.email}</span>
                 <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md ${
                   isAdmin ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-800 text-slate-400'}`}>
                   {user.role}
                 </span>
-              </span>
+              </Link>
               <button
                 type="button"
                 onClick={() => setConfirmSignOut(true)}

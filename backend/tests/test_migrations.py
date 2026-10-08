@@ -282,7 +282,7 @@ def test_0004_recomputes_confidence_from_the_threshold_and_downgrades_exactly():
     assert old[ids[0]] == pytest.approx(1 - 0.5233)  # the reported "Real, 47.7 %"
     with db.engine.begin() as connection:
         cfg.attributes["connection"] = connection
-        command.upgrade(cfg, "0004")
+        command.upgrade(cfg, "head")  # through 0004, back to head for the tests that follow
     new = confidences()
     tau = 0.7558
     for pid, (fusion, cls) in zip(ids, cases):

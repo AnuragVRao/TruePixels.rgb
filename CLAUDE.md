@@ -375,7 +375,7 @@ module.
 | Calibration (temperature) | ❌ no-op at T=1.0, and **MM2.5 is now measured as missed** — ECE 0.113 on validation, and the best temperature available (T = 0.97) only reaches 0.110 against a ≤ 0.05 target. Temperature scaling alone will not close it |
 | D3/D4 persistence | ✅ every prediction writes D4 and commits before responding; M3 reads it back (asserted end-to-end). SQLite by default |
 | Registry / model management (F.19) | ✅ D3 decides what runs; every D4 row links the semantic, frequency and fusion rows that actually ran (real FKs, RESTRICT). Activation = canary + quality gate (validation-split reference, 100 images; refuse if accuracy −0.05, FPR > 0.20 or AUC −0.02) + locked atomic switch; forced overrides need a reason and are audit-logged; rollback is one call (gate advisory there). Head uploads validated **only with perturbed copies of the published heads** (no training); fusion-config swap is the demonstrated feature. `metrics` stays null |
-| Sign-in / OTP (F.2) | ✅ realised, with **optional OTP 2FA, off by default** (`REQUIRE_2FA=False`). Until 2026-10-05 the OTP feature was an email-only sign-in for any role. Now a code exists only in a challenge created by a correct password (`login`) or registration (`register`, User only); 2FA off refuses the OTP endpoints; production never issues codes without real e-mail. Sign-in and OTP throttled (in memory, resets on restart). See [docs/auth-hardening.md](docs/auth-hardening.md) |
+| Sign-in / OTP (F.2) | ✅ realised, with **optional OTP 2FA, off by default** (`REQUIRE_2FA=False`). Until 2026-10-05 the OTP feature was an email-only sign-in for any role. Now a code exists only in a challenge created by a correct password (`login`) or registration (`register`, User only); 2FA off refuses the OTP endpoints; production never issues codes without real e-mail. Sign-in and OTP throttled (in memory, resets on restart). **Since 2026-10-08:** forgot password (e-mailed code in its own `password_resets` table, never a session), change password (ends every other session via `users.token_version`), and login activity (`login_events`: time, outcome, portal, IP, browser; own rows at `/account`, all rows at `/admin/login-activity`; 90-day purge). See [docs/auth-hardening.md](docs/auth-hardening.md) |
 | Authentication / ownership | ✅ M1's JWT sessions on every M2/M3 endpoint; predictions owner-only, `IMG_NOT_FOUND` for not-yours (no id oracle) |
 | Explainability (F.10/F.11/F.14/NF.13) | ✅ **real** — attention recomputed from passively captured inputs (matches eager attention < 1e-4; scores bit-identical, `regression_check --xai` 24/24). Rollout is an **attention-based proxy**. Deletion test (40 validation images, semantic branch only, per-image unit): masking the top-attended 20% beats random by mean +0.071 [0.041, 0.103], **median +0.019**; paired t one-sided p = 4.0e-5 (Wilcoxon 5.8e-8). Better than chance; typical advantage small. Frequency panel is descriptive, **not validated**. Frequency panel = mean spectrum of SPAI's 224 px patches + its r = 16 split; descriptive, not evidence. Cost: +1.2–3.7 s, +7 MB VRAM. See RESULTS.md |
 | **Detection of whole-image synthesis** | ✅ **measured** — Synthbuster vs RAISE-1k, 99 per class, at an operating point chosen on a disjoint validation split: fused accuracy 0.864 [0.81, 0.90], recall 0.838, AUC 0.941 [0.91, 0.97]; SPAI alone AUC 0.967. Confound-controlled. Read the narrow claim, not "accuracy" |
@@ -569,7 +569,28 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-05 (latest) — Phase 6 (HTTPS) and the pre-6 auth hardening
+### 2026-10-08 (latest) — forgot password, change password, login activity
+- Migration 0005:
+  - `users.token_version` (the `ver` claim) and `users.password_changed_at`;
+  - `password_resets`, one hashed code per user;
+  - `login_events`.
+- Endpoints:
+  - `POST /auth/password/forgot`, `/auth/password/reset` and `/auth/password/change`;
+  - `GET /users/me/login-activity` and `GET /admin/login-activity`.
+- Reset codes are kept out of `users.otp_*`. Widening that CHECK on SQLite would rebuild `users`
+  and lose the `lower(email)` index, and a separate table also stops a reset from replacing a
+  pending sign-in code.
+- A wrong current password is 400, not 401: the React client signs out on any 401.
+- `changes.md` was removed by the user in `4bf5c15`. These M1/M3 edits are recorded in
+  docs/auth-hardening.md instead.
+- React:
+  - "Forgot password?" on both portals, then `/forgot-password`;
+  - `/account` (reached from the e-mail chip): change password plus own login activity;
+  - admin "Login Activity" tab.
+- Tests: `test_password_reset.py` and `test_login_activity.py` (25). `test_migrations.py`'s 0004
+  test now re-upgrades to head.
+
+### 2026-10-05 — Phase 6 (HTTPS) and the pre-6 auth hardening
 - Pre-6:
   - OTP is a second factor: challenges are bound to a password or to
     registration; codes are purged on expiry;

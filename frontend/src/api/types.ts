@@ -102,3 +102,31 @@ export interface HistoryPage {
   page_size: number;
   total_pages: number;
 }
+
+export type LoginOutcome =
+  | 'success' | 'otp_sent' | 'wrong_password' | 'unknown_account' | 'account_disabled'
+  | 'not_admin' | 'otp_failed' | 'password_reset' | 'password_changed';
+
+/** One row of login activity (GET /users/me/login-activity, GET /admin/login-activity). */
+export interface LoginEvent {
+  event_id: number;
+  user_id: number | null;
+  email: string;
+  portal: 'user' | 'admin';
+  outcome: LoginOutcome;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface PaginatedLoginEvents {
+  items: LoginEvent[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface MessageResponse {
+  message: string;
+}

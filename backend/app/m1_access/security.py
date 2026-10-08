@@ -94,6 +94,9 @@ def create_session_token(user: User, custom_expire_hours: Optional[int] = None) 
         "email": user.email,
         "role": user.role,
         "account_status": user.account_status,
+        # Migration 0005: a password change or reset increments token_version,
+        # which ends every session issued before it.
+        "ver": user.token_version or 0,
         "iat": int(issued_at.timestamp()),
         "exp": int(expires_at.timestamp()),
     }
@@ -129,6 +132,7 @@ def verify_session_token(token: str, db: Session) -> SessionContext:
         account_status = payload.get("account_status")
         iat = datetime.fromtimestamp(payload.get("iat"), timezone.utc)
         exp = datetime.fromtimestamp(payload.get("exp"), timezone.utc)
+        version = int(payload.get("ver", 0))  # tokens from before migration 0005 carry none
     except (JWTError, ValueError, TypeError):
         raise AuthTokenInvalidException("Missing, malformed or expired session token.")
 
@@ -136,6 +140,8 @@ def verify_session_token(token: str, db: Session) -> SessionContext:
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise AuthTokenInvalidException("User associated with token no longer exists.")
+    if version != (user.token_version or 0):
+        raise AuthTokenInvalidException("This session ended when the account's password was changed.")
     if user.account_status in ("disabled", "removed"):
         emit("authentication", f"Access blocked: user_id={user.user_id} is {user.account_status}", severity="warning", user_id=user.user_id)
         raise AuthAccountDisabledException(f"Account is {user.account_status}.")

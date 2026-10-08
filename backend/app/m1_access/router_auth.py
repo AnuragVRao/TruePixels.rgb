@@ -9,10 +9,14 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.m1_access.config import OTP_EXPIRE_MINUTES, REQUIRE_2FA, ENVIRONMENT
-from app.m1_access import otp_challenge, throttle
+from app.m1_access import login_activity, otp_challenge, password_reset, throttle
 from app.m1_access.email_service import EmailService
 from app.m1_access.models import User
 from app.m1_access.schemas import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    MessageResponse,
+    ResetPasswordRequest,
     OTPRequest,
     OTPVerifyRequest,
     OTPVerifyResponse,
@@ -34,6 +38,7 @@ from app.m1_access.security import (
 )
 from app.shared.db import get_db
 from app.shared.errors import (
+    AppException,
     AuthAccountDisabledException,
     AuthEmailTakenException,
     AuthForbiddenException,
@@ -132,12 +137,14 @@ def login_user(
         verify_password(body.password, DUMMY_HASH)
         throttle.login_failed(attempt_key)
         emit("authentication", f"Login failed: unknown email {clean_email}", severity="warning")
+        login_activity.record(request, portal="user", outcome="unknown_account", email=clean_email)
         raise AuthInvalidCredentialsException("Invalid email or password.")
 
     # Check password
     if not verify_password(body.password, user.password_hash):
         throttle.login_failed(attempt_key)
         emit("authentication", f"Login failed: bad password for user_id={user.user_id}", severity="warning", user_id=user.user_id)
+        login_activity.record(request, portal="user", outcome="wrong_password", email=clean_email, user=user)
         raise AuthInvalidCredentialsException("Invalid email or password.")
 
     throttle.login_succeeded(attempt_key)  # the password was right
@@ -145,12 +152,14 @@ def login_user(
     # Check account active status
     if user.account_status in ("disabled", "removed"):
         emit("authentication", f"Login blocked: account {user.account_status} for user_id={user.user_id}", severity="warning", user_id=user.user_id)
+        login_activity.record(request, portal="user", outcome="account_disabled", email=clean_email, user=user)
         raise AuthAccountDisabledException(f"Account is {user.account_status}.")
 
     # If 2FA is required, trigger OTP dispatch before issuing token
     if REQUIRE_2FA:
         otp_challenge.issue(db, user, "login")  # after the correct password only (changes.md 6.15)
         emit("authentication", f"2FA OTP dispatched for login: user_id={user.user_id}", severity="info", user_id=user.user_id)
+        login_activity.record(request, portal="user", outcome="otp_sent", email=clean_email, user=user)
         return UserLoginResponse(
             token="",
             role=user.role,
@@ -161,6 +170,7 @@ def login_user(
 
     token, issued_at, expires_at = create_session_token(user)
     emit("authentication", f"User logged in successfully: user_id={user.user_id}", severity="info", user_id=user.user_id)
+    login_activity.record(request, portal="user", outcome="success", email=clean_email, user=user)
 
     return UserLoginResponse(
         token=token,
@@ -193,27 +203,32 @@ def login_admin(
         verify_password(body.password, DUMMY_HASH)
         throttle.login_failed(attempt_key)
         emit("authentication", f"Admin login failed: unknown email {clean_email}", severity="warning")
+        login_activity.record(request, portal="admin", outcome="unknown_account", email=clean_email)
         raise AuthInvalidCredentialsException("Invalid email or password.")
 
     if not verify_password(body.password, user.password_hash):
         throttle.login_failed(attempt_key)
         emit("authentication", f"Admin login failed: bad password for user_id={user.user_id}", severity="warning", user_id=user.user_id)
+        login_activity.record(request, portal="admin", outcome="wrong_password", email=clean_email, user=user)
         raise AuthInvalidCredentialsException("Invalid email or password.")
 
     throttle.login_succeeded(attempt_key)  # the password was right
 
     if user.account_status in ("disabled", "removed"):
         emit("authentication", f"Admin login blocked: account is {user.account_status}", severity="warning", user_id=user.user_id)
+        login_activity.record(request, portal="admin", outcome="account_disabled", email=clean_email, user=user)
         raise AuthAccountDisabledException(f"Account is {user.account_status}.")
 
     # PRD §5.1.3: User credentials on admin login endpoint returns 403 AUTH_FORBIDDEN
     if user.role != "Admin":
         emit("authentication", f"Admin login rejected: user_id={user.user_id} has role '{user.role}'", severity="warning", user_id=user.user_id)
+        login_activity.record(request, portal="admin", outcome="not_admin", email=clean_email, user=user)
         raise AuthForbiddenException("Access denied. Administrator privileges required.")
 
     if REQUIRE_2FA:
         otp_challenge.issue(db, user, "login")  # after the correct password only (changes.md 6.15)
         emit("authentication", f"2FA OTP dispatched for admin login: user_id={user.user_id}", severity="info", user_id=user.user_id)
+        login_activity.record(request, portal="admin", outcome="otp_sent", email=clean_email, user=user)
         return UserLoginResponse(
             token="",
             role="Admin",
@@ -224,6 +239,7 @@ def login_admin(
 
     token, issued_at, expires_at = create_session_token(user)
     emit("authentication", f"Admin logged in successfully: user_id={user.user_id}", severity="info", user_id=user.user_id)
+    login_activity.record(request, portal="admin", outcome="success", email=clean_email, user=user)
 
     return UserLoginResponse(
         token=token,
@@ -264,6 +280,10 @@ def get_me(
 # endpoints can re-send and redeem such a challenge; they can never start one.
 
 
+def _portal_of(user: User) -> str:
+    return "admin" if user.role == "Admin" else "user"
+
+
 def _otp_in_use() -> None:
     if not REQUIRE_2FA:
         raise AuthForbiddenException("Verification codes are not in use on this server.")
@@ -302,6 +322,7 @@ def send_otp(
 )
 def verify_otp(
     body: OTPVerifyRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     _otp_in_use()
@@ -323,6 +344,9 @@ def verify_otp(
         emit("authentication", f"OTP verification failed for user_id={user.user_id} "
              f"({'purpose mismatch' if not right_purpose else 'code mismatch'})", severity="warning",
              user_id=user.user_id)
+        # Login activity: the code step of a sign-in. The challenge does not
+        # carry which portal the password step used, so the role stands in.
+        login_activity.record(request, portal=_portal_of(user), outcome="otp_failed", email=clean_email, user=user)
         if throttle.otp_wrong(user.user_id):  # the 5th wrong attempt kills the code (6.13)
             otp_challenge.clear(db, user)
         raise AuthInvalidCredentialsException(invalid)
@@ -339,6 +363,7 @@ def verify_otp(
 
     token, issued_at, expires_at_token = create_session_token(user)
     emit("authentication", f"2FA OTP verified successfully: user_id={user.user_id}", severity="info", user_id=user.user_id)
+    login_activity.record(request, portal=_portal_of(user), outcome="success", email=clean_email, user=user)
 
     return OTPVerifyResponse(
         message="Verification successful.",
@@ -347,3 +372,112 @@ def verify_otp(
         expires_at=expires_at_token,
         user_id=user.user_id,
     )
+
+
+# --- Forgot password, reset and change (migration 0005) ---
+# A reset code lives in password_resets, apart from the sign-in / registration
+# challenge: it can only set a new password, never open a session. Both a
+# reset and a change end every existing session (users.token_version).
+
+_RESET_SENT = "If an account exists for that address, a reset code has been sent to it."
+_RESET_INVALID = "Invalid or expired reset code."
+
+
+def _strong(password: str) -> None:
+    try:
+        validate_password_strength(password)
+    except ValueError as e:
+        raise AppException(code="AUTH_WEAK_PASSWORD", status_code=422, message=str(e))
+
+
+@router.post(
+    "/password/forgot",
+    response_model=MessageResponse,
+    summary="E-mail a password reset code (same answer whether or not the account exists)",
+)
+def forgot_password(
+    body: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    # Refused for EVERY address when no code could be delivered, so the
+    # answer reveals nothing about which accounts exist.
+    otp_challenge.ensure_delivery_possible()
+    clean_email = body.email.strip().lower()
+    answer = MessageResponse(message=_RESET_SENT)
+    if not throttle.may_send(clean_email):  # 60 s cooldown, 5 per hour per address
+        return answer
+    user = db.query(User).filter(func.lower(User.email) == clean_email).first()
+    if user is None or user.account_status != "active":
+        create_otp_hash(generate_otp())  # same hashing cost as a real send
+        emit("authentication", f"Password reset requested for {clean_email}: no active account", severity="warning")
+        return answer
+    password_reset.issue(db, user)
+    emit("authentication", f"Password reset code sent: user_id={user.user_id}", severity="info", user_id=user.user_id)
+    return answer
+
+
+@router.post(
+    "/password/reset",
+    response_model=MessageResponse,
+    summary="Set a new password with an e-mailed reset code; every session ends",
+)
+def reset_password(
+    body: ResetPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    _strong(body.new_password)
+    clean_email = body.email.strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == clean_email).first()
+    if not password_reset.redeem(db, user, body.otp.strip()):
+        emit("authentication", f"Password reset failed for {clean_email}: invalid or expired code",
+             severity="warning", user_id=user.user_id if user else None)
+        raise AuthInvalidCredentialsException(_RESET_INVALID)
+    if user.account_status != "active":
+        password_reset.clear(db, user)
+        raise AuthAccountDisabledException(f"Account is {user.account_status}.")
+
+    user.is_email_verified = True  # redeeming the code proved control of the mailbox
+    password_reset.set_password(db, user, body.new_password)
+    emit("authentication", f"Password reset with an e-mailed code: user_id={user.user_id}", severity="info",
+         user_id=user.user_id)
+    login_activity.record(request, portal=_portal_of(user), outcome="password_reset", email=clean_email, user=user)
+    return MessageResponse(message="Your password has been changed. Sign in with the new password.")
+
+
+@router.post(
+    "/password/change",
+    response_model=UserLoginResponse,
+    summary="Change the signed-in account's password; other sessions end, this one gets a new token",
+)
+def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    session: SessionContext = Depends(current_session),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.user_id == session.user_id).first()
+    # The current-password check is throttled exactly like sign-in, so a
+    # stolen session cannot be used to guess the password.
+    attempt_key = throttle.login_key(user.email, request.client.host if request.client else None)
+    throttle.check_login(attempt_key)
+    if not verify_password(body.current_password, user.password_hash):
+        throttle.login_failed(attempt_key)
+        emit("authentication", f"Password change refused: wrong current password for user_id={user.user_id}",
+             severity="warning", user_id=user.user_id)
+        # 400, not 401: the session itself is fine, and a 401 would sign the
+        # client out over a typo.
+        raise AppException(code="AUTH_CURRENT_PASSWORD_INCORRECT", status_code=400,
+                           message="The current password is not correct.")
+    throttle.login_succeeded(attempt_key)
+    if body.new_password == body.current_password:
+        raise AppException(code="AUTH_WEAK_PASSWORD", status_code=422,
+                           message="The new password must be different from the current one.")
+    _strong(body.new_password)
+
+    password_reset.set_password(db, user, body.new_password)
+    token, issued_at, expires_at = create_session_token(user)
+    emit("authentication", f"Password changed: user_id={user.user_id}", severity="info", user_id=user.user_id)
+    login_activity.record(request, portal=_portal_of(user), outcome="password_changed", email=user.email, user=user)
+    return UserLoginResponse(token=token, role=user.role, expires_at=expires_at, user_id=user.user_id,
+                             requires_otp=False)

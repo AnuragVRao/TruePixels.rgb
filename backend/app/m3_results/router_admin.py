@@ -5,6 +5,7 @@ Guarded strictly by require_role("Admin").
 from __future__ import annotations
 import math
 from datetime import datetime
+from typing import Literal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -24,8 +25,14 @@ from app.m3_results.schemas import (
     UserStatusResponse,
 )
 from app.m3_results.analytics import get_admin_summary, get_system_analytics
+from app.m1_access import login_activity
+from app.m1_access.models import LoginEvent
+from app.m1_access.schemas import PaginatedLoginEvents
 
 router = APIRouter(prefix="/admin", tags=["Administration & Monitoring"])
+
+LoginOutcome = Literal["success", "otp_sent", "wrong_password", "unknown_account", "account_disabled",
+                       "not_admin", "otp_failed", "password_reset", "password_changed"]
 
 
 @router.get("/summary", response_model=AdminSummaryTile)
@@ -97,6 +104,31 @@ def get_system_logs(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+@router.get("/login-activity", response_model=PaginatedLoginEvents)
+def get_login_activity(
+    outcome: LoginOutcome | None = Query(default=None, description="Filter by outcome"),
+    email: str | None = Query(default=None, max_length=254, description="Filter by e-mail (substring)"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    session: SessionContext = Depends(require_role("Admin")),
+    db: Session = Depends(get_db),
+) -> PaginatedLoginEvents:
+    """Every account's sign-in attempts and password changes (migration 0005),
+    including attempts on addresses with no account. Audited like /logs."""
+    query = db.query(LoginEvent)
+    if outcome:
+        query = query.filter(LoginEvent.outcome == outcome)
+    if email:
+        query = query.filter(LoginEvent.email.contains(email.strip().lower(), autoescape=True))
+    emit(
+        event_type="administrative-action",
+        event_detail=f"Admin {session.user_id} viewed login activity (page={page}, filters: outcome={outcome})",
+        severity="info",
+        user_id=session.user_id,
+    )
+    return login_activity.page_of(query, page, page_size)
 
 
 @router.get("/analytics", response_model=SystemAnalytics)

@@ -4,7 +4,8 @@ import { AuthProvider } from './context/AuthContext';
 import { Layout, RequireAuth } from './components/Layout';
 import { useAuth } from './context/AuthContext';
 import { LandingPage } from './pages/LandingPage';
-import { AdminLoginPage, LoginPage, RegisterPage, VerifyOtpPage } from './pages/AuthPages';
+import { AdminLoginPage, ForgotPasswordPage, LoginPage, RegisterPage, VerifyOtpPage } from './pages/AuthPages';
+import { AccountPage } from './pages/AccountPage';
 import { UploadPage } from './pages/UploadPage';
 import { ResultsPage } from './pages/ResultsPage';
 import { HistoryPage } from './pages/HistoryPage';
@@ -15,6 +16,7 @@ import { AdminLayout } from './pages/admin/AdminLayout';
 const OverviewPage = lazy(() => import('./pages/admin/OverviewPage').then((m) => ({ default: m.OverviewPage })));
 const LogsPage = lazy(() => import('./pages/admin/LogsPage').then((m) => ({ default: m.LogsPage })));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage').then((m) => ({ default: m.UsersPage })));
+const LoginActivityPage = lazy(() => import('./pages/admin/LoginActivityPage').then((m) => ({ default: m.LoginActivityPage })));
 const ModelsPage = lazy(() => import('./pages/admin/ModelsPage').then((m) => ({ default: m.ModelsPage })));
 const loadingAdmin = <p className="text-slate-400 text-sm">Loading…</p>;
 
@@ -51,15 +53,18 @@ const Routed: React.FC = () => {
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/verify" element={<VerifyOtpPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route element={<RequireAuth />}>
             <Route path="/results/:id" element={<ResultsPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/verification" element={<VerificationPage />} />
+            <Route path="/account" element={<AccountPage />} />
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Suspense fallback={loadingAdmin}><OverviewPage /></Suspense>} />
             <Route path="logs" element={<Suspense fallback={loadingAdmin}><LogsPage /></Suspense>} />
             <Route path="users" element={<Suspense fallback={loadingAdmin}><UsersPage /></Suspense>} />
+            <Route path="login-activity" element={<Suspense fallback={loadingAdmin}><LoginActivityPage /></Suspense>} />
             <Route path="models" element={<Suspense fallback={loadingAdmin}><ModelsPage /></Suspense>} />
           </Route>
           <Route path="*" element={<NotFound />} />

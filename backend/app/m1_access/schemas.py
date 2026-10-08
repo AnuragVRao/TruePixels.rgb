@@ -110,3 +110,56 @@ class ImageMetadataResponse(BaseModel):
     rejection_reason: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Password reset / change and login activity (migration 0005) ---
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., max_length=256)
+    new_password: str = Field(..., max_length=256)
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class LoginEventItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    event_id: int
+    user_id: Optional[int] = None
+    email: str
+    portal: Literal["user", "admin"]
+    outcome: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: datetime
+
+
+class PaginatedLoginEvents(BaseModel):
+    items: list[LoginEventItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

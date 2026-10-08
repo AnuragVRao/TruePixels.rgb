@@ -231,23 +231,30 @@ def login_succeeded(key: tuple[str, str]) -> None:
 
 # ---- OTP codes ------------------------------------------------------------
 
-def new_code_issued(user_id: int) -> None:
+# ``scope`` separates kinds of code: "otp" (sign-in / registration) and
+# "reset" (forgot password) count their wrong attempts independently.
+def _code_key(user_id: int, scope: str):
+    return user_id if scope == "otp" else f"{scope}:{user_id}"
+
+
+def new_code_issued(user_id: int, scope: str = "otp") -> None:
     with _lock:
-        _otp_wrong.pop(user_id, None)
+        _otp_wrong.pop(_code_key(user_id, scope), None)
 
 
-def otp_wrong(user_id: int) -> bool:
+def otp_wrong(user_id: int, scope: str = "otp") -> bool:
     """Record a wrong code; True when the challenge must now be invalidated."""
+    key = _code_key(user_id, scope)
     now = clock()
     with _lock:
-        count = (_otp_wrong.get(user_id) or 0) + 1
+        count = (_otp_wrong.get(key) or 0) + 1
         if count >= OTP_MAX_WRONG:
-            _otp_wrong.pop(user_id, None)
-        elif _otp_wrong.touch(user_id, lambda: 0, now) is not None:
-            _otp_wrong[user_id] = count
+            _otp_wrong.pop(key, None)
+        elif _otp_wrong.touch(key, lambda: 0, now) is not None:
+            _otp_wrong[key] = count
     if count >= OTP_MAX_WRONG:
-        _log_once(f"otp:{user_id}", f"OTP invalidated after {OTP_MAX_WRONG} wrong codes: user_id={user_id}",
-                  user_id=user_id)
+        _log_once(f"{scope}:{user_id}", f"{'OTP' if scope == 'otp' else 'Password reset'} code invalidated "
+                  f"after {OTP_MAX_WRONG} wrong codes: user_id={user_id}", user_id=user_id)
         return True
     return False
 

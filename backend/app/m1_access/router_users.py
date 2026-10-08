@@ -2,17 +2,19 @@
 
 Conforms to PRD Section 5.1.5 / 6.3 and Module Interface Contract Section 6.3.
 """
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
+from app.m1_access import login_activity
 from app.m1_access.account_policy import apply_status_change
-from app.m1_access.models import User
+from app.m1_access.models import LoginEvent, User
 from typing import List
 from app.m1_access.schemas import (
+    PaginatedLoginEvents,
     UserListItemResponse,
     UserStatusUpdateRequest,
     UserStatusUpdateResponse,
 )
-from app.m1_access.security import require_role
+from app.m1_access.security import current_session, require_role
 from app.shared.db import get_db
 from app.shared.errors import (
     AdmActionNotPermittedException,
@@ -21,6 +23,21 @@ from app.shared.logging import emit
 from app.shared.schemas import SessionContext
 
 router = APIRouter(prefix="/users", tags=["User Administration (M1 Write)"])
+
+
+@router.get(
+    "/me/login-activity",
+    response_model=PaginatedLoginEvents,
+    summary="The signed-in user's own sign-ins and password changes, newest first",
+)
+def my_login_activity(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    session: SessionContext = Depends(current_session),
+    db: Session = Depends(get_db),
+):
+    query = db.query(LoginEvent).filter(LoginEvent.user_id == session.user_id)
+    return login_activity.page_of(query, page, page_size)
 
 
 @router.get(
