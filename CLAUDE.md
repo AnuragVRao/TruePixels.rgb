@@ -119,11 +119,18 @@ the code.
 
 ## 3. Current focus: M2, integrated with M1 and M3
 
-**M1 and M3 are written by teammates** and were integrated on 2026-09-30
-([changes.md](changes.md) lists every edit made to their code, and why).
-[backend/app/m1_access/](backend/app/m1_access/) and
-[backend/app/m3_results/](backend/app/m3_results/) are theirs: change them
-only when integration requires it, and record each change in `changes.md`.
+**M1 is written by a teammate**; M1 and M3 were integrated on 2026-09-30
+([changes.md](changes.md), removed in `4bf5c15`, listed every edit made to the
+teammates' code). [backend/app/m1_access/](backend/app/m1_access/) is theirs:
+change it only when integration requires it, and record each change (since
+`changes.md` went: in [docs/auth-hardening.md](docs/auth-hardening.md)).
+
+**Ownership change, 2026-10-08: M3 is now owned by this project's author.**
+[backend/app/m3_results/](backend/app/m3_results/), `backend/tests/m3/` and
+`frontend/m3_dashboard/` are edited directly, like M2, with no hand-off or
+acknowledgement step. Edits made to M3 before that date were recorded as
+teammate-code edits (changes.md, then commit messages); from then on they are
+ordinary commits.
 
 The seams are [backend/app/shared/contracts/](backend/app/shared/contracts/):
 [c1.py](backend/app/shared/contracts/c1.py) in (from M1's
@@ -326,7 +333,7 @@ backend/app/
     schemas.py               re-exports C1-C3 at the path M1/M3 import from
     db.py deps.py errors.py logging.py   merged from M1 + M3 (see changes.md)
   m1_access/                 M1 (teammate): auth, OTP, upload validation, C1 preprocess, D1/D2
-  m3_results/                M3 (teammate): results, history, PDF reports, admin, D5/D6, C5 logs
+  m3_results/                M3 (owned here since 2026-10-08): results, history, PDF reports, admin, D5/D6, C5 logs
   stubs/                     M3's fake M1/M2 — TEST-ONLY, imported by backend/tests/m3 alone
   m2_analysis/
     detectors.py             ★ semantic branch (SigLIP 2) + resolve_ai_index
