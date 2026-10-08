@@ -23,7 +23,9 @@ export interface SystemAnalytics {
   total_predictions: number;
   class_distribution: Record<string, number>;
   usage_over_time: { date: string; predictions_count: number; active_users: number }[];
-  confidence_distribution: { bin_range: string; count: number }[];
+  /** P(AI) shown to users (C2 v2); rows with p_ai null are counted in p_ai_uncalibrated_count, not binned. */
+  p_ai_distribution: { bin_range: string; count: number }[];
+  p_ai_uncalibrated_count: number;
   error_rate_percentage: number;
   total_logs: number;
 }

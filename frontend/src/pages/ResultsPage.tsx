@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { Activity, AlertCircle, ArrowLeft, Brain, Download, Info, Layers, Loader2, RefreshCw } from 'lucide-react';
 import { apiBlob, apiRequest } from '../api/client';
-import type { ResultView, Visualization, XaiStatus } from '../api/types';
+import type { Certainty, ResultView, Visualization, XaiStatus } from '../api/types';
 import { AuthImage } from '../components/AuthImage';
 import { ErrorNotice, Notice } from '../components/Feedback';
 
@@ -11,7 +11,8 @@ const PANEL_LABEL: Record<Visualization['branch'], string> = {
   frequency: 'SPAI patch spectrum',
 };
 
-const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+// Detector scores are shown as scores (0-1), never as percentages: only p_ai is a likelihood.
+const score = (x: number) => x.toFixed(3);
 
 function xaiMessage(status: XaiStatus | undefined, reasons: string[] | undefined, panels: number) {
   if (status === 'unavailable') {
@@ -32,18 +33,17 @@ function xaiMessage(status: XaiStatus | undefined, reasons: string[] | undefined
   return null;
 }
 
-const BAND_CHIP: Record<ResultView['confidence_band'], string> = {
-  High: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300',
-  Moderate: 'bg-sky-500/10 border-sky-500/40 text-sky-700 dark:text-sky-300',
-  Low: 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300',
+const CERTAINTY_CHIP: Record<Certainty, string> = {
+  confident: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300',
+  inconclusive: 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300',
 };
 
 // A 240° arc with the gap at the bottom; pathLength 100 makes the dash a percentage.
 const GAUGE_ARC = 'M 23.04 100 A 60 60 0 1 1 126.96 100';
 
-/** Confidence in the predicted class (never fusion_score - CLAUDE.md §7). */
-const ConfidenceGauge: React.FC<{ percentage: number; label: string; band: ResultView['confidence_band']; ai: boolean }> = ({
-  percentage, label, band, ai,
+/** P(AI) for EITHER verdict (C2 v2) - never fusion_score. The arc fills with p_ai. */
+const LikelihoodGauge: React.FC<{ percentage: number; display: string; certainty: Certainty; label: string }> = ({
+  percentage, display, certainty, label,
 }) => (
   <div className="flex flex-col items-center">
     <div className="relative w-48 h-40">
@@ -53,27 +53,30 @@ const ConfidenceGauge: React.FC<{ percentage: number; label: string; band: Resul
           <linearGradient id="gauge-real" x1="0" x2="1"><stop offset="0" stopColor="#10b981" /><stop offset="1" stopColor="#34d399" /></linearGradient>
         </defs>
         <path d={GAUGE_ARC} pathLength={100} fill="none" stroke="var(--muted)" strokeWidth="12" strokeLinecap="round" />
-        <path d={GAUGE_ARC} pathLength={100} fill="none" stroke={`url(#${ai ? 'gauge-ai' : 'gauge-real'})`} strokeWidth="12"
+        <path d={GAUGE_ARC} pathLength={100} fill="none" stroke={`url(#${percentage >= 50 ? 'gauge-ai' : 'gauge-real'})`} strokeWidth="12"
               strokeLinecap="round" strokeDasharray={`${Math.min(100, Math.max(0, percentage))} 100`} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center pb-3">
-        <span className="text-3xl font-bold text-foreground">{percentage.toFixed(1)}%</span>
-        <span className="text-sm text-foreground/80">{label}</span>
+        <span className="text-3xl font-bold text-foreground">{display}</span>
+        <span className="text-sm text-foreground/80">likely AI-generated</span>
       </div>
     </div>
-    <span className={`-mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium ${BAND_CHIP[band]}`}>
-      <AlertCircle className="w-3.5 h-3.5" /> {band} confidence
+    <span className={`-mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium ${CERTAINTY_CHIP[certainty]}`}>
+      <AlertCircle className="w-3.5 h-3.5" /> {label}
     </span>
   </div>
 );
 
-const ScoreCard: React.FC<{ icon: React.ReactNode; title: string; value: string }> = ({ icon, title, value }) => (
+const ScoreCard: React.FC<{ icon: React.ReactNode; title: string; detector: string; value: string }> = ({
+  icon, title, detector, value,
+}) => (
   <div className="flex gap-4 rounded-2xl border border-border bg-card p-5">
     <div className="text-primary shrink-0">{icon}</div>
     <div>
       <p className="text-sm text-foreground/80">{title}</p>
       <p className="mt-1 text-2xl font-mono font-semibold text-foreground">{value}</p>
-      <p className="text-xs text-muted-foreground/80" title="Probability that the image is AI-generated, as this detector scores it">P(AI)</p>
+      <p className="text-xs text-muted-foreground/80"
+         title="A detector score from 0 to 1: higher means more AI-like. It is not a probability.">{detector}</p>
     </div>
   </div>
 );
@@ -163,26 +166,44 @@ export const ResultsPage: React.FC = () => {
             {result.predicted_class}
           </h1>
           <p className="text-lg text-foreground">
-            Confidence: <strong>{result.confidence_percentage.toFixed(1)}%</strong>{' '}
-            <span className="text-muted-foreground/80">({result.confidence_band})</span>
+            {result.p_ai !== null ? (
+              <><strong>{result.p_ai_display}</strong> likelihood AI-generated{' '}
+                <span className="text-muted-foreground/80">({result.certainty_label})</span></>
+            ) : (
+              <span className="text-muted-foreground">{result.likelihood_headline}</span>
+            )}
           </p>
+          {result.leans_ai_below_threshold && (
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Leans AI, below detection threshold.</p>
+          )}
           <p className="text-sm text-muted-foreground/80">{new Date(result.prediction_timestamp).toLocaleString()}</p>
         </div>
-        <ConfidenceGauge percentage={result.confidence_percentage} label={result.predicted_class}
-                         band={result.confidence_band} ai={ai} />
+        {result.p_ai !== null && result.p_ai_percentage !== null && result.certainty !== null ? (
+          <LikelihoodGauge percentage={result.p_ai_percentage} display={result.p_ai_display ?? ''}
+                           certainty={result.certainty} label={result.certainty_label ?? ''} />
+        ) : (
+          <div className="max-w-xs rounded-2xl border border-dashed border-border px-5 py-4 text-sm text-muted-foreground">
+            Not calibrated for the active model configuration, so no likelihood is shown. The verdict is unaffected.
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <ScoreCard icon={<Brain className="w-7 h-7" />} title="Semantic detector (SigLIP 2)"
-                   value={pct(result.semantic_score)} />
-        <ScoreCard icon={<Activity className="w-7 h-7" />} title="Frequency detector (SPAI)"
-                   value={result.frequency_score === null ? 'not measured' : pct(result.frequency_score)} />
-        <ScoreCard icon={<Layers className="w-7 h-7" />} title="Combined score" value={pct(result.fusion_score)} />
+        <ScoreCard icon={<Brain className="w-7 h-7" />} title="Semantic score" detector="SigLIP 2 detector"
+                   value={score(result.semantic_score)} />
+        <ScoreCard icon={<Activity className="w-7 h-7" />} title="Frequency score" detector="SPAI detector"
+                   value={result.frequency_score === null ? 'not measured' : score(result.frequency_score)} />
+        <ScoreCard icon={<Layers className="w-7 h-7" />} title="Combined score" detector="weighted, vs. threshold"
+                   value={score(result.fusion_score)} />
       </div>
-      {result.frequency_score === null && (
+      <p className="text-xs text-muted-foreground/80">
+        These are detector scores (higher = more AI-like), not probabilities.
+        {result.p_ai !== null && ' Only the likelihood above is one.'}
+      </p>
+      {result.semantic_only && (
         <Notice tone="warning" title="Semantic-only verdict">
-          The image is smaller than the frequency detector's 224-pixel patch, so only the content-based detector
-          produced a score. The two-kinds-of-evidence check does not apply to this result.
+          {/* The backend's wording, as text (likelihood.py). */}
+          {result.likelihood_notes.filter((n) => n.startsWith('Low reliability')).join(' ')}
         </Notice>
       )}
 

@@ -22,18 +22,10 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from PIL import Image as PILImage
 from app.m3_results.explain import caption_for
+from app.m3_results.likelihood import describe
 from app.m3_results.models import Prediction, Explainability
 from app.m3_results.overlay import explainability_path
 from app.shared.errors import AppException
-
-
-def compute_confidence_band(score: float) -> str:
-    if score >= 0.85:
-        return "High"
-    elif score >= 0.65:
-        return "Moderate"
-    else:
-        return "Low"
 
 
 def build_pdf_report(
@@ -107,21 +99,24 @@ def build_pdf_report(
 
     # 2. Executive Summary Box
     verdict = prediction.predicted_class
-    conf_val = prediction.confidence_score * 100
-    conf_band = compute_confidence_band(prediction.confidence_score)
+    # C2 v2: P(AI) for either verdict + certainty (likelihood.py), not the old
+    # "confidence in the predicted class" with High/Moderate/Low bands.
+    shown = describe(prediction)
+    likelihood_cell = (f"<b>{shown.p_ai_display}</b> ({shown.certainty_label})"
+                       if shown.p_ai is not None else "not available")
     verdict_color = "#dc2626" if verdict == "AI Generated" else "#16a34a"
 
     summary_data = [
         [
             Paragraph("<b>Predicted Verdict:</b>", body_style),
             Paragraph(f"<font color='{verdict_color}' size=12><b>{verdict}</b></font>", body_style),
-            Paragraph("<b>Confidence Score:</b>", body_style),
-            Paragraph(f"<b>{conf_val:.1f}%</b> ({conf_band} Confidence)", body_style),
+            Paragraph("<b>Likelihood AI-generated:</b>", body_style),
+            Paragraph(likelihood_cell, body_style),
         ],
         [
-            Paragraph("<b>Semantic Score:</b>", body_style),
+            Paragraph("<b>Semantic score:</b>", body_style),
             Paragraph(f"{prediction.semantic_score:.4f}", body_style),
-            Paragraph("<b>Frequency Score:</b>", body_style),
+            Paragraph("<b>Frequency score:</b>", body_style),
             Paragraph(f"{prediction.frequency_score:.4f}"
                       if prediction.frequency_score is not None else "unavailable", body_style),
         ],
@@ -141,6 +136,16 @@ def build_pdf_report(
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]))
     story.append(summary_table)
+    story.append(Spacer(1, 8))
+    # The likelihood in words, plus anything that changes how to read it
+    # (leans AI below the threshold; semantic-only = low reliability; not calibrated).
+    story.append(Paragraph(f"<b>{shown.headline}</b>", body_style))
+    for note in shown.notes:
+        story.append(Paragraph(note, caveat_style))
+    story.append(Paragraph("The semantic and frequency values above are detector scores, not "
+                           "probabilities. The verdict compares their weighted combination with a "
+                           "threshold set to keep false alarms on genuine photographs at or below 10 %.",
+                           caveat_style))
     story.append(Spacer(1, 16))
 
     # 3. Visual Evidence (Original, Semantic Saliency, Frequency Spectrum)

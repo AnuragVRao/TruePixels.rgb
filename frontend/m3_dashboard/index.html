@@ -178,7 +178,7 @@
 
           <div class="flex items-center space-x-6">
             <div class="text-right">
-              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Confidence Level</span>
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Likelihood AI-generated</span>
               <div id="resConfidence" class="text-3xl font-black text-white">—</div>
             </div>
             <!-- FIXED PDF DOWNLOAD BUTTON -->
@@ -318,7 +318,7 @@
                 <th class="py-3 px-4">Scan ID</th>
                 <th class="py-3 px-4">Thumbnail</th>
                 <th class="py-3 px-4">Verdict</th>
-                <th class="py-3 px-4">Confidence</th>
+                <th class="py-3 px-4">Likelihood AI</th>
                 <th class="py-3 px-4">Date</th>
                 <th class="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -365,7 +365,7 @@
       <!-- Charts Row (F.18) -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-3">
-          <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider">10-Bin Confidence Score Distribution</h4>
+          <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider">10-Bin Distribution of P(AI) Shown to Users</h4>
           <div class="h-56">
             <canvas id="confidenceChart"></canvas>
           </div>
@@ -618,10 +618,12 @@
 
         if (badgeEl) {
           badgeEl.className = data.predicted_class === "AI Generated" ? "text-xs font-bold px-3 py-1 rounded-full badge-ai" : "text-xs font-bold px-3 py-1 rounded-full badge-real";
-          badgeEl.textContent = `${data.confidence_band} Confidence`;
+          badgeEl.textContent = data.certainty_label || "Not calibrated";
         }
 
-        document.getElementById("resConfidence").textContent = `${data.confidence_percentage}%`;
+        // C2 v2: P(AI) for EITHER verdict (null = not calibrated for the configuration that ran).
+        document.getElementById("resConfidence").textContent =
+          data.p_ai_display === null ? "n/a" : data.p_ai_display;
         document.getElementById("scoreSem").textContent = data.semantic_score.toFixed(4);
         // frequency_score is null when the frequency branch had no evidence to
         // give: the image is under SPAI's 224px patch, or the branch is switched
@@ -744,10 +746,10 @@
       confidenceChartInstance = new Chart(ctx1, {
         type: "bar",
         data: {
-          labels: analytics.confidence_distribution.map(b => b.bin_range),
+          labels: analytics.p_ai_distribution.map(b => b.bin_range),
           datasets: [{
             label: "Scans",
-            data: analytics.confidence_distribution.map(b => b.count),
+            data: analytics.p_ai_distribution.map(b => b.count),
             backgroundColor: "#3b82f6",
             borderRadius: 6
           }]
@@ -889,7 +891,7 @@
 
       const tests = [
         { name: "1. System Health & Seams (GET /api/v1/health)", fn: () => fetch("/api/v1/health") },
-        { name: `2. Forensic Result & Confidence Inversion (GET /api/v1/results/${testPredId})`, fn: () => fetch(`/api/v1/results/${testPredId}`, { headers: getAuthHeaders() }) },
+        { name: `2. Forensic Result & P(AI) (GET /api/v1/results/${testPredId})`, fn: () => fetch(`/api/v1/results/${testPredId}`, { headers: getAuthHeaders() }) },
         { name: "3. F.13 Security Isolation Barrier (GET /api/v1/results/999999 as User A)", fn: () => fetch("/api/v1/results/999999", { headers: getAuthHeaders() }), expectStatus: 404 },
         { name: `4. Forensic PDF Report Generation (GET /api/v1/reports/${testPredId})`, fn: () => fetch(`/api/v1/reports/${testPredId}`, { headers: getAuthHeaders() }) },
         { name: "5. Admin Summary & Analytics Aggregation (GET /api/v1/admin/summary)", fn: () => fetch("/api/v1/admin/summary", { headers: getAuthHeaders() }), expectStatus: currentRole === "Admin" ? 200 : 403 },

@@ -41,7 +41,9 @@ export interface PredictionResponse {
   prediction_id: number;
   image_id: number;
   predicted_class: 'Real' | 'AI Generated';
-  confidence_score: number;
+  /** C2 v2: P(AI) for EITHER verdict, [0.01, 0.99]; null = not calibrated for the configuration that ran. */
+  p_ai: number | null;
+  certainty: Certainty | null;
   semantic_score: number;
   frequency_score: number | null;
   fusion_score: number;
@@ -58,19 +60,32 @@ export interface Visualization {
   caption: string;
 }
 
+export type Certainty = 'confident' | 'inconclusive';
+
+/** C2 v2 display fields, worded server-side (backend/app/m3_results/likelihood.py). */
+export interface Likelihood {
+  p_ai: number | null;
+  p_ai_percentage: number | null;
+  p_ai_display: string | null;
+  certainty: Certainty | null;
+  certainty_label: string | null;
+  semantic_only: boolean;
+  leans_ai_below_threshold: boolean;
+  likelihood_headline: string;
+  likelihood_notes: string[];
+}
+
 export interface ModelRef {
   model_id: number;
   model_name: string;
   model_version: string;
 }
 
-export interface ResultView {
+export interface ResultView extends Likelihood {
   prediction_id: number;
   image_id: number;
   predicted_class: 'Real' | 'AI Generated';
-  confidence_score: number;
-  confidence_percentage: number;
-  confidence_band: 'High' | 'Moderate' | 'Low';
+  /** Detector SCORES (higher = more AI-like), not probabilities. */
   semantic_score: number;
   frequency_score: number | null;
   fusion_score: number;
@@ -84,14 +99,11 @@ export interface ResultView {
   interpretive_caption: string;
 }
 
-export interface HistoryItem {
+export interface HistoryItem extends Likelihood {
   prediction_id: number;
   image_id: number;
   thumbnail_url: string;
   predicted_class: 'Real' | 'AI Generated';
-  confidence_score: number;
-  confidence_percentage: number;
-  confidence_band: 'High' | 'Moderate' | 'Low';
   prediction_timestamp: string;
 }
 

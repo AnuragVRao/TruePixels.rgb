@@ -99,7 +99,7 @@
           <i data-lucide="file-code" class="w-4 h-4 text-cyan-400"></i> Active Contracts
         </div>
         <ul class="space-y-1 text-[11px] list-disc pl-4 text-slate-400">
-          <li><strong class="text-slate-300">Contract C2:</strong> Dual-branch inference outputs + inverted confidence for Real ($1.0 - \text{score}$).</li>
+          <li><strong class="text-slate-300">Contract C2:</strong> Dual-branch scores + P(AI) for either verdict, with a certainty label (C2 v2).</li>
           <li><strong class="text-slate-300">Contract C3:</strong> Session context from M1's JWT (user, role, account status).</li>
           <li><strong class="text-slate-300">Contract C5:</strong> System audit logging (`emit()`) with secret redaction.</li>
           <li><strong class="text-slate-300">Security F.13:</strong> Return `404` (never `403`) on cross-user prediction access.</li>
@@ -197,7 +197,7 @@
       {
         id: "result_own", category: "Results & Explainability (F.10, F.11)", name: "GET Result (your newest)", method: "GET",
         url: "/api/v1/results/{own}", body: null, needs: "own",
-        desc: "Your newest prediction, with the confidence inversion rule applied."
+        desc: "Your newest prediction, with P(AI) and its certainty (C2 v2)."
       },
       {
         id: "xai_payload", category: "Results & Explainability (F.10, F.11)", name: "GET Explainability Payload", method: "GET",
@@ -233,7 +233,7 @@
       {
         id: "admin_analytics", category: "Admin & Analytics (F.15 - F.19)", name: "GET Admin Analytics (30 Days)", method: "GET",
         url: "/api/v1/admin/analytics?days=30", body: null, admin: true,
-        desc: "30-day time series, confidence histogram and warm-only latency. Admin only."
+        desc: "30-day time series, P(AI) histogram and warm-only latency. Admin only."
       },
       {
         id: "admin_logs", category: "Admin & Analytics (F.15 - F.19)", name: "GET Audit Logs (D6 Table)", method: "GET",

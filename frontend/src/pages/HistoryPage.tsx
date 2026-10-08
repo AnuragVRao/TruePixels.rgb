@@ -96,7 +96,11 @@ export const HistoryPage: React.FC = () => {
                     {item.predicted_class}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {item.confidence_percentage.toFixed(1)}% ({item.confidence_band}) ·{' '}
+                    {item.p_ai_display !== null
+                      ? `${item.p_ai_display} likely AI (${item.certainty_label})`
+                      : 'likelihood not calibrated'}
+                    {item.leans_ai_below_threshold ? ' · leans AI' : ''}
+                    {item.semantic_only ? ' · low reliability' : ''} ·{' '}
                     {new Date(item.prediction_timestamp).toLocaleString()}
                   </p>
                 </div>

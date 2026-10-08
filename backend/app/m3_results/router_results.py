@@ -17,11 +17,19 @@ from app.shared.errors import AppException
 from app.m3_results.models import Prediction, Image, Explainability
 from app.m3_results.schemas import ExplainabilityItem, ModelRef, PredictionResultView, ResultModels
 from app.m3_results.explain import caption_for
-from app.m3_results.reporting import compute_confidence_band
+from app.m3_results.likelihood import describe
 from app.m3_results.urls import explainability_file_url, image_file_url
 
 router = APIRouter(tags=["Results & Explainability"])
 
+
+
+def _likelihood_fields(shown) -> dict:
+    """The C2 v2 display fields shared by the results view and history (likelihood.py)."""
+    return dict(p_ai=shown.p_ai, p_ai_percentage=shown.p_ai_percentage, p_ai_display=shown.p_ai_display,
+                certainty=shown.certainty, certainty_label=shown.certainty_label,
+                semantic_only=shown.semantic_only, leans_ai_below_threshold=shown.leans_ai_below_threshold,
+                likelihood_headline=shown.headline, likelihood_notes=shown.notes)
 
 @router.get("/results/{prediction_id}", response_model=PredictionResultView)
 def get_prediction_result(
@@ -72,8 +80,7 @@ def get_prediction_result(
         for x in xai_rows
     ]
 
-    conf_score = pred.confidence_score
-    conf_band = compute_confidence_band(conf_score)
+    shown = describe(pred)
     model_name = pred.model.model_name if pred.model else "Hybrid ViT/FFT Detector"
     model_version = pred.model.model_version if pred.model else "1.0"
 
@@ -81,9 +88,7 @@ def get_prediction_result(
         prediction_id=pred.prediction_id,
         image_id=pred.image_id,
         predicted_class=pred.predicted_class,
-        confidence_score=conf_score,
-        confidence_percentage=round(conf_score * 100.0, 1),
-        confidence_band=conf_band,
+        **_likelihood_fields(shown),
         semantic_score=pred.semantic_score,
         frequency_score=pred.frequency_score,
         fusion_score=pred.fusion_score,

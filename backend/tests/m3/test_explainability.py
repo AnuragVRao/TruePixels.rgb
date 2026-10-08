@@ -10,7 +10,9 @@ from fastapi.testclient import TestClient
 from app.shared.schemas import ActivationBundle
 from app.m3_results.explain import compute_attention_rollout, build_relevance_map
 from app.m3_results.overlay import generate_semantic_overlay, generate_frequency_spectrum_panel
-from app.m3_results.reporting import compute_confidence_band
+from types import SimpleNamespace
+
+from app.m3_results import likelihood
 
 
 def test_attention_rollout_shape_and_cls_exclusion():
@@ -85,13 +87,40 @@ def test_frequency_spectrum_panel_generation():
         assert img.size[0] > 100 and img.size[1] > 100
 
 
-def test_confidence_banding_boundaries():
-    """Validates confidence band boundaries according to PRD 10.1 (0.649, 0.650, 0.849, 0.850)."""
-    assert compute_confidence_band(0.649) == "Low"
-    assert compute_confidence_band(0.650) == "Moderate"
-    assert compute_confidence_band(0.849) == "Moderate"
-    assert compute_confidence_band(0.850) == "High"
-    assert compute_confidence_band(0.99) == "High"
+def _pred(p_ai, certainty, predicted_class="Real", frequency_score=0.1):
+    return SimpleNamespace(p_ai=p_ai, certainty=certainty, predicted_class=predicted_class,
+                           frequency_score=frequency_score)
+
+
+def test_likelihood_wording_replaces_the_confidence_bands():
+    """C2 v2 (2026-10-08): the PRD 10.1 High/Moderate/Low bands on confidence-in-the-
+    predicted-class are superseded by P(AI) for either verdict + a measured certainty."""
+    real = likelihood.describe(_pred(0.12, "inconclusive"))
+    assert (real.p_ai_display, real.certainty_label, real.headline) == (
+        "12 %", "Inconclusive", "12 % likelihood AI-generated")
+    assert real.notes == [] and not real.leans_ai_below_threshold
+
+    capped_low = likelihood.describe(_pred(0.01, "confident"))
+    capped_high = likelihood.describe(_pred(0.99, "confident", "AI Generated"))
+    assert (capped_low.p_ai_display, capped_high.p_ai_display) == ("1 % or less", "99 % or more")
+
+
+def test_a_real_verdict_above_half_leans_ai_below_the_threshold():
+    shown = likelihood.describe(_pred(0.62, "inconclusive", "Real"))
+    assert shown.leans_ai_below_threshold and shown.notes[0] == likelihood.LEANS_AI
+    assert not likelihood.describe(_pred(0.62, "inconclusive", "AI Generated")).leans_ai_below_threshold
+
+
+def test_semantic_only_results_carry_the_low_reliability_note():
+    shown = likelihood.describe(_pred(0.26, "inconclusive", frequency_score=None))
+    assert shown.semantic_only and likelihood.SEMANTIC_ONLY in shown.notes
+
+
+def test_null_p_ai_is_said_to_be_not_calibrated_never_a_number():
+    shown = likelihood.describe(_pred(None, None))
+    assert (shown.p_ai, shown.p_ai_percentage, shown.p_ai_display, shown.certainty) == (None, None, None, None)
+    assert shown.headline == likelihood.NOT_CALIBRATED
+    assert "not calibrated for the active model configuration" in shown.headline
 
 
 def test_interpretive_caption_presence(client: TestClient, seeded_db):

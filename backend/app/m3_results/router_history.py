@@ -12,7 +12,8 @@ from app.shared.deps import current_session
 from app.shared.schemas import SessionContext
 from app.m3_results.models import Prediction, Image
 from app.m3_results.schemas import PaginatedHistory, HistoryItem
-from app.m3_results.reporting import compute_confidence_band
+from app.m3_results.likelihood import describe
+from app.m3_results.router_results import _likelihood_fields
 from app.m3_results.urls import image_thumbnail_url
 
 router = APIRouter(tags=["Prediction History"])
@@ -55,16 +56,13 @@ def get_user_prediction_history(
 
     items = []
     for pred, img in rows:
-        conf_score = pred.confidence_score
         items.append(
             HistoryItem(
                 prediction_id=pred.prediction_id,
                 image_id=pred.image_id,
                 thumbnail_url=image_thumbnail_url(img.image_id),
                 predicted_class=pred.predicted_class,
-                confidence_score=conf_score,
-                confidence_percentage=round(conf_score * 100.0, 1),
-                confidence_band=compute_confidence_band(conf_score),
+                **_likelihood_fields(describe(pred)),
                 prediction_timestamp=pred.prediction_timestamp,
             )
         )

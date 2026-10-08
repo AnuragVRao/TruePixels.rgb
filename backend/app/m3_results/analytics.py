@@ -11,7 +11,7 @@ from app.m3_results.schemas import (
     AdminSummaryTile,
     SystemAnalytics,
     TimeSeriesPoint,
-    ConfidenceHistogramBin,
+    PAiHistogramBin,
     LatencyPoint,
     LatencySummary,
 )
@@ -155,7 +155,9 @@ def get_system_analytics(db: Session, days: int = 30) -> SystemAnalytics:
         for row in daily_stats
     ]
 
-    # 4. Confidence Distribution in 10 uniform bins [0.0-0.1, ..., 0.9-1.0]
+    # 4. Distribution of the P(AI) shown to users, 10 uniform bins [0.0-0.1, ..., 0.9-1.0].
+    #    C2 v2: p_ai, not confidence in the predicted class. NULL p_ai (not
+    #    calibrated for the configuration that ran) is counted, never binned.
     bins_data = [
         (0.0, 0.1, "0.0 - 0.1"),
         (0.1, 0.2, "0.1 - 0.2"),
@@ -168,15 +170,18 @@ def get_system_analytics(db: Session, days: int = 30) -> SystemAnalytics:
         (0.8, 0.9, "0.8 - 0.9"),
         (0.9, 1.0, "0.9 - 1.0"),
     ]
-    confidence_bins = []
+    p_ai_bins = []
     for low, high, label in bins_data:
         # Include high boundary for 1.0
         if high == 1.0:
-            cond = and_(Prediction.confidence_score >= low, Prediction.confidence_score <= high)
+            cond = and_(Prediction.p_ai >= low, Prediction.p_ai <= high)
         else:
-            cond = and_(Prediction.confidence_score >= low, Prediction.confidence_score < high)
+            cond = and_(Prediction.p_ai >= low, Prediction.p_ai < high)
         cnt = db.query(func.count(Prediction.prediction_id)).filter(cond).scalar() or 0
-        confidence_bins.append(ConfidenceHistogramBin(bin_range=label, count=cnt))
+        p_ai_bins.append(PAiHistogramBin(bin_range=label, count=cnt))
+    p_ai_uncalibrated = (
+        db.query(func.count(Prediction.prediction_id)).filter(Prediction.p_ai.is_(None)).scalar() or 0
+    )
 
     # 5. Error Rate
     total_logs = db.query(func.count(LogEntry.log_id)).scalar() or 0
@@ -197,7 +202,8 @@ def get_system_analytics(db: Session, days: int = 30) -> SystemAnalytics:
         total_predictions=total_preds,
         class_distribution=class_dist,
         usage_over_time=usage_over_time,
-        confidence_distribution=confidence_bins,
+        p_ai_distribution=p_ai_bins,
+        p_ai_uncalibrated_count=p_ai_uncalibrated,
         error_rate_percentage=round(error_rate, 2),
         total_logs=total_logs,
     )

@@ -67,14 +67,18 @@ export const VerificationPage: React.FC = () => {
     } catch { /* reported by the checks below */ }
 
     if (newest === null) {
-      for (const name of ['Your newest result (confidence rule)', 'PDF report for your newest result']) {
+      for (const name of ['Your newest result (P(AI) rule)', 'PDF report for your newest result']) {
         push({ name, request: '-', expected: '-', got: '-', ms: null, outcome: 'skip', note: 'Analyse an image first.' });
       }
     } else {
-      await exact('Your newest result (confidence rule)', `/api/v1/results/${newest}`, 200, true, async (r) => {
+      await exact('Your newest result (P(AI) rule)', `/api/v1/results/${newest}`, 200, true, async (r) => {
         const body = await r.json();
-        // confidence_score is confidence in the PREDICTED class: never below one half.
-        return body.confidence_score >= 0.5 ? null : `confidence ${body.confidence_score} is below 0.5`;
+        // C2 v2: p_ai is P(AI) for either verdict, within [0.01, 0.99], or null (not calibrated);
+        // certainty is null exactly when p_ai is, and semantic-only results are always inconclusive.
+        if (body.p_ai === null) return body.certainty === null ? null : 'certainty set without p_ai';
+        if (body.p_ai < 0.01 || body.p_ai > 0.99) return `p_ai ${body.p_ai} is outside [0.01, 0.99]`;
+        if (body.semantic_only && body.certainty !== 'inconclusive') return 'semantic-only result is not inconclusive';
+        return body.certainty ? null : 'p_ai set without certainty';
       });
       await exact('PDF report for your newest result', `/api/v1/reports/${newest}`, 200, true, async (r) =>
         (r.headers.get('content-type') ?? '').includes('application/pdf') ? null : 'not a PDF');

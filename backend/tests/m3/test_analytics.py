@@ -28,11 +28,15 @@ def test_admin_logs_filtering_and_pagination(client: TestClient, seeded_db):
 
 
 def test_admin_analytics_confidence_histogram(client: TestClient, seeded_db):
-    """Validates 10-bin confidence score distribution in analytics."""
+    """Validates the 10-bin distribution of P(AI) in analytics (C2 v2; was confidence)."""
     resp = client.get("/api/v1/admin/analytics?days=30", headers=AUTH_ADMIN)
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data["confidence_distribution"]) == 10  # Exactly 10 bins
+    assert len(data["p_ai_distribution"]) == 10  # Exactly 10 bins
+    assert "confidence_distribution" not in data
+    # rows with p_ai NULL are counted, never binned
+    binned = sum(b["count"] for b in data["p_ai_distribution"])
+    assert data["p_ai_uncalibrated_count"] + binned == data["total_predictions"]
     assert data["total_predictions"] == 5
 
 

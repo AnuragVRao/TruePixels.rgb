@@ -53,7 +53,8 @@ export const OverviewPage: React.FC = () => {
 
   const latency = analytics?.latency ?? null;
   const usage = analytics?.usage_over_time ?? [];
-  const histogramEmpty = (analytics?.confidence_distribution ?? []).every((b) => b.count === 0);
+  const histogramEmpty = (analytics?.p_ai_distribution ?? []).every((b) => b.count === 0);
+  const uncalibrated = analytics?.p_ai_uncalibrated_count ?? 0;
 
   return (
     <div className="space-y-6">
@@ -128,11 +129,14 @@ export const OverviewPage: React.FC = () => {
             )}
           </Panel>
 
-          <Panel title="Confidence in the predicted class" note="All predictions. Confidence is in whichever class was predicted - not P(AI).">
-            {histogramEmpty ? <p className="text-sm text-muted-foreground">No predictions yet.</p> : (
+          <Panel title="Likelihood AI-generated shown to users"
+                 note={`All predictions: P(AI) for either verdict, capped to 1-99 %.${uncalibrated
+                   ? ` ${uncalibrated} prediction${uncalibrated === 1 ? '' : 's'} not calibrated for the configuration that ran - not binned.`
+                   : ''}`}>
+            {histogramEmpty ? <p className="text-sm text-muted-foreground">No calibrated predictions yet.</p> : (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={analytics.confidence_distribution}>
+                  <BarChart data={analytics.p_ai_distribution}>
                     <CartesianGrid stroke="var(--muted)" />
                     <XAxis dataKey="bin_range" {...axis} interval={1} />
                     <YAxis allowDecimals={false} {...axis} />

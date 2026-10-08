@@ -34,9 +34,20 @@ class PredictionResultView(BaseModel):
     prediction_id: int
     image_id: int
     predicted_class: Literal["Real", "AI Generated"]
-    confidence_score: float
-    confidence_percentage: float  # confidence_score * 100
-    confidence_band: Literal["High", "Moderate", "Low"]
+    # C2 v2 (2026-10-08): P(AI) for EITHER verdict + certainty, worded by
+    # app/m3_results/likelihood.py. Replaces confidence_score / _percentage /
+    # _band (confidence in the predicted class, High/Moderate/Low).
+    p_ai: float | None  # null: not calibrated for the configuration that ran
+    p_ai_percentage: int | None
+    p_ai_display: str | None  # "12 %", "1 % or less", "99 % or more"
+    certainty: Literal["confident", "inconclusive"] | None
+    certainty_label: str | None
+    semantic_only: bool  # the frequency branch had no evidence (image under 224 px)
+    leans_ai_below_threshold: bool  # "Real" verdict with p_ai > 0.5
+    likelihood_headline: str
+    likelihood_notes: list[str] = []
+    # Scores, NOT probabilities (higher = more AI-like). The verdict is
+    # fusion_score >= tau; only p_ai is a likelihood.
     semantic_score: float
     frequency_score: float | None  # null when the frequency branch had no evidence
     fusion_score: float
@@ -61,9 +72,18 @@ class HistoryItem(BaseModel):
     image_id: int
     thumbnail_url: str
     predicted_class: Literal["Real", "AI Generated"]
-    confidence_score: float
-    confidence_percentage: float
-    confidence_band: Literal["High", "Moderate", "Low"]
+    # C2 v2 (2026-10-08): P(AI) for EITHER verdict + certainty, worded by
+    # app/m3_results/likelihood.py. Replaces confidence_score / _percentage /
+    # _band (confidence in the predicted class, High/Moderate/Low).
+    p_ai: float | None  # null: not calibrated for the configuration that ran
+    p_ai_percentage: int | None
+    p_ai_display: str | None  # "12 %", "1 % or less", "99 % or more"
+    certainty: Literal["confident", "inconclusive"] | None
+    certainty_label: str | None
+    semantic_only: bool  # the frequency branch had no evidence (image under 224 px)
+    leans_ai_below_threshold: bool  # "Real" verdict with p_ai > 0.5
+    likelihood_headline: str
+    likelihood_notes: list[str] = []
     prediction_timestamp: datetime
 
 
@@ -107,7 +127,10 @@ class TimeSeriesPoint(BaseModel):
     active_users: int
 
 
-class ConfidenceHistogramBin(BaseModel):
+class PAiHistogramBin(BaseModel):
+    """C2 v2: distribution of the P(AI) shown to users (was confidence in the
+    predicted class). Rows with p_ai NULL are not binned - see
+    SystemAnalytics.p_ai_uncalibrated_count."""
     bin_range: str  # e.g. "0.0 - 0.1", "0.1 - 0.2"
     count: int
 
@@ -141,7 +164,8 @@ class SystemAnalytics(BaseModel):
     total_predictions: int
     class_distribution: dict[str, int]
     usage_over_time: list[TimeSeriesPoint]
-    confidence_distribution: list[ConfidenceHistogramBin]
+    p_ai_distribution: list[PAiHistogramBin]
+    p_ai_uncalibrated_count: int = 0  # predictions with p_ai NULL, not in any bin
     error_rate_percentage: float
     total_logs: int
 
