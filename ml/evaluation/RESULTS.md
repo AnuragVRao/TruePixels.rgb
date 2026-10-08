@@ -133,6 +133,77 @@ arm that differs from validation.
 
 ---
 
+### The displayed P(AI) on the held-out test set: frozen-map pilot, 2026-10-08 (run once)
+
+**How it was run.**
+
+- Pre-registered and committed before the run: `76a1448`, `ml/calibration/evaluate_calibration.py`.
+- The map and band are the phase-1 constants, unchanged: a = 0.9294, b = −0.2230, band 0.90.
+- Nothing was refitted, the band was not edited, and there was no second run.
+- Offline: branch scores come from the stored test CSVs, S is recomputed at w = 0.25, and
+  P(AI) comes from the backend `calibration.calibrated()`.
+- Output: `ml/outputs/calibration_pilot_20261008T094223Z.json` and
+  `reliability_pilot_20261008T094223Z.png`.
+- This is a held-out, **same-distribution** test (see above), not a distribution-shift
+  test. The semantic-only map is untestable here: every image is ≥ 256 px.
+
+| | native (headline) | cropped reals (secondary) | validation, CV (for reference) |
+|---|---|---|---|
+| Brier | **0.088 [0.065, 0.114]** | 0.110 [0.083, 0.138] | 0.102 [0.082, 0.122] |
+| log loss | **0.299 [0.231, 0.376]** | 0.356 [0.277, 0.441] | 0.350 [0.291, 0.414] |
+| CITL (mean P − AI fraction) | **+0.005 [−0.027, +0.037]** | +0.028 [−0.007, +0.063] | +0.000 [−0.023, +0.023] |
+| diagnostic slope (not applied) | 1.17 [0.90, 1.65] | 0.97 [0.76, 1.38] | — |
+| diagnostic intercept (not applied) | −0.11 [−0.51, +0.28] | −0.24 [−0.64, +0.07] | — |
+| ECE, equal-count (secondary) | 0.050 [0.035, 0.093] | 0.071 [0.048, 0.118] | 0.052 [0.041, 0.093] |
+| P(AI) − raw S, Brier | −0.000 [−0.003, +0.003] | −0.003 [−0.007, +0.000] | +0.002 [−0.000, +0.004] |
+| coverage (confident) | 0.495 [0.426, 0.564] | 0.505 [0.436, 0.574] | 0.452 [0.404, 0.501] |
+| accuracy within confident | **0.980 [0.929, 0.994]** | 0.960 [0.902, 0.984] | 0.950 [0.907, 0.973] |
+| — confident-AI | 0.955 [0.849, 0.987], 42/44 | 0.913 [0.797, 0.966], 42/46 | 0.904 [0.821, 0.950] |
+| — confident-Real | 1.000 [0.934, 1.000], 54/54 | 1.000 [0.934, 1.000], 54/54 | 0.990 [0.943, 0.998] |
+| accuracy, inconclusive | 0.750 [0.657, 0.825] | 0.755 [0.661, 0.830] | 0.770 [0.709, 0.821] |
+| genuine photo shown confident-AI | 2 of 99 | 4 of 99 | 8 of 198 |
+
+**Held out, nothing degraded.**
+
+- Calibration on the test set is as good as on validation, or a little better. All
+  intervals overlap, so this is the sampling noise of 99 images per class, not an
+  improvement.
+- The diagnostic slope's interval contains 1 and the intercept's contains 0, so no
+  recalibration is indicated.
+- The map again makes no measurable difference to Brier or log loss versus raw S. What it
+  does fix is the average: CITL drops from +0.030 to +0.005.
+
+**AC2.**
+
+- Pooled, it is met: 0.980, Wilson lower bound 0.929.
+- On the confident-AI side alone, the point estimate clears 0.85 (0.955), but the Wilson
+  lower bound is 0.849, one hair below. That matches validation, where the lower bound
+  was 0.821.
+- The confident-AI side is where the system's errors live: genuine photographs shown at
+  P(AI) ≥ 0.90.
+
+**Native vs cropped reals: not material** by the pre-registered rule. The CITL gap is
+0.023, against a threshold of 0.05, and the Brier intervals overlap. Cropping the reals to
+1024² moves things in the expected direction:
+
+- Brier worsens by 0.022;
+- confident-AI false positives rise from 2 to 4;
+- the generated class is identical in both arms, so per-generator figures repeat.
+
+**Per generator (n = 11 each, indicative only).** Mean P(AI) on the generated images is
+lowest for DALL·E 3 (0.67, 6/11 detected) and highest for SD 1.4 (0.92). No generated
+image was shown as confident-Real in either arm.
+
+**What this does not show:**
+
+- behaviour on post-2023 generators;
+- behaviour on resized or otherwise processed images. Resizing takes SPAI's recall from
+  0.939 to 0.616, so a low P(AI) on a resized image is not evidence that it is real;
+- behaviour on any real-photo source other than RAISE's three Nikon bodies;
+- behaviour on images under 224 px.
+
+---
+
 ### Explainability: faithfulness and cost, 2026-10-03
 
 **What the semantic map is.** It is an attention rollout of the SigLIP 2
