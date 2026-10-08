@@ -33,9 +33,9 @@ function xaiMessage(status: XaiStatus | undefined, reasons: string[] | undefined
 }
 
 const BAND_CHIP: Record<ResultView['confidence_band'], string> = {
-  High: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300',
-  Moderate: 'bg-sky-500/10 border-sky-500/40 text-sky-300',
-  Low: 'bg-amber-500/10 border-amber-500/40 text-amber-300',
+  High: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300',
+  Moderate: 'bg-sky-500/10 border-sky-500/40 text-sky-700 dark:text-sky-300',
+  Low: 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300',
 };
 
 // A 240° arc with the gap at the bottom; pathLength 100 makes the dash a percentage.
@@ -52,13 +52,13 @@ const ConfidenceGauge: React.FC<{ percentage: number; label: string; band: Resul
           <linearGradient id="gauge-ai" x1="0" x2="1"><stop offset="0" stopColor="#f43f5e" /><stop offset="1" stopColor="#fb7185" /></linearGradient>
           <linearGradient id="gauge-real" x1="0" x2="1"><stop offset="0" stopColor="#10b981" /><stop offset="1" stopColor="#34d399" /></linearGradient>
         </defs>
-        <path d={GAUGE_ARC} pathLength={100} fill="none" stroke="#1e293b" strokeWidth="12" strokeLinecap="round" />
+        <path d={GAUGE_ARC} pathLength={100} fill="none" stroke="var(--muted)" strokeWidth="12" strokeLinecap="round" />
         <path d={GAUGE_ARC} pathLength={100} fill="none" stroke={`url(#${ai ? 'gauge-ai' : 'gauge-real'})`} strokeWidth="12"
               strokeLinecap="round" strokeDasharray={`${Math.min(100, Math.max(0, percentage))} 100`} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center pb-3">
-        <span className="text-3xl font-bold text-white">{percentage.toFixed(1)}%</span>
-        <span className="text-sm text-slate-300">{label}</span>
+        <span className="text-3xl font-bold text-foreground">{percentage.toFixed(1)}%</span>
+        <span className="text-sm text-foreground/80">{label}</span>
       </div>
     </div>
     <span className={`-mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium ${BAND_CHIP[band]}`}>
@@ -68,23 +68,23 @@ const ConfidenceGauge: React.FC<{ percentage: number; label: string; band: Resul
 );
 
 const ScoreCard: React.FC<{ icon: React.ReactNode; title: string; value: string }> = ({ icon, title, value }) => (
-  <div className="flex gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-    <div className="text-indigo-400 shrink-0">{icon}</div>
+  <div className="flex gap-4 rounded-2xl border border-border bg-card p-5">
+    <div className="text-primary shrink-0">{icon}</div>
     <div>
-      <p className="text-sm text-slate-300">{title}</p>
-      <p className="mt-1 text-2xl font-mono font-semibold text-white">{value}</p>
-      <p className="text-xs text-slate-500" title="Probability that the image is AI-generated, as this detector scores it">P(AI)</p>
+      <p className="text-sm text-foreground/80">{title}</p>
+      <p className="mt-1 text-2xl font-mono font-semibold text-foreground">{value}</p>
+      <p className="text-xs text-muted-foreground/80" title="Probability that the image is AI-generated, as this detector scores it">P(AI)</p>
     </div>
   </div>
 );
 
 const Panel: React.FC<{ v: Visualization }> = ({ v }) => (
   <figure className="space-y-2">
-    <figcaption className="text-sm font-semibold text-slate-200">{PANEL_LABEL[v.branch]}</figcaption>
+    <figcaption className="text-sm font-semibold text-foreground">{PANEL_LABEL[v.branch]}</figcaption>
     <AuthImage src={v.visualization_url} alt={PANEL_LABEL[v.branch]}
-               className="w-full rounded-xl border border-slate-800 object-contain bg-slate-900 min-h-40" />
+               className="w-full rounded-xl border border-border object-contain bg-card min-h-40" />
     {/* The backend's caption, rendered as text, exactly as returned. */}
-    <p className="text-xs leading-relaxed text-slate-400">{v.caption}</p>
+    <p className="text-xs leading-relaxed text-muted-foreground">{v.caption}</p>
   </figure>
 );
 
@@ -128,7 +128,7 @@ export const ResultsPage: React.FC = () => {
   };
 
   if (error) return <div className="max-w-2xl mx-auto"><ErrorNotice error={error} /></div>;
-  if (!result) return <p className="text-slate-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading result…</p>;
+  if (!result) return <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading result…</p>;
 
   const ai = result.predicted_class === 'AI Generated';
   const xai = xaiMessage(navState.xaiStatus, navState.xaiReasons, result.visualizations.length);
@@ -138,35 +138,35 @@ export const ResultsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link to="/" className="flex items-center gap-2 text-sm text-indigo-300 hover:text-indigo-200">
+        <Link to="/" className="flex items-center gap-2 text-sm text-primary hover:text-primary/80">
           <ArrowLeft className="w-4 h-4" /> New Analysis
         </Link>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={downloadPdf} disabled={pdfBusy}
-                  className="flex items-center gap-2 rounded-xl border border-slate-700 hover:border-indigo-500 bg-slate-900/60 px-4 py-2 text-sm font-medium text-slate-200 disabled:opacity-50">
+                  className="flex items-center gap-2 rounded-xl border border-border hover:border-primary bg-card px-4 py-2 text-sm font-medium text-foreground disabled:opacity-50">
             {pdfBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download Report (PDF)
           </button>
           <Link to="/"
-                className="flex items-center gap-2 rounded-xl border border-slate-700 hover:border-indigo-500 bg-slate-900/60 px-4 py-2 text-sm font-medium text-slate-200">
+                className="flex items-center gap-2 rounded-xl border border-border hover:border-primary bg-card px-4 py-2 text-sm font-medium text-foreground">
             <RefreshCw className="w-4 h-4" /> Analyse Another
           </Link>
         </div>
       </div>
       <ErrorNotice error={pdfError} />
 
-      <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6">
         <div className="space-y-2">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-[11px] font-semibold tracking-wider text-slate-300">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted border border-border text-[11px] font-semibold tracking-wider text-foreground/80">
             <Info className="w-3.5 h-3.5" /> RESULT #{result.prediction_id}
           </span>
-          <h1 className={`text-4xl sm:text-5xl font-extrabold tracking-tight ${ai ? 'text-rose-400' : 'text-emerald-400'}`}>
+          <h1 className={`text-4xl sm:text-5xl font-extrabold tracking-tight ${ai ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
             {result.predicted_class}
           </h1>
-          <p className="text-lg text-slate-200">
+          <p className="text-lg text-foreground">
             Confidence: <strong>{result.confidence_percentage.toFixed(1)}%</strong>{' '}
-            <span className="text-slate-500">({result.confidence_band})</span>
+            <span className="text-muted-foreground/80">({result.confidence_band})</span>
           </p>
-          <p className="text-sm text-slate-500">{new Date(result.prediction_timestamp).toLocaleString()}</p>
+          <p className="text-sm text-muted-foreground/80">{new Date(result.prediction_timestamp).toLocaleString()}</p>
         </div>
         <ConfidenceGauge percentage={result.confidence_percentage} label={result.predicted_class}
                          band={result.confidence_band} ai={ai} />
@@ -188,10 +188,10 @@ export const ResultsPage: React.FC = () => {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <figure className="space-y-2">
-          <figcaption className="text-sm font-semibold text-slate-200">Original image</figcaption>
+          <figcaption className="text-sm font-semibold text-foreground">Original image</figcaption>
           {result.original_available ? (
             <AuthImage src={result.original_image_url} alt="Original image"
-                       className="w-full rounded-xl border border-slate-800 object-contain bg-slate-900 min-h-40" />
+                       className="w-full rounded-xl border border-border object-contain bg-card min-h-40" />
           ) : (
             <Notice tone="warning" title="The original image is no longer stored.">
               The verdict and scores are the recorded result of the analysis made while it was.
@@ -202,23 +202,23 @@ export const ResultsPage: React.FC = () => {
       </div>
       {xai && <Notice tone={xai.tone}>{xai.text}</Notice>}
 
-      <div className="flex gap-4 rounded-2xl border border-sky-800/60 bg-sky-950/30 px-5 py-4">
-        <Info className="w-6 h-6 shrink-0 text-sky-300" />
+      <div className="flex gap-4 rounded-2xl border border-sky-300 dark:border-sky-800/60 bg-sky-50 dark:bg-sky-950/30 px-5 py-4">
+        <Info className="w-6 h-6 shrink-0 text-sky-700 dark:text-sky-300" />
         <div className="space-y-1">
-          <p className="font-semibold text-white">How to read this result</p>
-          <p className="text-sm leading-relaxed text-slate-300">{result.interpretive_caption}</p>
+          <p className="font-semibold text-foreground">How to read this result</p>
+          <p className="text-sm leading-relaxed text-foreground/80">{result.interpretive_caption}</p>
         </div>
       </div>
 
       {models.length > 0 && (
-        <div className="text-xs text-slate-500 space-y-0.5">
-          <p className="font-semibold text-slate-400">Models that produced this result</p>
+        <div className="text-xs text-muted-foreground/80 space-y-0.5">
+          <p className="font-semibold text-muted-foreground">Models that produced this result</p>
           {models.map((m) => (
             <p key={m!.model_id} className="font-mono">#{m!.model_id} {m!.model_name} · {m!.model_version}</p>
           ))}
         </div>
       )}
-      <Link to="/history" className="text-sm text-indigo-400 hover:underline">← All results</Link>
+      <Link to="/history" className="text-sm text-primary hover:underline">← All results</Link>
     </div>
   );
 };

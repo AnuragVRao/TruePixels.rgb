@@ -2,8 +2,133 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens. Light is the default (:root); dark applies with class="dark"
+   on <html>, set by lib/theme.ts. Components use the semantic names
+   (bg-card, text-muted-foreground, bg-primary, ...) from tailwind.config.js. */
 @layer base {
+  :root {
+    --background: rgb(247, 249, 243);
+    --foreground: rgb(0, 0, 0);
+    --card: rgb(255, 255, 255);
+    --card-foreground: rgb(0, 0, 0);
+    --popover: rgb(255, 255, 255);
+    --popover-foreground: rgb(0, 0, 0);
+    --primary: rgb(79, 70, 229);
+    --primary-foreground: rgb(255, 255, 255);
+    --secondary: rgb(20, 184, 166);
+    --secondary-foreground: rgb(255, 255, 255);
+    --muted: rgb(240, 240, 240);
+    --muted-foreground: rgb(51, 51, 51);
+    --accent: rgb(245, 158, 11);
+    --accent-foreground: rgb(0, 0, 0);
+    --destructive: rgb(239, 68, 68);
+    --destructive-foreground: rgb(255, 255, 255);
+    --border: rgb(0, 0, 0);
+    --input: rgb(115, 115, 115);
+    --ring: rgb(165, 180, 252);
+    --chart-1: rgb(79, 70, 229);
+    --chart-2: rgb(20, 184, 166);
+    --chart-3: rgb(245, 158, 11);
+    --chart-4: rgb(236, 72, 153);
+    --chart-5: rgb(34, 197, 94);
+    --sidebar: rgb(247, 249, 243);
+    --sidebar-foreground: rgb(0, 0, 0);
+    --sidebar-primary: rgb(79, 70, 229);
+    --sidebar-primary-foreground: rgb(255, 255, 255);
+    --sidebar-accent: rgb(245, 158, 11);
+    --sidebar-accent-foreground: rgb(0, 0, 0);
+    --sidebar-border: rgb(0, 0, 0);
+    --sidebar-ring: rgb(165, 180, 252);
+    --font-sans: DM Sans, sans-serif;
+    --font-serif: DM Sans, sans-serif;
+    --font-mono: Space Mono, monospace;
+    --radius: 1rem;
+    --shadow-x: 0px;
+    --shadow-y: 0px;
+    --shadow-blur: 0px;
+    --shadow-spread: 0px;
+    --shadow-opacity: 0.05;
+    --shadow-color: #1a1a1a;
+    --shadow-2xs: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.03);
+    --shadow-xs: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.03);
+    --shadow-sm: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow-md: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 2px 4px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow-lg: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 4px 6px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow-xl: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 8px 10px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow-2xl: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.13);
+    --tracking-normal: normal;
+    --spacing: 0.25rem;
+  }
+
+  .dark {
+    --background: rgb(0, 0, 0);
+    --foreground: rgb(255, 255, 255);
+    --card: rgb(26, 33, 43);
+    --card-foreground: rgb(255, 255, 255);
+    --popover: rgb(26, 33, 43);
+    --popover-foreground: rgb(255, 255, 255);
+    --primary: rgb(129, 140, 248);
+    --primary-foreground: rgb(0, 0, 0);
+    --secondary: rgb(45, 212, 191);
+    --secondary-foreground: rgb(0, 0, 0);
+    --muted: rgb(51, 51, 51);
+    --muted-foreground: rgb(204, 204, 204);
+    --accent: rgb(252, 211, 77);
+    --accent-foreground: rgb(0, 0, 0);
+    --destructive: rgb(248, 113, 113);
+    --destructive-foreground: rgb(0, 0, 0);
+    --border: rgb(84, 84, 84);
+    --input: rgb(255, 255, 255);
+    --ring: rgb(129, 140, 248);
+    --chart-1: rgb(129, 140, 248);
+    --chart-2: rgb(45, 212, 191);
+    --chart-3: rgb(252, 211, 77);
+    --chart-4: rgb(244, 114, 182);
+    --chart-5: rgb(74, 222, 128);
+    --sidebar: rgb(0, 0, 0);
+    --sidebar-foreground: rgb(255, 255, 255);
+    --sidebar-primary: rgb(129, 140, 248);
+    --sidebar-primary-foreground: rgb(0, 0, 0);
+    --sidebar-accent: rgb(252, 211, 77);
+    --sidebar-accent-foreground: rgb(0, 0, 0);
+    --sidebar-border: rgb(255, 255, 255);
+    --sidebar-ring: rgb(129, 140, 248);
+    --font-sans: DM Sans, sans-serif;
+    --font-serif: DM Sans, sans-serif;
+    --font-mono: Space Mono, monospace;
+    --radius: 1rem;
+    --shadow-x: 0px;
+    --shadow-y: 0px;
+    --shadow-blur: 0px;
+    --shadow-spread: 0px;
+    --shadow-opacity: 0.05;
+    --shadow-color: #1a1a1a;
+    --shadow-2xs: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.03);
+    --shadow-xs: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.03);
+    --shadow-sm: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow-md: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 2px 4px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow-lg: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 4px 6px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow-xl: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 8px 10px -1px hsl(0 0% 10.1961% / 0.05);
+    --shadow-2xl: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.13);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
   body {
-    @apply bg-slate-950 text-slate-100;
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  ::selection {
+    @apply bg-primary text-primary-foreground;
   }
 }

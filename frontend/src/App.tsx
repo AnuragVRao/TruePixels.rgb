@@ -18,19 +18,19 @@ const LogsPage = lazy(() => import('./pages/admin/LogsPage').then((m) => ({ defa
 const UsersPage = lazy(() => import('./pages/admin/UsersPage').then((m) => ({ default: m.UsersPage })));
 const LoginActivityPage = lazy(() => import('./pages/admin/LoginActivityPage').then((m) => ({ default: m.LoginActivityPage })));
 const ModelsPage = lazy(() => import('./pages/admin/ModelsPage').then((m) => ({ default: m.ModelsPage })));
-const loadingAdmin = <p className="text-slate-400 text-sm">Loading…</p>;
+const loadingAdmin = <p className="text-muted-foreground text-sm">Loading…</p>;
 
 const NotFound: React.FC = () => (
   <div className="text-center space-y-3 py-16">
-    <p className="text-slate-300">That page does not exist.</p>
-    <Link className="text-indigo-400 hover:underline" to="/">Go to the start page</Link>
+    <p className="text-foreground/80">That page does not exist.</p>
+    <Link className="text-primary hover:underline" to="/">Go to the start page</Link>
   </div>
 );
 
 /** "/" - the landing page when signed out (as in M1), the analyse page when signed in. */
 const Home: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
-  if (loading) return <p className="text-slate-400 text-sm">Checking your session…</p>;
+  if (loading) return <p className="text-muted-foreground text-sm">Checking your session…</p>;
   return isAuthenticated ? <UploadPage /> : <LandingPage />;
 };
 

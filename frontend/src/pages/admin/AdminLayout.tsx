@@ -5,7 +5,7 @@ import { Notice } from '../../components/Feedback';
 
 const tab = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
-    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+    isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
   }`;
 
 /**
@@ -16,7 +16,7 @@ const tab = ({ isActive }: { isActive: boolean }) =>
 export const AdminLayout: React.FC = () => {
   const { isAuthenticated, isAdmin, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <p className="text-slate-400 text-sm">Checking your session…</p>;
+  if (loading) return <p className="text-muted-foreground text-sm">Checking your session…</p>;
   if (!isAuthenticated) {
     return <Navigate to={`/admin/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }
@@ -29,7 +29,7 @@ export const AdminLayout: React.FC = () => {
   }
   return (
     <div className="space-y-6">
-      <nav className="flex gap-1 overflow-x-auto border-b border-slate-800 pb-3" aria-label="Administration">
+      <nav className="flex gap-1 overflow-x-auto border-b border-border pb-3" aria-label="Administration">
         <NavLink to="/admin" end className={tab}>Overview</NavLink>
         <NavLink to="/admin/logs" className={tab}>Logs</NavLink>
         <NavLink to="/admin/users" className={tab}>Users</NavLink>
@@ -49,10 +49,10 @@ export const Pager: React.FC<{ page: number; totalPages: number; total: number; 
   totalPages > 1 ? (
     <nav className="flex items-center justify-between text-sm" aria-label="Pagination">
       <button type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}
-              className="px-3 py-1.5 rounded-lg border border-slate-700 disabled:opacity-40">Previous</button>
-      <span className="text-slate-400">Page {page} of {totalPages} · {total} {noun}</span>
+              className="px-3 py-1.5 rounded-lg border border-border disabled:opacity-40">Previous</button>
+      <span className="text-muted-foreground">Page {page} of {totalPages} · {total} {noun}</span>
       <button type="button" disabled={page >= totalPages} onClick={() => onPage(page + 1)}
-              className="px-3 py-1.5 rounded-lg border border-slate-700 disabled:opacity-40">Next</button>
+              className="px-3 py-1.5 rounded-lg border border-border disabled:opacity-40">Next</button>
     </nav>
   ) : null;
 

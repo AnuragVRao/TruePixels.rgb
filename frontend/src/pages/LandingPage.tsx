@@ -15,28 +15,28 @@ export const LandingPage: React.FC = () => (
   <>
     {/* Background glows, fixed to the viewport and behind everything but the page background. */}
     <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden" aria-hidden="true">
-      <div className="absolute -top-48 -left-48 w-[36rem] h-[36rem] rounded-full bg-indigo-600/40 blur-[120px]" />
-      <div className="absolute -bottom-56 -right-40 w-[40rem] h-[40rem] rounded-full bg-blue-600/35 blur-[120px]" />
-      <div className="absolute -bottom-72 -right-72 w-[36rem] h-[36rem] rounded-full border border-blue-500/30" />
+      <div className="absolute -top-48 -left-48 w-[36rem] h-[36rem] rounded-full bg-primary/30 blur-[120px]" />
+      <div className="absolute -bottom-56 -right-40 w-[40rem] h-[40rem] rounded-full bg-secondary/25 blur-[120px]" />
+      <div className="absolute -bottom-72 -right-72 w-[36rem] h-[36rem] rounded-full border border-primary/30" />
     </div>
 
     <div className="relative z-10 min-h-[calc(100vh-12rem)] flex flex-col items-center justify-center text-center">
-      <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight pb-2 bg-gradient-to-r from-white from-30% via-sky-400 to-violet-500 bg-clip-text text-transparent">
+      <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight pb-2 bg-gradient-to-r from-foreground from-30% via-primary to-secondary bg-clip-text text-transparent">
         TruePixels.rgb
       </h1>
-      <p className="mt-2 text-xl sm:text-3xl font-semibold text-white">AI Image Detection System</p>
-      <p className="mt-3 text-base sm:text-xl text-slate-300">Software Engineering Project</p>
-      <div className="mt-4 h-0.5 w-20 rounded-full bg-gradient-to-r from-sky-400 to-violet-500" />
+      <p className="mt-2 text-xl sm:text-3xl font-semibold text-foreground">AI Image Detection System</p>
+      <p className="mt-3 text-base sm:text-xl text-foreground/80">Software Engineering Project</p>
+      <div className="mt-4 h-0.5 w-20 rounded-full bg-gradient-to-r from-primary to-secondary" />
 
-      <h2 className="mt-12 text-lg sm:text-xl font-semibold text-indigo-300">Contributors</h2>
-      <ul className="mt-2 space-y-1.5 text-base sm:text-lg text-slate-100">
+      <h2 className="mt-12 text-lg sm:text-xl font-semibold text-primary">Contributors</h2>
+      <ul className="mt-2 space-y-1.5 text-base sm:text-lg text-foreground">
         {CONTRIBUTORS.map((c) => (
           <li key={c.roll}>{c.name} - {c.roll}</li>
         ))}
       </ul>
 
-      <h2 className="mt-10 text-lg sm:text-xl font-semibold text-indigo-300">Course Instructor</h2>
-      <p className="mt-2 text-base sm:text-lg text-slate-100">Prof. Jaidhar C D</p>
+      <h2 className="mt-10 text-lg sm:text-xl font-semibold text-primary">Course Instructor</h2>
+      <p className="mt-2 text-base sm:text-lg text-foreground">Prof. Jaidhar C D</p>
     </div>
   </>
 );

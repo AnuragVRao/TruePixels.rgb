@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react
 import { BarChart3, CheckCircle, Clock, Lock, LogOut, ScanSearch, ShieldAlert, ShieldCheck, UserCog } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ThemeToggle } from './ThemeToggle';
 
 /**
  * Signed in: the four numbered tabs of M3's original dashboard (Forensic
@@ -12,7 +13,7 @@ import { ConfirmDialog } from './ConfirmDialog';
  */
 const tabClass = (active: boolean) =>
   `flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-    active ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
+    active ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30' : 'text-foreground/80 hover:text-foreground hover:bg-muted'
   }`;
 
 const Tabs: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
@@ -46,26 +47,28 @@ export const Layout: React.FC = () => {
   const isAdmin = user?.role === 'Admin';
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-950/90 sticky top-0 z-30 backdrop-blur">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <header className="border-b border-border bg-background/90 sticky top-0 z-30 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <Link to="/" className="flex items-center gap-2 font-bold text-white shrink-0">
-            <ShieldCheck className="w-5 h-5 text-indigo-400" />
+          <Link to="/" className="flex items-center gap-2 font-bold text-foreground shrink-0">
+            <ShieldCheck className="w-5 h-5 text-primary" />
             <span>TruePixels.rgb</span>
           </Link>
+          <div className="flex items-center gap-2 min-w-0">
+          <ThemeToggle />
           {!user && (
             /* Signed out: M1's three entry points - each its own page. */
             <nav className="flex items-center gap-2" aria-label="Account">
               <NavLink to="/admin/login"
-                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 border border-amber-900/40">
+                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-amber-700 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-amber-300 dark:border-amber-900/40">
                 <ShieldAlert className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Admin Login</span>
               </NavLink>
               <NavLink to="/login"
-                       className="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-200 hover:text-white hover:bg-slate-900 border border-slate-800">
+                       className="px-3.5 py-1.5 rounded-xl text-xs font-medium text-foreground hover:text-foreground hover:bg-card border border-border">
                 Sign In
               </NavLink>
               <NavLink to="/register"
-                       className="px-4 py-1.5 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/30">
+                       className="px-4 py-1.5 rounded-xl text-xs font-semibold text-primary-foreground bg-primary hover:bg-primary/90 shadow-md shadow-primary/30">
                 Create Account
               </NavLink>
             </nav>
@@ -73,24 +76,25 @@ export const Layout: React.FC = () => {
           {user && (
             <div className="flex items-center gap-2 min-w-0">
               <Link to="/account" title="Account: change password, login activity"
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500 text-xs text-slate-300 min-w-0">
-                <UserCog className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-card border border-border hover:border-primary text-xs text-foreground/80 min-w-0">
+                <UserCog className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
                 <span className={`w-2 h-2 rounded-full shrink-0 ${isAdmin ? 'bg-amber-400' : 'bg-emerald-400'}`} />
                 <span className="truncate hidden sm:inline max-w-[14rem]">{user.email}</span>
                 <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md ${
-                  isAdmin ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                  isAdmin ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30' : 'bg-muted text-muted-foreground'}`}>
                   {user.role}
                 </span>
               </Link>
               <button
                 type="button"
                 onClick={() => setConfirmSignOut(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-foreground/80 hover:text-foreground bg-muted hover:bg-muted/70 border border-border"
               >
                 <LogOut className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Sign Out</span>
               </button>
             </div>
           )}
+          </div>
         </div>
         {user && <Tabs isAdmin={isAdmin} />}
       </header>
@@ -98,12 +102,12 @@ export const Layout: React.FC = () => {
         <Outlet />
       </main>
       {user || pathname !== '/' ? (
-        <footer className="border-t border-slate-800 py-5 px-6 flex flex-wrap justify-between gap-2 text-xs text-slate-500">
+        <footer className="border-t border-border py-5 px-6 flex flex-col items-center gap-1 text-center text-xs text-muted-foreground/80">
           <span>&copy; {new Date().getFullYear()} TruePixels.rgb. All rights reserved.</span>
           <span>A result is a model&apos;s estimate, not proof.</span>
         </footer>
       ) : (
-        <footer className="relative z-10 py-5 px-6 text-left text-xs text-slate-400">
+        <footer className="relative z-10 py-5 px-6 text-center text-xs text-muted-foreground">
           &copy; {new Date().getFullYear()} TruePixels.rgb. All rights reserved.
         </footer>
       )}
@@ -129,7 +133,7 @@ export const Layout: React.FC = () => {
 export const RequireAuth: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <p className="text-slate-400 text-sm">Checking your session…</p>;
+  if (loading) return <p className="text-muted-foreground text-sm">Checking your session…</p>;
   if (!isAuthenticated) {
     return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }

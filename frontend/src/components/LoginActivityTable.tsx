@@ -2,15 +2,15 @@ import React from 'react';
 import type { LoginEvent, LoginOutcome } from '../api/types';
 
 export const OUTCOME: Record<LoginOutcome, { label: string; tone: string }> = {
-  success: { label: 'Signed in', tone: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300' },
-  otp_sent: { label: 'Password correct, code sent', tone: 'bg-sky-500/10 border-sky-500/40 text-sky-300' },
-  wrong_password: { label: 'Wrong password', tone: 'bg-rose-500/10 border-rose-500/40 text-rose-300' },
-  unknown_account: { label: 'No such account', tone: 'bg-rose-500/10 border-rose-500/40 text-rose-300' },
-  account_disabled: { label: 'Account disabled', tone: 'bg-amber-500/10 border-amber-500/40 text-amber-300' },
-  not_admin: { label: 'Not an administrator', tone: 'bg-amber-500/10 border-amber-500/40 text-amber-300' },
-  otp_failed: { label: 'Wrong verification code', tone: 'bg-rose-500/10 border-rose-500/40 text-rose-300' },
-  password_reset: { label: 'Password reset by e-mail', tone: 'bg-violet-500/10 border-violet-500/40 text-violet-300' },
-  password_changed: { label: 'Password changed', tone: 'bg-violet-500/10 border-violet-500/40 text-violet-300' },
+  success: { label: 'Signed in', tone: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300' },
+  otp_sent: { label: 'Password correct, code sent', tone: 'bg-sky-500/10 border-sky-500/40 text-sky-700 dark:text-sky-300' },
+  wrong_password: { label: 'Wrong password', tone: 'bg-rose-500/10 border-rose-500/40 text-rose-700 dark:text-rose-300' },
+  unknown_account: { label: 'No such account', tone: 'bg-rose-500/10 border-rose-500/40 text-rose-700 dark:text-rose-300' },
+  account_disabled: { label: 'Account disabled', tone: 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300' },
+  not_admin: { label: 'Not an administrator', tone: 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300' },
+  otp_failed: { label: 'Wrong verification code', tone: 'bg-rose-500/10 border-rose-500/40 text-rose-700 dark:text-rose-300' },
+  password_reset: { label: 'Password reset by e-mail', tone: 'bg-violet-500/10 border-violet-500/40 text-violet-700 dark:text-violet-300' },
+  password_changed: { label: 'Password changed', tone: 'bg-violet-500/10 border-violet-500/40 text-violet-700 dark:text-violet-300' },
 };
 
 /** "Chrome 129 on Windows" from a user-agent string; the full string is in the tooltip. */
@@ -34,9 +34,9 @@ export function browserOf(agent: string | null): string {
 
 /** Every field is rendered as text: e-mails and user-agents are attacker-supplied. */
 export const LoginActivityTable: React.FC<{ rows: LoginEvent[]; showEmail?: boolean }> = ({ rows, showEmail }) => (
-  <div className="overflow-x-auto rounded-xl border border-slate-800">
+  <div className="overflow-x-auto rounded-xl border border-border">
     <table className="w-full text-sm">
-      <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-500">
+      <thead className="bg-card text-left text-xs uppercase tracking-wide text-muted-foreground/80">
         <tr>
           <th className="px-3 py-2">Time</th>
           {showEmail && <th className="px-3 py-2">E-mail</th>}
@@ -46,16 +46,16 @@ export const LoginActivityTable: React.FC<{ rows: LoginEvent[]; showEmail?: bool
           <th className="px-3 py-2">Browser</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-800" data-testid="login-activity-rows">
+      <tbody className="divide-y divide-border" data-testid="login-activity-rows">
         {rows.map((row) => {
-          const outcome = OUTCOME[row.outcome] ?? { label: row.outcome, tone: 'border-slate-700 text-slate-300' };
+          const outcome = OUTCOME[row.outcome] ?? { label: row.outcome, tone: 'border-border text-foreground/80' };
           return (
             <tr key={row.event_id}>
-              <td className="px-3 py-2 whitespace-nowrap text-slate-400">{new Date(row.created_at).toLocaleString()}</td>
+              <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{new Date(row.created_at).toLocaleString()}</td>
               {showEmail && (
-                <td className="px-3 py-2 text-slate-200 break-all">
+                <td className="px-3 py-2 text-foreground break-all">
                   {row.email}
-                  {row.user_id === null && <span className="ml-1 text-xs text-slate-500">(no account)</span>}
+                  {row.user_id === null && <span className="ml-1 text-xs text-muted-foreground/80">(no account)</span>}
                 </td>
               )}
               <td className="px-3 py-2">
@@ -63,9 +63,9 @@ export const LoginActivityTable: React.FC<{ rows: LoginEvent[]; showEmail?: bool
                   {outcome.label}
                 </span>
               </td>
-              <td className="px-3 py-2 text-slate-300 capitalize">{row.portal}</td>
-              <td className="px-3 py-2 text-slate-300 font-mono whitespace-nowrap">{row.ip_address ?? '—'}</td>
-              <td className="px-3 py-2 text-slate-300 whitespace-nowrap" title={row.user_agent ?? undefined}>
+              <td className="px-3 py-2 text-foreground/80 capitalize">{row.portal}</td>
+              <td className="px-3 py-2 text-foreground/80 font-mono whitespace-nowrap">{row.ip_address ?? '—'}</td>
+              <td className="px-3 py-2 text-foreground/80 whitespace-nowrap" title={row.user_agent ?? undefined}>
                 {browserOf(row.user_agent)}
               </td>
             </tr>

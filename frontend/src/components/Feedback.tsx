@@ -5,10 +5,10 @@ import { ApiError, messageFor } from '../api/client';
 type Tone = 'error' | 'info' | 'success' | 'warning';
 
 const TONES: Record<Tone, string> = {
-  error: 'bg-rose-950/60 border-rose-700/60 text-rose-100',
-  warning: 'bg-amber-950/50 border-amber-700/60 text-amber-100',
-  info: 'bg-sky-950/50 border-sky-700/60 text-sky-100',
-  success: 'bg-emerald-950/50 border-emerald-700/60 text-emerald-100',
+  error: 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700/60 text-rose-900 dark:text-rose-100',
+  warning: 'bg-amber-50 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-100',
+  info: 'bg-sky-50 dark:bg-sky-950/50 border-sky-300 dark:border-sky-700/60 text-sky-900 dark:text-sky-100',
+  success: 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700/60 text-emerald-900 dark:text-emerald-100',
 };
 
 export const Notice: React.FC<{ tone?: Tone; title?: string; children?: React.ReactNode }> = ({

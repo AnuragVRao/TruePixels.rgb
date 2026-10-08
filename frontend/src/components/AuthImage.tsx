@@ -17,7 +17,7 @@ export const AuthImage: React.FC<AuthImageProps> = ({ src, alt, className, fallb
 
   if (state.status === 'loading') {
     return (
-      <div className={`flex items-center justify-center bg-slate-900 text-slate-500 ${className ?? ''}`}>
+      <div className={`flex items-center justify-center bg-card text-muted-foreground/80 ${className ?? ''}`}>
         <Loader2 className="w-5 h-5 animate-spin" aria-label="Loading image" />
       </div>
     );
@@ -27,7 +27,7 @@ export const AuthImage: React.FC<AuthImageProps> = ({ src, alt, className, fallb
       <div
         role="img"
         aria-label={alt}
-        className={`flex flex-col items-center justify-center gap-2 bg-slate-900 text-slate-400 text-xs text-center p-3 ${className ?? ''}`}
+        className={`flex flex-col items-center justify-center gap-2 bg-card text-muted-foreground text-xs text-center p-3 ${className ?? ''}`}
       >
         <ImageOff className="w-5 h-5" />
         <span>{fallbackText ?? messageFor(state.error)}</span>

@@ -10,7 +10,7 @@ const PAGE_SIZE = 20;
 type Action = 'enable' | 'disable' | 'remove';
 
 const STATUS_TONE: Record<string, string> = {
-  active: 'text-emerald-300', disabled: 'text-amber-300', removed: 'text-rose-300',
+  active: 'text-emerald-700 dark:text-emerald-300', disabled: 'text-amber-700 dark:text-amber-300', removed: 'text-rose-700 dark:text-rose-300',
 };
 
 /**
@@ -98,21 +98,21 @@ export const UsersPage: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold text-white">Users</h1>
-      <p className="text-sm text-slate-400">
+      <h1 className="text-2xl font-bold text-foreground">Users</h1>
+      <p className="text-sm text-muted-foreground">
         Account details only. Administrators cannot open users&apos; images or results. You cannot change your own
         account, and the server refuses any change that would leave no active administrator.
       </p>
       <ErrorNotice error={error} />
       {done && <Notice tone="success" title={done} />}
       {!users && !error && (
-        <p className="text-slate-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
       )}
       {users && users.length === 0 && <Notice tone="info" title="No registered users." />}
       {users && users.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-sm">
-            <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-card text-left text-xs uppercase tracking-wide text-muted-foreground/80">
               <tr>
                 <th className="px-3 py-2">#</th>
                 <th className="px-3 py-2">Name / email</th>
@@ -122,32 +122,32 @@ export const UsersPage: React.FC = () => {
                 <th className="px-3 py-2">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-border">
               {shown.map((u) => {
                 const self = me?.user_id === u.user_id;
                 return (
                   <tr key={u.user_id} data-testid={`user-${u.user_id}`}>
-                    <td className="px-3 py-2 font-mono text-slate-500">{u.user_id}</td>
+                    <td className="px-3 py-2 font-mono text-muted-foreground/80">{u.user_id}</td>
                     <td className="px-3 py-2">
-                      <p className="text-slate-100">{u.full_name}{self && <span className="text-slate-500"> (you)</span>}</p>
-                      <p className="text-xs text-slate-400 break-all">{u.email}</p>
+                      <p className="text-foreground">{u.full_name}{self && <span className="text-muted-foreground/80"> (you)</span>}</p>
+                      <p className="text-xs text-muted-foreground break-all">{u.email}</p>
                     </td>
-                    <td className="px-3 py-2 text-slate-300">{u.role}</td>
+                    <td className="px-3 py-2 text-foreground/80">{u.role}</td>
                     <td className={`px-3 py-2 ${STATUS_TONE[u.account_status] ?? ''}`}>{u.account_status}</td>
-                    <td className="px-3 py-2 text-slate-400 whitespace-nowrap">{when(u.registered_at)}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{when(u.registered_at)}</td>
                     <td className="px-3 py-2">
-                      {self ? <span className="text-xs text-slate-500">—</span> : (
+                      {self ? <span className="text-xs text-muted-foreground/80">—</span> : (
                         <div className="flex flex-wrap gap-2">
                           {u.account_status !== 'active' && (
-                            <button type="button" className="text-xs px-2 py-1 rounded border border-emerald-700 text-emerald-300"
+                            <button type="button" className="text-xs px-2 py-1 rounded border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
                                     onClick={() => { setActionError(null); setDone(null); setPending({ target: u, action: 'enable' }); }}>Enable</button>
                           )}
                           {u.account_status === 'active' && (
-                            <button type="button" className="text-xs px-2 py-1 rounded border border-amber-700 text-amber-300"
+                            <button type="button" className="text-xs px-2 py-1 rounded border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300"
                                     onClick={() => { setActionError(null); setDone(null); setPending({ target: u, action: 'disable' }); }}>Disable</button>
                           )}
                           {u.account_status !== 'removed' && (
-                            <button type="button" className="text-xs px-2 py-1 rounded border border-rose-800 text-rose-300"
+                            <button type="button" className="text-xs px-2 py-1 rounded border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300"
                                     onClick={() => { setActionError(null); setDone(null); setPending({ target: u, action: 'remove' }); }}>Remove</button>
                           )}
                         </div>
@@ -166,7 +166,7 @@ export const UsersPage: React.FC = () => {
         <ConfirmDialog title={EXPLAIN[pending.action].title} confirmLabel={EXPLAIN[pending.action].button}
                        danger={pending.action !== 'enable'} busy={busy} onConfirm={confirm}
                        onCancel={() => { setPending(null); setActionError(null); }}>
-          <p className="text-white">{pending.target.full_name} · {pending.target.email} ({pending.target.role})</p>
+          <p className="text-foreground">{pending.target.full_name} · {pending.target.email} ({pending.target.role})</p>
           {EXPLAIN[pending.action].body}
           <ErrorNotice error={actionError} />
         </ConfirmDialog>

@@ -8,21 +8,21 @@ import { ErrorNotice, Notice } from '../components/Feedback';
 import { PasswordRules, passwordOk } from '../components/PasswordRules';
 
 const field =
-  'w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2.5 text-sm text-white placeholder-slate-500 ' +
-  'focus:outline-none focus:ring-2 focus:ring-indigo-500';
+  'w-full rounded-lg bg-card border border-border px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground/60 ' +
+  'focus:outline-none focus:ring-2 focus:ring-ring';
 const adminField =
-  'w-full rounded-lg bg-slate-950 border border-amber-900/60 px-3 py-2.5 text-sm text-white placeholder-slate-500 ' +
+  'w-full rounded-lg bg-background border border-amber-300 dark:border-amber-900/60 px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground/60 ' +
   'focus:outline-none focus:ring-2 focus:ring-amber-500';
 const adminButton =
   'w-full flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 ' +
   'px-4 py-2.5 text-sm font-semibold text-white';
 const button =
-  'w-full flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 ' +
-  'px-4 py-2.5 text-sm font-semibold text-white';
+  'w-full flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 ' +
+  'px-4 py-2.5 text-sm font-semibold text-primary-foreground';
 
 const Card: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="max-w-md mx-auto bg-slate-900/60 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-5">
-    <h1 className="text-xl font-bold text-white">{title}</h1>
+  <div className="max-w-md mx-auto bg-card border border-border rounded-2xl p-6 sm:p-8 space-y-5">
+    <h1 className="text-xl font-bold text-foreground">{title}</h1>
     {children}
   </div>
 );
@@ -97,15 +97,15 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
   const fields = (
     <>
       <label className="block space-y-1.5 text-sm">
-        <span className="text-slate-300">{admin ? 'Admin Email' : 'Email'}</span>
+        <span className="text-foreground/80">{admin ? 'Admin Email' : 'Email'}</span>
         <input className={admin ? adminField : field} type="email" autoComplete="email" required value={email}
                onChange={(e) => setEmail(e.target.value)} />
       </label>
       <label className="block space-y-1.5 text-sm">
         <span className="flex items-baseline justify-between">
-          <span className="text-slate-300">{admin ? 'Master Password' : 'Password'}</span>
+          <span className="text-foreground/80">{admin ? 'Master Password' : 'Password'}</span>
           <Link to={`/forgot-password${admin ? '?portal=admin' : ''}`}
-                className={`text-xs hover:underline ${admin ? 'text-amber-400' : 'text-indigo-400'}`}>
+                className={`text-xs hover:underline ${admin ? 'text-amber-700 dark:text-amber-400' : 'text-primary'}`}>
             Forgot password?
           </Link>
         </span>
@@ -117,14 +117,14 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
 
   if (admin) {
     return (
-      <div className="max-w-md mx-auto bg-slate-900/60 border border-amber-900/50 rounded-2xl p-6 sm:p-8 space-y-5">
+      <div className="max-w-md mx-auto bg-card border border-amber-300 dark:border-amber-900/50 rounded-2xl p-6 sm:p-8 space-y-5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-700 dark:text-amber-400">
             <ShieldAlert className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">Administrator Portal</h1>
-            <p className="text-xs text-amber-300/80">Elevated privilege authentication (F.3)</p>
+            <h1 className="text-xl font-bold text-foreground">Administrator Portal</h1>
+            <p className="text-xs text-amber-700/80 dark:text-amber-300/80">Elevated privilege authentication (F.3)</p>
           </div>
         </div>
         {expired && <Notice tone="warning" title="Your session ended. Please sign in again." />}
@@ -140,8 +140,8 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
             {busy && <Loader2 className="w-4 h-4 animate-spin" />} Sign in as administrator
           </button>
         </form>
-        <p className="text-sm text-slate-400">
-          Not an administrator? <Link className="text-indigo-400 hover:underline" to="/login">User sign-in</Link>
+        <p className="text-sm text-muted-foreground">
+          Not an administrator? <Link className="text-primary hover:underline" to="/login">User sign-in</Link>
         </p>
       </div>
     );
@@ -158,11 +158,11 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
           {busy && <Loader2 className="w-4 h-4 animate-spin" />} Sign in
         </button>
       </form>
-      <p className="text-sm text-slate-400">
-        No account? <Link className="text-indigo-400 hover:underline" to="/register">Create one</Link>
+      <p className="text-sm text-muted-foreground">
+        No account? <Link className="text-primary hover:underline" to="/register">Create one</Link>
       </p>
-      <p className="text-xs text-slate-500">
-        Administrator? <Link className="text-amber-400 hover:underline" to="/admin/login">Use the Administrator Portal</Link>
+      <p className="text-xs text-muted-foreground/80">
+        Administrator? <Link className="text-amber-700 dark:text-amber-400 hover:underline" to="/admin/login">Use the Administrator Portal</Link>
       </p>
     </Card>
   );
@@ -214,17 +214,17 @@ export const RegisterPage: React.FC = () => {
       <ErrorNotice error={error} />
       <form onSubmit={submit} className="space-y-4">
         <label className="block space-y-1.5 text-sm">
-          <span className="text-slate-300">Full name</span>
+          <span className="text-foreground/80">Full name</span>
           <input className={field} autoComplete="name" required minLength={2} maxLength={120} value={fullName}
                  onChange={(e) => setFullName(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
-          <span className="text-slate-300">Email</span>
+          <span className="text-foreground/80">Email</span>
           <input className={field} type="email" autoComplete="email" required value={email}
                  onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
-          <span className="text-slate-300">Password</span>
+          <span className="text-foreground/80">Password</span>
           <input className={field} type="password" autoComplete="new-password" required value={password}
                  onChange={(e) => setPassword(e.target.value)} />
         </label>
@@ -233,8 +233,8 @@ export const RegisterPage: React.FC = () => {
           {busy && <Loader2 className="w-4 h-4 animate-spin" />} Create account
         </button>
       </form>
-      <p className="text-sm text-slate-400">
-        Already registered? <Link className="text-indigo-400 hover:underline" to="/login">Sign in</Link>
+      <p className="text-sm text-muted-foreground">
+        Already registered? <Link className="text-primary hover:underline" to="/login">Sign in</Link>
       </p>
     </Card>
   );
@@ -311,7 +311,7 @@ export const VerifyOtpPage: React.FC = () => {
           {busy && <Loader2 className="w-4 h-4 animate-spin" />} Verify
         </button>
       </form>
-      <button type="button" onClick={resend} className="text-sm text-indigo-400 hover:underline">
+      <button type="button" onClick={resend} className="text-sm text-primary hover:underline">
         Send a new code
       </button>
     </Card>
@@ -377,11 +377,11 @@ export const ForgotPasswordPage: React.FC = () => {
       <ErrorNotice error={error} />
       {step === 'email' ? (
         <form onSubmit={requestCode} className="space-y-4" aria-label="Request a reset code">
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-muted-foreground">
             Enter the e-mail address of your account. We will send a 6-digit code to choose a new password.
           </p>
           <label className="block space-y-1.5 text-sm">
-            <span className="text-slate-300">Email</span>
+            <span className="text-foreground/80">Email</span>
             <input className={field} type="email" autoComplete="email" required value={email}
                    onChange={(e) => setEmail(e.target.value)} />
           </label>
@@ -406,36 +406,36 @@ export const ForgotPasswordPage: React.FC = () => {
           )}
           <form onSubmit={reset} className="space-y-4" aria-label="Choose a new password">
             <label className="block space-y-1.5 text-sm">
-              <span className="text-slate-300">Reset code</span>
+              <span className="text-foreground/80">Reset code</span>
               <input className={`${field} text-center tracking-[0.5em] text-lg font-mono`}
                      inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required
                      value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
             </label>
             <label className="block space-y-1.5 text-sm">
-              <span className="text-slate-300">New password</span>
+              <span className="text-foreground/80">New password</span>
               <input className={field} type="password" autoComplete="new-password" required value={password}
                      onChange={(e) => setPassword(e.target.value)} />
             </label>
             <label className="block space-y-1.5 text-sm">
-              <span className="text-slate-300">Confirm new password</span>
+              <span className="text-foreground/80">Confirm new password</span>
               <input className={field} type="password" autoComplete="new-password" required value={confirm}
                      onChange={(e) => setConfirm(e.target.value)} />
             </label>
             <PasswordRules password={password} />
-            {mismatch && <p className="text-xs text-rose-300">The two passwords do not match.</p>}
+            {mismatch && <p className="text-xs text-rose-700 dark:text-rose-300">The two passwords do not match.</p>}
             <button className={button} type="submit"
                     disabled={busy || code.length !== 6 || !passwordOk(password) || confirm !== password}>
               {busy && <Loader2 className="w-4 h-4 animate-spin" />} Set new password
             </button>
           </form>
           <button type="button" onClick={() => void requestCode()} disabled={busy}
-                  className="text-sm text-indigo-400 hover:underline disabled:opacity-50">
+                  className="text-sm text-primary hover:underline disabled:opacity-50">
             Send a new code
           </button>
         </>
       )}
-      <p className="text-sm text-slate-400">
-        Remembered it? <Link className="text-indigo-400 hover:underline" to={signInPath}>Back to sign in</Link>
+      <p className="text-sm text-muted-foreground">
+        Remembered it? <Link className="text-primary hover:underline" to={signInPath}>Back to sign in</Link>
       </p>
     </Card>
   );

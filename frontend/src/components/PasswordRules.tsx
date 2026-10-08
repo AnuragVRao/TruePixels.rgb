@@ -14,7 +14,7 @@ export const passwordOk = (password: string) => passwordRules(password).every((r
 export const PasswordRules: React.FC<{ password: string }> = ({ password }) => (
   <ul className="text-xs space-y-1" aria-label="Password rules">
     {passwordRules(password).map((rule) => (
-      <li key={rule.text} className={rule.ok ? 'text-emerald-400' : 'text-slate-500'}>
+      <li key={rule.text} className={rule.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground/80'}>
         {rule.ok ? '✓' : '•'} {rule.text}
       </li>
     ))}

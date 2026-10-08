@@ -8,7 +8,7 @@ import { LoginActivityTable, OUTCOME } from '../../components/LoginActivityTable
 import { Pager } from './AdminLayout';
 
 const PAGE_SIZE = 25;
-const select = 'rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm text-slate-100';
+const select = 'rounded-lg bg-card border border-border px-2 py-1.5 text-sm text-foreground';
 
 /** Every account's sign-ins and password changes, including attempts on unknown addresses. Viewing is audited. */
 export const LoginActivityPage: React.FC = () => {
@@ -42,30 +42,30 @@ export const LoginActivityPage: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold text-white">Login activity</h1>
+      <h1 className="text-2xl font-bold text-foreground">Login activity</h1>
       <form className="flex flex-wrap items-end gap-3" aria-label="Login activity filters"
             onSubmit={(e) => { e.preventDefault(); update({ email: emailDraft.trim().toLowerCase() }); }}>
-        <label className="text-xs text-slate-400 space-y-1">
+        <label className="text-xs text-muted-foreground space-y-1">
           <span className="block">Result</span>
           <select className={select} value={outcome} onChange={(e) => update({ outcome: e.target.value })}>
             <option value="">all</option>
             {(Object.keys(OUTCOME) as LoginOutcome[]).map((o) => <option key={o} value={o}>{OUTCOME[o].label}</option>)}
           </select>
         </label>
-        <label className="text-xs text-slate-400 space-y-1">
+        <label className="text-xs text-muted-foreground space-y-1">
           <span className="block">E-mail contains</span>
           <input className={select} value={emailDraft} onChange={(e) => setEmailDraft(e.target.value)}
                  placeholder="press Enter to filter" />
         </label>
         {(outcome || email) && (
-          <button type="button" className="text-sm text-indigo-400 hover:underline pb-1.5"
+          <button type="button" className="text-sm text-primary hover:underline pb-1.5"
                   onClick={() => { setEmailDraft(''); setParams(new URLSearchParams()); }}>Clear filters</button>
         )}
       </form>
 
       <ErrorNotice error={error} />
       {!data && !error && (
-        <p className="text-slate-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
       )}
       {data && data.total === 0 && <Notice tone="info" title="No sign-ins match these filters." />}
       {data && data.items.length > 0 && <LoginActivityTable rows={data.items} showEmail />}

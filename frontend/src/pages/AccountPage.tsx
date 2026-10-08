@@ -11,8 +11,8 @@ import { Pager } from './admin/AdminLayout';
 
 const PAGE_SIZE = 15;
 const field =
-  'w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2.5 text-sm text-white placeholder-slate-500 ' +
-  'focus:outline-none focus:ring-2 focus:ring-indigo-500';
+  'w-full rounded-lg bg-card border border-border px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground/60 ' +
+  'focus:outline-none focus:ring-2 focus:ring-ring';
 
 /**
  * Change password: the server ends every other session and returns a new
@@ -50,9 +50,9 @@ const ChangePassword: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
   };
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-4">
-      <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
-        <KeyRound className="w-5 h-5 text-indigo-400" /> Change password
+    <section className="rounded-2xl border border-border bg-card p-6 space-y-4">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+        <KeyRound className="w-5 h-5 text-primary" /> Change password
       </h2>
       {done && (
         <Notice tone="success" title="Password changed.">
@@ -62,24 +62,24 @@ const ChangePassword: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
       <ErrorNotice error={error} />
       <form onSubmit={submit} className="space-y-4" aria-label="Change password">
         <label className="block space-y-1.5 text-sm">
-          <span className="text-slate-300">Current password</span>
+          <span className="text-foreground/80">Current password</span>
           <input className={field} type="password" autoComplete="current-password" required value={current}
                  onChange={(e) => setCurrent(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
-          <span className="text-slate-300">New password</span>
+          <span className="text-foreground/80">New password</span>
           <input className={field} type="password" autoComplete="new-password" required value={password}
                  onChange={(e) => setPassword(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
-          <span className="text-slate-300">Confirm new password</span>
+          <span className="text-foreground/80">Confirm new password</span>
           <input className={field} type="password" autoComplete="new-password" required value={confirm}
                  onChange={(e) => setConfirm(e.target.value)} />
         </label>
         <PasswordRules password={password} />
-        {mismatch && <p className="text-xs text-rose-300">The two passwords do not match.</p>}
+        {mismatch && <p className="text-xs text-rose-700 dark:text-rose-300">The two passwords do not match.</p>}
         <button type="submit" disabled={busy || !current || !passwordOk(password) || confirm !== password}
-                className="w-full flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white">
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-primary-foreground">
           {busy && <Loader2 className="w-4 h-4 animate-spin" />} Change password
         </button>
       </form>
@@ -108,24 +108,24 @@ export const AccountPage: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Account</h1>
-        <p className="text-sm text-slate-400 mt-1">{user?.email}</p>
+        <h1 className="text-2xl font-bold text-foreground">Account</h1>
+        <p className="text-sm text-muted-foreground mt-1">{user?.email}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[22rem_1fr] items-start">
         <ChangePassword onChanged={() => setReload((n) => n + 1)} />
 
         <section className="space-y-4 min-w-0">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
-            <History className="w-5 h-5 text-indigo-400" /> Login activity
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <History className="w-5 h-5 text-primary" /> Login activity
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground/80">
             Every sign-in to this account and every password change, newest first, kept for 90 days. If you see one
             you do not recognise, change your password.
           </p>
           <ErrorNotice error={error} />
           {!data && !error && (
-            <p className="text-slate-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+            <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
           )}
           {data && data.total === 0 && <Notice tone="info" title="No sign-ins recorded yet." />}
           {data && data.items.length > 0 && <LoginActivityTable rows={data.items} />}

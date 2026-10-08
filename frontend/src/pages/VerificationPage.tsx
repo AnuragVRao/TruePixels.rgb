@@ -96,12 +96,12 @@ export const VerificationPage: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border bg-card p-5">
         <div>
-          <h1 className="text-lg font-bold text-white flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Live Verification Suite
+          <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-700 dark:text-emerald-400" /> Live Verification Suite
           </h1>
-          <p className="text-sm text-slate-400">Runs live checks against the API&apos;s endpoints and seams, as you.</p>
+          <p className="text-sm text-muted-foreground">Runs live checks against the API&apos;s endpoints and seams, as you.</p>
         </div>
         <button type="button" onClick={run} disabled={running}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-semibold text-white">
@@ -112,14 +112,14 @@ export const VerificationPage: React.FC = () => {
       {results.length > 0 && (
         <ul className="space-y-2" data-testid="verification-results">
           {results.map((r) => (
-            <li key={r.name} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm">
+            <li key={r.name} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-background px-4 py-3 text-sm">
               <div className="min-w-0">
-                <p className="font-medium text-slate-100">{r.name}</p>
-                <p className="text-xs text-slate-500 font-mono break-all">{r.request} · expected {r.expected}</p>
-                {r.note && <p className="text-xs text-amber-300">{r.note}</p>}
+                <p className="font-medium text-foreground">{r.name}</p>
+                <p className="text-xs text-muted-foreground/80 font-mono break-all">{r.request} · expected {r.expected}</p>
+                {r.note && <p className="text-xs text-amber-700 dark:text-amber-300">{r.note}</p>}
               </div>
               <span className={`flex items-center gap-1.5 font-semibold ${
-                r.outcome === 'pass' ? 'text-emerald-400' : r.outcome === 'fail' ? 'text-rose-400' : 'text-slate-400'}`}
+                r.outcome === 'pass' ? 'text-emerald-700 dark:text-emerald-400' : r.outcome === 'fail' ? 'text-rose-700 dark:text-rose-400' : 'text-muted-foreground'}`}
                     data-outcome={r.outcome}>
                 {r.outcome === 'pass' ? <CheckCircle2 className="w-4 h-4" /> : r.outcome === 'fail' ? <XCircle className="w-4 h-4" /> : <MinusCircle className="w-4 h-4" />}
                 {r.outcome === 'skip' ? 'SKIPPED' : `${r.outcome === 'pass' ? 'PASS' : 'FAIL'} (${r.got}${r.ms !== null ? `, ${r.ms} ms` : ''})`}
@@ -129,7 +129,7 @@ export const VerificationPage: React.FC = () => {
         </ul>
       )}
       {done && (
-        <p className={`text-sm font-semibold ${failed ? 'text-rose-400' : 'text-emerald-400'}`} data-testid="verification-summary">
+        <p className={`text-sm font-semibold ${failed ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`} data-testid="verification-summary">
           {passed} passed, {failed} failed, {skipped} skipped
         </p>
       )}
