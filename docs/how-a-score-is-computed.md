@@ -1,18 +1,18 @@
 # How a score is computed
 
 What happens between a user choosing an image and the result page showing
-"AI Generated, 92.7 %". Every number below is what the code does today; the
+"AI Generated, 92.6 %". Every number below is what the code does today; the
 constants live in [backend/app/shared/config.py](../backend/app/shared/config.py).
 
 ```
 upload ──► validate & store ──► semantic detector (SigLIP 2) ──┐
                            └──► frequency detector (SPAI) ─────┤
                                                                ▼
-                                        combined score = 0.25·semantic + 0.75·frequency
+                                        combined score = 0.5·semantic + 0.5·frequency
                                                                ▼
-                                        verdict: AI Generated if combined ≥ 0.7558
+                                        verdict: AI Generated if combined ≥ 0.6665
                                                                ▼
-                                        confidence: distance from 0.7558, shown as a percentage
+                                        confidence: distance from 0.6665, shown as a percentage
 ```
 
 ---
@@ -88,15 +88,16 @@ and the verdict rests on the semantic detector alone; the result page says so.
 ## 3. The combined score
 
 ```
-combined = 0.25 × semantic + 0.75 × frequency
+combined = 0.5 × semantic + 0.5 × frequency
 ```
 
 ([m2_analysis/fusion.py](../backend/app/m2_analysis/fusion.py), `combine`)
 
-- **The weights:** the frequency detector gets three times the weight because
-  it was clearly stronger in testing (AUC 0.967 vs 0.728).
-- **How w = 0.25 was chosen:** on a validation set of 198 real and 198
-  generated images, kept separate from the test set.
+- **The weights:** both detectors count equally, so neither kind of evidence
+  outweighs the other.
+- **How the threshold was chosen:** on a validation set of 198 real and 198
+  generated images, kept separate from the test set, as the lowest threshold
+  that keeps false alarms on real photos at or below 10 %.
 - **No model was changed:** the weight is a setting; the models are unchanged.
 - **One detector only:** without a frequency score, the combined score is
   simply the semantic score.
@@ -107,7 +108,7 @@ All three of these numbers (semantic, frequency, combined) mean the same thing:
 ## 4. The verdict
 
 ```
-AI Generated   if combined ≥ τ      (τ = 0.7558)
+AI Generated   if combined ≥ τ      (τ = 0.6665)
 Real           otherwise
 ```
 
@@ -146,23 +147,23 @@ The hammer image (result #18):
 |---|---|
 | Semantic score (SigLIP 2) | 0.994 |
 | Frequency score (SPAI) | 1.000 (rounded; the raw value is just under 1) |
-| Combined | 0.25 × 0.994 + 0.75 × 1.000 = **0.9985** |
-| Verdict | 0.9985 ≥ 0.7558 → **AI Generated** |
-| Confidence | 0.9985 is far above 0.7558 → **92.7 %, High** |
+| Combined | 0.5 × 0.994 + 0.5 × 1.000 = **0.997** |
+| Verdict | 0.997 ≥ 0.6665 → **AI Generated** |
+| Confidence | 0.997 is far above 0.6665 → **92.6 %, High** |
 
 And a photograph whose combined score is 0.52:
 
 | Step | Value |
 |---|---|
-| Verdict | 0.52 < 0.7558 → **Real** |
-| Confidence | 0.52 is below 0.7558, but not far below → **63.4 %, Low** |
+| Verdict | 0.52 < 0.6665 → **Real** |
+| Confidence | 0.52 is below 0.6665, but not far below → **59.5 %, Low** |
 
 ## 7. What the numbers do *not* mean
 
 - **Confidence is not "the chance the verdict is right".** It is a distance
   from the threshold. The detectors' outputs are not calibrated: on validation
   their scores were off by 11 percentage points on average, against a target
-  of 5. Read 92.7 % as "far past the threshold", not as an exact probability.
+  of 5. Read 92.6 % as "far past the threshold", not as an exact probability.
 - **A detector can be wrong with full conviction.** A genuine sunflower
   photograph once scored 1.000 on the frequency detector.
 - **Enhanced photos tend to look synthetic** to the frequency detector. This
@@ -171,8 +172,9 @@ And a photograph whose combined score is 0.52:
   image's size dropped SPAI's detection rate from 94 % to 62 %.
 - **Measured on one test, so far:** 99 generated images (2022–23 generators)
   against 99 camera originals. On that set:
-  - overall accuracy was 0.864 [0.81, 0.90];
-  - 11 % of the genuine photographs were wrongly called AI.
+  - overall accuracy was 0.783 [0.72, 0.83];
+  - 66 % of the generated images were caught;
+  - 9 % of the genuine photographs were wrongly called AI.
 
   Newer generators have not been tested.
 

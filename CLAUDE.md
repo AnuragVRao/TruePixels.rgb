@@ -304,7 +304,7 @@ is therefore a **measured** 16 (3.4 GB peak; 24 gave 5% for +600 MB), and
 | 1 | pre-M2.0 | End-to-end path, HTTP upload → verdict | ✅ done (2026-09-07) |
 | 2 | ~~M2.1~~ | ~~Train the CLIP head~~ → **superseded**: integrate a pretrained SigLIP 2 detector | ✅ done (2026-09-07) |
 | 3 | ~~M2.2~~ | ~~Train the frequency classifier~~ → **superseded**: integrate a pretrained frequency-domain detector. Interim (2026-09-07): a second semantic detector, SwinV2. Final (2026-09-12): **SPAI**, SwinV2 removed | ✅ done (2026-09-12) |
-| 4 | M2.3 | Select the fusion weight and τ on a validation split | ✅ **done (2026-10-01)** — reopened. It had been closed as "fitting is training", a ruling made when no labelled data existed. w and τ are configuration constants, not model weights; §0 forbids updating weights, and PRD2 FR-03 explicitly calls for both to be tuned on validation. Chosen on scenes 99–296, disjoint from the test set: **w = 0.25, τ = 0.7558**. Not done: the calibration temperature (MM2.5) |
+| 4 | M2.3 | Select the fusion weight and τ on a validation split | ✅ **done (2026-10-01)** — reopened. It had been closed as "fitting is training", a ruling made when no labelled data existed. w and τ are configuration constants, not model weights; §0 forbids updating weights, and PRD2 FR-03 explicitly calls for both to be tuned on validation. Chosen on scenes 99–296, disjoint from the test set: **w = 0.25, τ = 0.7558**. **Changed 2026-10-09 to equal weights, w = 0.5, τ = 0.6665** (τ re-selected for w = 0.5 by the same rule on the same split). Not done: the calibration temperature (MM2.5) |
 | 5 | M2.4 | Postgres + Alembic, D3/D4 tables, registry endpoints, atomic activation | ✅ **done (2026-10-03, Phases 2 + 4)** — PostgreSQL + Alembic; D3 is the authority on what runs; upload (safetensors heads / fusion JSON), canary, quality gate on a validation-split reference, atomic activation, one-call rollback, immutable D3 rows |
 | 6 | M2.5 | ActivationBundle capture hooks (joint delivery with M3) | ✅ **done (2026-10-03, Phase 3)** — SigLIP attention rollout (mean-pooled, faithfulness-tested) + spectrum of SPAI's own patches; panels in D5, results and PDF |
 | 7 | M2.6 | Benchmark the **pretrained** branches on a public labelled set — evaluation only, no weight updates. Should include the SigLIP 2 / SPAI / fused ablation | ✅ **done (2026-09-30)** — Synthbuster vs RAISE-1k, 99/class, with the SigLIP 2 / SPAI / fused ablation, a confound control and a degradation sweep (§6). Optional next: scale to 1000/class (one flag), and a set from post-2023 generators |
@@ -371,15 +371,15 @@ module.
 | Spectral feature pipeline (`frequency.py`) | ✅ real, but **explainability only — produces no score** |
 | Randomly initialised weights | ✅ **none anywhere** — a partial load is refused, not tolerated |
 | **Latency budget MM2.7** | ⚠ met on the GPU for ordinary photographs (≤ ~2000² px: 1–3 s); missed for very large originals (6144²: 34 s). Not met on CPU. See §4 |
-| τ and fusion weight | ✅ **selected on a validation split** (2026-10-01), disjoint from the test set, by PRD2 FR-03's own rule. w = 0.25, τ = 0.7558. No model weight was touched |
+| τ and fusion weight | ✅ **selected on a validation split**, disjoint from the test set, by PRD2 FR-03's own rule. Since 2026-10-09: **w = 0.5 (equal weights, owner's decision), τ = 0.6665** (was w = 0.25, τ = 0.7558). Active as D3 fusion row #6. No model weight was touched |
 | Calibration (temperature) | ❌ no-op at T=1.0, and **MM2.5 is now measured as missed** — ECE 0.113 on validation, and the best temperature available (T = 0.97) only reaches 0.110 against a ≤ 0.05 target. Temperature scaling alone will not close it |
 | D3/D4 persistence | ✅ every prediction writes D4 and commits before responding; M3 reads it back (asserted end-to-end). SQLite by default |
 | Registry / model management (F.19) | ✅ D3 decides what runs; every D4 row links the semantic, frequency and fusion rows that actually ran (real FKs, RESTRICT). Activation = canary + quality gate (validation-split reference, 100 images; refuse if accuracy −0.05, FPR > 0.20 or AUC −0.02) + locked atomic switch; forced overrides need a reason and are audit-logged; rollback is one call (gate advisory there). Head uploads validated **only with perturbed copies of the published heads** (no training); fusion-config swap is the demonstrated feature. `metrics` stays null |
 | Sign-in / OTP (F.2) | ✅ realised, with **optional OTP 2FA, off by default** (`REQUIRE_2FA=False`). Until 2026-10-05 the OTP feature was an email-only sign-in for any role. Now a code exists only in a challenge created by a correct password (`login`) or registration (`register`, User only); 2FA off refuses the OTP endpoints; production never issues codes without real e-mail. Sign-in and OTP throttled (in memory, resets on restart). **Since 2026-10-08:** forgot password (e-mailed code in its own `password_resets` table, never a session), change password (ends every other session via `users.token_version`), and login activity (`login_events`: time, outcome, portal, IP, browser; own rows at `/account`, all rows at `/admin/login-activity`; 90-day purge). See [docs/auth-hardening.md](docs/auth-hardening.md) |
 | Authentication / ownership | ✅ M1's JWT sessions on every M2/M3 endpoint; predictions owner-only, `IMG_NOT_FOUND` for not-yours (no id oracle) |
 | Explainability (F.10/F.11/F.14/NF.13) | ✅ **real** — attention recomputed from passively captured inputs (matches eager attention < 1e-4; scores bit-identical, `regression_check --xai` 24/24). Rollout is an **attention-based proxy**. Deletion test (40 validation images, semantic branch only, per-image unit): masking the top-attended 20% beats random by mean +0.071 [0.041, 0.103], **median +0.019**; paired t one-sided p = 4.0e-5 (Wilcoxon 5.8e-8). Better than chance; typical advantage small. Frequency panel is descriptive, **not validated**. Frequency panel = mean spectrum of SPAI's 224 px patches + its r = 16 split; descriptive, not evidence. Cost: +1.2–3.7 s, +7 MB VRAM. See RESULTS.md |
-| **Detection of whole-image synthesis** | ✅ **measured** — Synthbuster vs RAISE-1k, 99 per class, at an operating point chosen on a disjoint validation split: fused accuracy 0.864 [0.81, 0.90], recall 0.838, AUC 0.941 [0.91, 0.97]; SPAI alone AUC 0.967. Confound-controlled. Read the narrow claim, not "accuracy" |
-| **False-positive rate MM2.6 (≤ 0.10)** | ❌ **still missed, narrowly** — 0.111 [0.06, 0.19] after selecting w and τ on a validation split specifically to meet it (validation predicted 0.096). Improved from 0.162, at a cost of 10 points of recall. 11 of 99 genuine photographs called AI Generated |
+| **Detection of whole-image synthesis** | ✅ **measured** — Synthbuster vs RAISE-1k, 99 per class, at an operating point chosen on a disjoint validation split: fused (w = 0.5, τ = 0.6665) accuracy 0.783 [0.72, 0.83], recall 0.657, AUC 0.928 [0.89, 0.96]; SPAI alone AUC 0.967. (At w = 0.25, τ = 0.7558: 0.864, 0.838, 0.941.) Confound-controlled. Read the narrow claim, not "accuracy" |
+| **False-positive rate MM2.6 (≤ 0.10)** | ✅ **met since 2026-10-09** — 0.091 [0.05, 0.16] held out at w = 0.5, τ = 0.6665 (9 of 99 genuine photographs called AI Generated), at the cost of recall 0.657. At w = 0.25, τ = 0.7558 it was 0.111, missed narrowly, with recall 0.838 |
 | Robustness to resizing | ❌ **measured and poor** — halving both classes takes SPAI recall 0.939 → 0.616. JPEG q75 costs almost nothing. See below |
 | Images smaller than 224 px | ✅ **fixed 2026-09-30** — below one 224 px patch SPAI has no evidence at all, so the branch reports itself unavailable and fusion uses the documented passthrough: a semantic-only verdict with `frequency_score` **null**. M1 admits images from 64 px (PRD C.9), so this is a normal upload, not an edge case ([changes.md](changes.md) §3.0) |
 
@@ -387,15 +387,17 @@ module.
 
 Full results, every arm, every per-generator figure and every superseded
 measurement live in **[ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md)**.
-The headline: Synthbuster vs RAISE-1k, 99 images per class, at **w = 0.25 and
-tau = 0.7558 chosen on a disjoint validation split** (198/class, scenes
+The headline: Synthbuster vs RAISE-1k, 99 images per class, at **w = 0.5 and
+tau = 0.6665** (tau chosen on a disjoint validation split; the table's 2026-10-01
+row is w = 0.25, tau = 0.7558 - see the note under it) (198/class, scenes
 99-296), 95% intervals:
 
 | branch | accuracy | recall | FPR on real | AUC |
 |---|---|---|---|---|
 | SigLIP 2 | 0.672 [0.60, 0.73] | 0.475 | 0.131 | 0.728 [0.66, 0.80] |
 | SPAI | 0.884 [0.83, 0.92] | 0.909 | 0.141 | **0.967 [0.95, 0.98]** |
-| **fused (what the system returns)** | 0.864 [0.81, 0.90] | 0.838 | **0.111 [0.06, 0.19]** | 0.941 [0.91, 0.97] |
+| **fused (what the system returns, w 0.5, τ 0.6665)** | 0.783 [0.72, 0.83] | 0.657 | **0.091 [0.05, 0.16]** | 0.928 [0.89, 0.96] |
+| fused at w 0.25, τ 0.7558 (until 2026-10-09) | 0.864 [0.81, 0.90] | 0.838 | 0.111 [0.06, 0.19] | 0.941 [0.91, 0.97] |
 
 **The claim this supports, and no more:** *detection of whole-image synthesis
 from 2022-23 generators versus pristine Nikon RAW-derived TIFFs, 99 images per
@@ -495,9 +497,9 @@ in whichever class was *actually predicted*.
 
 Confidence is 0.5 exactly at the threshold and rises with the distance from
 it, so a verdict never shows less than 50 %. At the operating point
-tau = 0.7558, PRD2 FR-04's `fusion` / `1 - fusion` would show a fused score
+tau = 0.6665, PRD2 FR-04's `fusion` / `1 - fusion` would show a fused score
 of 0.52 as "Real, 48 %", so it was replaced on 2026-10-05; 0.52 now reads
-"Real, 63 %" and 0.08 reads "Real, 88 %". It is a margin from the threshold,
+"Real, 59 %" and 0.08 reads "Real, 88 %". It is a margin from the threshold,
 **not** a calibrated probability (MM2.5 is missed). Stored predictions were
 recomputed by migrations 0004 and 0006c.
 
@@ -575,6 +577,15 @@ The public field set is now exactly PRD2 §7.3's again.
   other.
 - Admin Dashboard tab hidden from non-admins; reset e-mail sent after the
   response; one error envelope (cherry-picked from `decision-map-1`).
+- **Fusion weights made equal (owner's decision): w = 0.5, τ = 0.6665.** τ
+  re-selected for w = 0.5 by `select_threshold.py` on the validation CSV
+  (0.666505). Registered as D3 fusion row #6 and activated through
+  `registry.activate` (canary ok, gate passed: 0.78 / FPR 0.12 / AUC 0.898
+  vs current 0.77 / 0.14 / 0.904; 11 of 100 labels changed); #3 (w 0.25) is
+  one rollback away. Held out: accuracy 0.783, recall 0.657, FPR 0.091
+  (MM2.6 now met), AUC 0.928 - fewer false alarms, fewer AI images caught.
+- PDF report rewritten for non-technical readers (result first, plain
+  captions, "Keep in mind", technical details last; 2 pages).
 
 ### 2026-10-08 — forgot password, change password, login activity
 - Migration 0005:

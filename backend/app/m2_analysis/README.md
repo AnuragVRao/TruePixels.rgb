@@ -45,8 +45,8 @@ plausible numbers.
 **`confidence_score` is not `fusion_score`.** It is confidence in the
 predicted class, measured from the decision threshold (0.5 at tau, rising with the distance from it;
 never below 0.5).
-At the operating point tau = 0.7558 a `fusion_score` of 0.08 means "Real" at 0.88 confidence, and 0.52
-means "Real" at 0.63 - not the 0.48 the old `1 - fusion` rule gave (changes.md 6.21).
+At the operating point tau = 0.6665 a `fusion_score` of 0.08 means "Real" at 0.88 confidence, and 0.52
+means "Real" at 0.59 - not the 0.48 the old `1 - fusion` rule gave (changes.md 6.21).
 
 M2 owns D3 Models and D4 Predictions (neither built yet). It consumes Contract
 C1 and produces Contract C2; see `docs/contracts/` for the documented C2

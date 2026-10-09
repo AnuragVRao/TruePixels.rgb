@@ -39,8 +39,8 @@ confidence_score = fusion.confidence_in_prediction(fusion_score, tau, predicted_
 ```
 
 0.5 at the threshold, rising with the distance from it; never below the coin
-flip. At the operating point tau = 0.7558, 0.08 is "Real" at 0.88 and 0.52 is
-"Real" at 0.63, not the self-contradicting 0.48 the original `fusion` /
+flip. At the operating point tau = 0.6665, 0.08 is "Real" at 0.88 and 0.52 is
+"Real" at 0.59, not the self-contradicting 0.48 the original `fusion` /
 `1 - fusion` rule gave (changes.md 6.21, 2026-10-05). M3 is expected to
 assert this independently from its own side.
 

@@ -303,14 +303,20 @@ FUSION_STRATEGY = "weighted_average"
 #
 #   w       tau     FPR     recall   (validation, 198 real / 198 generated)
 #   0.00    0.945   0.096   0.843    frequency branch alone
-#   0.25    0.756   0.096   0.798    <- selected
-#   0.50    0.667   0.096   0.596    the old value
+#   0.25    0.756   0.096   0.798    selected 2026-10-01
+#   0.50    0.667   0.096   0.596    <- in use since 2026-10-09
 #   1.00    0.950   0.096   0.192    semantic branch alone
 #
 # 0.25 rather than 0 because the semantic branch still earns its place: under
 # degradation the fused score beats SPAI alone (RESULTS.md), so keeping some
 # of it buys robustness that w = 0 would discard.
-FUSION_WEIGHT = 0.25
+#
+# 2026-10-09: set back to 0.5 (equal weight to both detectors) by the
+# project owner's decision, with tau re-selected for it below by the same
+# rule. Held-out test at w = 0.5, tau = 0.6665: accuracy 0.783, recall 0.657,
+# FPR 0.091 (meets MM2.6), AUC 0.928 - against 0.864 / 0.838 / 0.111 / 0.941
+# at w = 0.25. Fewer false alarms, fewer AI images caught.
+FUSION_WEIGHT = 0.5
 
 # Decision threshold.
 #
@@ -334,7 +340,12 @@ FUSION_WEIGHT = 0.25
 # FPR 0.051 at recall 0.798 on the test set - but choosing tau from the set you
 # then report is fitting on the test set. Use ml/evaluation/select_threshold.py
 # on a disjoint validation split instead.
-FUSION_TAU = 0.7558
+#
+# 2026-10-09: re-selected for w = 0.5 by the same rule on the same validation
+# split (ml/evaluation/select_threshold.py on sbr_val_20261001T071305Z.csv,
+# whose fusion column is the w = 0.5 average): 0.666505, validation FPR 0.096,
+# recall 0.596. 0.7558 was the value for w = 0.25.
+FUSION_TAU = 0.6665
 
 # Temperature scaling (PRD2 FR-04). A no-op at 1.0: nothing is fitted here.
 # MEASURED 2026-09-30: expected calibration error is 0.097 (SPAI) and 0.089

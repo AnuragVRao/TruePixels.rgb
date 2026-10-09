@@ -78,15 +78,29 @@ const ScoreCard: React.FC<{ icon: React.ReactNode; title: string; value: string 
   </div>
 );
 
-const Panel: React.FC<{ v: Visualization }> = ({ v }) => (
-  <figure className="space-y-2">
-    <figcaption className="text-sm font-semibold text-foreground">{PANEL_LABEL[v.branch]}</figcaption>
-    <AuthImage src={v.visualization_url} alt={PANEL_LABEL[v.branch]}
-               className="w-full rounded-xl border border-border object-contain bg-card min-h-40" />
-    {/* The backend's caption, rendered as text, exactly as returned. */}
-    <p className="text-xs leading-relaxed text-muted-foreground">{v.caption}</p>
-  </figure>
-);
+const Panel: React.FC<{ v: Visualization }> = ({ v }) => {
+  const tipId = `panel-tip-${v.branch}`;
+  return (
+    <figure className="space-y-2">
+      <figcaption className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+        {PANEL_LABEL[v.branch]}
+        {/* The backend's caption, rendered as text, exactly as returned - shown on hover, focus or tap. */}
+        <span className="group relative inline-flex">
+          <button type="button" aria-label={`About the ${PANEL_LABEL[v.branch]}`} aria-describedby={tipId}
+                  className="rounded-full text-muted-foreground hover:text-primary focus:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <Info className="w-4 h-4" />
+          </button>
+          <span id={tipId} role="tooltip"
+                className="pointer-events-none invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity absolute left-1/2 -translate-x-1/2 top-6 z-20 w-72 max-w-[80vw] rounded-lg border border-border bg-card px-3 py-2 text-xs font-normal leading-relaxed text-muted-foreground shadow-lg">
+            {v.caption}
+          </span>
+        </span>
+      </figcaption>
+      <AuthImage src={v.visualization_url} alt={PANEL_LABEL[v.branch]}
+                 className="w-full rounded-xl border border-border object-contain bg-card min-h-40" />
+    </figure>
+  );
+};
 
 export const ResultsPage: React.FC = () => {
   const { id } = useParams();

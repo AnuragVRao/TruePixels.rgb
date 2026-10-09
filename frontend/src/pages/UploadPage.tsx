@@ -104,8 +104,7 @@ export const UploadPage: React.FC = () => {
           <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">an Image</span>
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
-          Upload a JPG or PNG image (up to 10 MB). Two independent detectors examine it - one for content, one for
-          frequency patterns - and their scores are combined to detect AI-generated images.
+          Upload a JPG or PNG image (up to 10 MB).
         </p>
       </div>
 

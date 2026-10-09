@@ -340,15 +340,15 @@ The whole system on one machine. Set up as above, then:
 
 Benchmarked on **Synthbuster** (9 generators) against **RAISE-1k** camera
 originals: 99 images per class, scene-paired, with 95 % intervals. The fusion
-weight and threshold (w = 0.25, τ = 0.7558) were chosen on a **separate
-validation split** that shares no scene with this one, so these are held-out
-figures:
+weights are equal (w = 0.5) and the threshold (τ = 0.6665) was chosen on a
+**separate validation split** that shares no scene with this one, so these
+are held-out figures:
 
 | branch | accuracy | recall | false positives on real | AUC |
 |---|---|---|---|---|
 | SigLIP 2 | 0.672 [0.60, 0.73] | 0.475 | 0.131 | 0.728 [0.66, 0.80] |
 | SPAI | 0.884 [0.83, 0.92] | 0.909 | 0.141 | **0.967 [0.95, 0.98]** |
-| **fused (what the system returns)** | 0.864 [0.81, 0.90] | 0.838 | **0.111 [0.06, 0.19]** | 0.941 [0.91, 0.97] |
+| **fused (what the system returns)** | 0.783 [0.72, 0.83] | 0.657 | **0.091 [0.05, 0.16]** | 0.928 [0.89, 0.96] |
 
 **The claim this supports, and no more:** *detection of whole-image synthesis
 from 2022–23 generators versus pristine Nikon RAW-derived TIFFs, 99 images per
@@ -359,8 +359,10 @@ class.* It is not "the accuracy of the system".
   0.616. Never downscale before analysis.
 - **Fusion buys robustness, not peak accuracy.** On pristine images it is
   worse than SPAI alone; under degradation it is better.
-- **The false-positive target is still missed, narrowly:** 0.111 against a
-  requirement of ≤ 0.10.
+- **The false-positive target is met, at a cost in recall:** 0.091 against a
+  requirement of ≤ 0.10, but only 66 % of generated images are caught. Giving
+  the stronger frequency detector more weight (w = 0.25, τ = 0.7558) caught
+  84 % at 0.111 false positives; equal weights were chosen instead.
 - **Scores are uncalibrated.** A confidence of 85 % is not an 85 % chance of
   being right; it is a distance from the threshold.
 - **Behaviour on post-2023 generators is unknown.** Real photos that went
