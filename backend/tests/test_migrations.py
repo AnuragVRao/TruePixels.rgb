@@ -300,7 +300,16 @@ def test_0004_recomputes_confidence_from_the_threshold_and_downgrades_exactly():
     for pid in ids:
         assert scaled[pid] == pytest.approx(0.5 + 0.5 * 0.86 * min(1.0, margins[pid]))
         assert 0.5 <= scaled[pid] <= 0.93
-    # and 0006c reverts exactly to 0004's rule
+    # 0007 (2026-10-10) removes the scale again: back to 0004's rule ...
+    with db.engine.begin() as connection:
+        cfg.attributes["connection"] = connection
+        command.upgrade(cfg, "0007")
+    assert confidences() == pytest.approx(new)
+    # ... and each step reverts exactly.
+    with db.engine.begin() as connection:
+        cfg.attributes["connection"] = connection
+        command.downgrade(cfg, "0006c")
+    assert confidences() == pytest.approx(scaled)
     with db.engine.begin() as connection:
         cfg.attributes["connection"] = connection
         command.downgrade(cfg, "0005")

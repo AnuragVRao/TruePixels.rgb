@@ -16,14 +16,14 @@ meanings.
 | Field | Status | Meaning now |
 |---|---|---|
 | `semantic_score` | unchanged | P(AI Generated) from the content branch — Community Forensics since 2026-10-09 (a SigLIP 2 fine-tune before) |
-| `frequency_score` | **populated again**, typed `float \| None` | P(AI Generated) from the frequency branch — SPAI, a pretrained spectral detector reading the native-resolution image. Null **only** if that branch is disabled by configuration, in which case fusion is a documented passthrough of `semantic_score`. Never a stand-in number |
+| `frequency_score` | **populated again**, typed `float \| None` | P(AI Generated) from the frequency branch — SPAI, a pretrained spectral detector reading the native-resolution image. Null when that branch has no evidence — the image is under its 224 px patch — or is disabled by configuration; fusion is then a documented passthrough of `semantic_score`. Never a stand-in number |
 | `fusion_score` | unchanged | `w · semantic + (1 − w) · frequency` (PRD2 FR-03 strategy A, w = 0.55), P(AI Generated) |
 | `confidence_score` | unchanged | Confidence in the **predicted class** — see the inversion rule below |
 
 `secondary_score` (interim, 2026-09-07 → 2026-09-12) **no longer exists**.
 Nothing should read it.
 
-**Implementers of M3:** treat a null `frequency_score` as "branch disabled",
+**Implementers of M3:** treat a null `frequency_score` as "not measured",
 render the absence, and do not substitute a zero.
 
 ### The inversion rule is unchanged
@@ -34,15 +34,15 @@ predicted:
 
 ```
 predicted_class  = "AI Generated" if fusion_score >= tau else "Real"
-# confidence in the PREDICTED class, measured from the threshold (changes.md 6.21)
+# confidence in the PREDICTED class, measured from the threshold (since 2026-10-05)
 confidence_score = fusion.confidence_in_prediction(fusion_score, tau, predicted_class)
 ```
 
 0.5 at the threshold, rising with the distance from it; never below the coin
-flip. At the operating point tau = 0.4524, 0.08 is "Real" at 0.85 and 0.30 is
-"Real" at 0.64, never the self-contradicting below-0.5 figures the original
-`fusion` / `1 - fusion` rule gave (changes.md 6.21, 2026-10-05). M3 is expected to
-assert this independently from its own side.
+flip, and 1.0 at the far end. At the operating point tau = 0.4524, 0.08 is
+"Real" at 0.91 and 0.30 is "Real" at 0.67, never the self-contradicting
+below-0.5 figures the original `fusion` / `1 - fusion` rule gave (replaced
+2026-10-05). M3 is expected to assert this independently from its own side.
 
 ## C1 — PreprocessedImage (M1 → M2): unchanged, but one field is now dead
 
@@ -53,11 +53,10 @@ its own transform (Community Forensics: resize + 384 centre crop; SigLIP 2: its
 that must never come from a resized copy. No single shared tensor can serve
 both.
 
-The contract is preserved as written and the field is still populated, but
-**C1 v2 should drop `tensor_ref`, `shape`, `dtype` and `normalization` before
-M1 is implemented** — otherwise M1's owner will build a CLIP-normalised tensor
-that nothing consumes. Flagged here rather than changed unilaterally, since
-C1 is jointly owned.
+The contract is preserved as written, but M1 no longer builds the tensor:
+`tensor_ref`, `shape`, `dtype` and `normalization` are always `None`.
+**C1 v2 should drop them.** Flagged here rather than changed unilaterally,
+since C1 is jointly owned.
 
 What M2 does still require from C1 is unchanged and load-bearing:
 `source_reference` must point at the **losslessly decoded original**, not a
@@ -65,9 +64,11 @@ resampled copy.
 
 ## C4 — Model management: what "a model version" means now
 
-D3 rows will record **which third-party checkpoint was active**, not an
-artefact this project produced — a Hugging Face id for the semantic branch, a
-weights file plus the pinned digest of its contents for the frequency branch.
+D3 rows record **which third-party checkpoint was active**, not an artefact
+this project produced — a Hugging Face id at a pinned revision for the content
+branch (one of the pinned set in `config.SEMANTIC_BACKBONES`), a weights file
+plus the pinned digest of its contents for the frequency branch — and the D3
+rows decide what runs.
 FR-06's canary forward pass still applies with full force: a checkpoint that
 fails to load, whose weights do not match their digest, whose labels cannot be
 resolved to an AI class, or whose parameter set does not match the

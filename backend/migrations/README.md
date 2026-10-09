@@ -14,8 +14,9 @@ alembic downgrade base      # drop everything this history created
 alembic revision --autogenerate -m "describe the change"   # new migration
 ```
 
-**Two histories (2026-10-09).** `main`: `0001 … 0005 → 0006c` (0006c
-recomputes the stored confidence). Branch `decision-map-1`:
+**Two histories (2026-10-09).** `main`: `0001 … 0005 → 0006c → 0007` (both
+recompute the stored confidence; 0007 restores the 2026-10-05 rule). Branch
+`decision-map-1`:
 `0001 … 0005 → 0006` (p_ai / certainty columns). The two are different
 migrations with different ids on purpose. To move a database from one branch
 to the other, check out the branch it is on, `alembic downgrade 0005`, then

@@ -6,42 +6,39 @@ distinction is what separates this directory from `../training/`, which is
 retired.
 
 `evaluate.py` runs any `<root>/0_real` + `<root>/1_fake` set through the
-production path and reports per-branch and fused metrics (see its docstring).
-It has been run once, on AttGAN — an out-of-scope face-edit set on which both
-branches are at chance; see `CLAUDE.md` §6 and `../datasets/README.md` for why
-that number is not the system's accuracy. Consequently **no accuracy figure
-for TruePixels.rgb on its own task exists yet**. The only numbers currently quotable are the upstream
-checkpoints' own self-reported metrics, which must always be attributed to
-their authors and to their splits.
+production path and reports per-branch and fused metrics with 95 % intervals
+(see its docstring). `select_threshold.py` picks τ on a validation split.
+**Every result is in [RESULTS.md](RESULTS.md)**; the headline held-out figures
+are also in `CLAUDE.md` §5. Evaluations so far:
 
-## What a first evaluation should report
+- 2026-09-12: AttGAN, an out-of-scope face-edit set (a negative control).
+- 2026-09-30: Synthbuster vs RAISE-1k (2022–23 generators), with ablation,
+  a resolution control and a degradation sweep.
+- 2026-10-01: operating point chosen on a disjoint validation split.
+- 2026-10-09: AIGenImages2026 (19 generators from 2025), and a bake-off that
+  replaced the content detector, reported on two held-out sets.
 
-Per PRD2 §13.5 and NF.3, against a public labelled test set:
+## What every evaluation reports
 
-- Accuracy, precision, recall, F1 and ROC-AUC, overall and per generator family.
-- **False-positive rate on real photographs** — the most important number
-  here. PRD2 FR-03 argues that calling a genuine photograph AI-generated is
-  the more damaging error, MM2.6 wants FPR ≤ 0.10, and an ad-hoc 14-image
-  smoke test already produced two false positives on real photos. This needs a
-  real measurement.
-- Expected calibration error, plus a reliability diagram. The fused score is
-  currently uncalibrated and no temperature has been fitted.
-- Per-branch ablation: SigLIP 2 alone, SPAI alone, fused. Whether fusion
-  actually helps is an open question — on the 2026-09-07 smoke test with the
-  previous second branch it helped twice and hurt once; the SPAI smoke test of
-  2026-09-12 is recorded in `CLAUDE.md` §6.
-- Because the frequency branch was chosen over a cheaper alternative (NPR)
-  on the strength of the authors' numbers, not ours, the ablation should be
-  run before that choice is treated as settled.
-- Robustness sweep: JPEG quality 95/85/75/60, 50% downscaling, mild noise.
+- Accuracy, precision, recall, F1 and ROC-AUC, overall and per generator,
+  each with its interval.
+- **False-positive rate on real photographs** — the most important number.
+  Calling a genuine photograph AI-generated is the more damaging error, and
+  MM2.6 wants FPR ≤ 0.10.
+- Per-branch ablation: content detector alone, SPAI alone, fused.
+- The claim the numbers support, stated narrowly: separation of *these*
+  generators' images from *these* real photographs, never "the accuracy of the
+  system".
 
 ## Rules
 
-- Use a test set neither model was trained on. `competitions/aiornot` is the
-  semantic branch's training data; COCO, LSUN and the Latent Diffusion set
-  are SPAI's. None of them can be used to evaluate the branch trained on it.
-- Touch the test set once. There are no hyperparameters to tune here, because
-  tuning them on results is how a test set silently becomes a validation set.
+- Use a test set neither model was trained on, and say when that cannot be
+  guaranteed (Synthbuster is one of SPAI's own test sets).
+- Configuration constants (`w`, τ) may be chosen only on a selection or
+  validation split, never on a test set; report on held-out data that played
+  no part in the choice.
+- Touch a test set once per decision. Choosing anything from its results is
+  how a test set silently becomes a validation set.
 - Report what was measured, including results that are worse than hoped.
 
 ## Regression check (NF.5): `regression_check.py`

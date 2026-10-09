@@ -24,7 +24,7 @@ administrator can switch back with one rollback in *Admin → Models*.
 > **This project never trains, fine-tunes or retrains a model.** Every score
 > comes from a third-party checkpoint used exactly as published. Where the
 > PRDs call for a trained component, the architecture uses pretrained weights
-> instead; the supersessions are recorded in `CLAUDE.md` §8.
+> instead; the supersessions are recorded in `CLAUDE.md` §7.
 
 **Contents:** [Requirements](#requirements) · [Setup](#setup) ·
 [Database](#database-postgresql--migrations) · [Run](#run) · [HTTPS](#https) ·
@@ -139,7 +139,7 @@ cd ..
   `-v`**, which deletes the data volume.
 - **SQLite instead of Docker:** set `DATABASE_URL=sqlite:///./truepixels.db`
   and run `alembic upgrade head` as above.
-- **Branches:** `main` runs the migration chain `0001 … 0005 → 0006c`. The
+- **Branches:** `main` runs the migration chain `0001 … 0005 → 0006c → 0007`. The
   `decision-map-1` branch holds the calibrated-P(AI) work and has a
   *different* `0006`. A database migrated on one branch must be taken back to
   `0005` on that branch (`alembic downgrade 0005`) before the other branch
@@ -307,6 +307,11 @@ real HTTP path:
 python ml/evaluation/regression_check.py --compare
 ```
 
+After a **deliberate** change to what runs (a new detector or operating
+point - the content detector changed on 2026-10-09), record a new baseline
+first, then compare against it:
+`python ml/evaluation/regression_check.py --record --out <name>`.
+
 ## Demo
 
 The whole system on one machine. Set up as above, then:
@@ -385,11 +390,16 @@ originals, 99 per class, scene-paired:
 from these 19 (2025) and 9 (2022–23) generators from the real photographs
 they were paired with. They are not "the accuracy of the system".
 
-- **Resizing breaks this system; recompression barely touches it.** JPEG q75
-  costs 0.019 AUC. Halving both classes takes SPAI's recall from 0.939 to
-  0.616. Never downscale before analysis.
-- **Fusion buys robustness, not peak accuracy.** On pristine images it is
-  worse than SPAI alone; under degradation it is better.
+- **Resizing hurts the frequency branch badly; recompression barely does.**
+  Measured for SPAI (2026-09-30): JPEG q75 costs 0.019 AUC; halving both
+  classes takes its recall from 0.939 to 0.616. Never downscale before
+  analysis. The same test has not been repeated with Community Forensics.
+- **What fusion buys.** On 2022–23 generators the fused score beats both
+  detectors alone (AUC 0.986 vs 0.967 SPAI, 0.946 Community Forensics). On
+  2025 generators Community Forensics alone ranks images slightly better
+  (AUC 0.926 vs 0.895), but at the chosen threshold the fusion is more
+  accurate (0.798 vs 0.750) - and keeps a second, independent kind of
+  evidence.
 - **The false-positive target is met on both test sets** (0.030 and 0.071
   against ≤ 0.10).
 - **Some 2025 generators still get through most of the time:** FLUX.2 pro
@@ -428,9 +438,11 @@ infra/               Caddyfiles (dev/prod) and the HTTPS acceptance checks
 ml/evaluation/       benchmark, threshold selection, regression check, RESULTS.md
 ml/datasets/         fetch scripts for the evaluation sets (no images committed)
 storage/             runtime files: uploads, panels, model weights (gitignored)
-docs/                contracts, HTTPS, auth hardening, secret rotation, manual tests
-PRD*.md, SRS.pdf     requirements
+docs/                contracts, HTTPS, auth hardening, secret rotation, manual tests, session log
 ```
+
+The requirement documents (PRD1-4) were removed from the working tree in
+commit `4bf5c15`; they remain in git history.
 
 ## Documentation
 
@@ -447,12 +459,18 @@ PRD*.md, SRS.pdf     requirements
 
 ## Licences
 
-The application code is this project's. Two third-party components carry
-their own terms:
+The application code is this project's. Third-party components carry their
+own terms:
 
 - **SPAI** (`backend/app/m2_analysis/vendor/spai/`): Apache-2.0, code and
   weights. Its `NOTICE` lists the local modifications, none of which change
   the arithmetic.
-- **Synthbuster**, used only as evaluation data and never committed:
-  **CC-BY-NC-SA-4.0, non-commercial**. RAISE-1k is research-use only.
-  Neither is redistributed here.
+- **Community Forensics** (`backend/app/m2_analysis/vendor/commfor/`, weights
+  `OwensLab/commfor-model-384`): MIT, code and weights. Its `NOTICE` lists the
+  local modifications; the five sample images in
+  `backend/tests/fixtures/commfor/` are the authors' (MIT).
+- **SigLIP 2 fine-tune** (`prithivMLmods/AIorNot-SigLIP2`, the pinned rollback
+  detector): Apache-2.0.
+- **Evaluation data**, used only for measurement and never committed:
+  Synthbuster is **CC-BY-NC-SA-4.0, non-commercial**; RAISE-1k is
+  research-use only; AIGenImages2026 is CC-BY-4.0. None is redistributed here.

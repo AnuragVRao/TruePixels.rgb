@@ -8,6 +8,26 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-10 — evaluation images lost in the clean-up
+- After the clean-up, `ml/datasets/synthbuster_raise/` (2.3 GB) and
+  `ml/datasets/sbr_val/` (4.6 GB) were found empty. Neither was named in any
+  delete. The most likely cause: the removed `c2v2-0007` worktree folder held
+  directory junctions to these folders (made by an earlier session so tests
+  could run there), and Git Bash's `rm -rf` followed them. Not confirmable
+  after the fact.
+- Unaffected: storage (uploads, panels, weights, gate cache), the database,
+  the AIGenImages2026 images, every recorded result.
+- To do: re-fetch both sets (`ml/datasets/README.md`) and verify the reference
+  images against the SHA-256s in the gate cache's manifest. Lesson: inspect a
+  folder for junctions (`dir /AL`) before deleting it on Windows.
+
+### 2026-10-10 — confidence rule restored
+- The scale applied to the displayed confidence on 2026-10-09 was removed:
+  confidence is again 0.5 at the threshold rising to 1.0 at the far end
+  (the 2026-10-05 rule). Migration `0007` recomputed stored rows; its
+  downgrade restores `0006c` exactly. Worked examples in the docs updated
+  (#18: 63.1 %, Low).
+
 ### 2026-10-10 — clean-up
 - Removed M3's legacy static dashboard (`frontend/m3_dashboard`, its dev-only
   routes `/`, `/api-tester`, `/developer`, `/playground`, and its e2e check);

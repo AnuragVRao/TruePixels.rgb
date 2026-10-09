@@ -158,9 +158,10 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers  
 - Tests build their own database (scratch SQLite, or `TEST_DATABASE_URL` whose
   name must end in `_test`) and never touch `storage/`.
 - The server refuses to start on a database that is not at the latest
-  migration. `main` and branch `decision-map-1` have **different** migration
-  chains (`0006c` vs `0006`): downgrade to `0005` before switching a database
-  between them. `start.ps1` applies pending migrations — take a backup first.
+  migration. `main` (`… 0005 → 0006c → 0007`) and branch `decision-map-1`
+  (`… 0005 → 0006`) have **different** migration chains: downgrade to `0005`
+  before switching a database between them. `start.ps1` applies pending
+  migrations — take a backup first.
 - `GET /ready` is 503 until warm-up succeeds; `/health` shows the device, the
   baseline and every pinned content detector, and which are loaded.
 - `ENVIRONMENT` defaults to production (no `/docs`).
@@ -198,8 +199,9 @@ photographs*, never as "the accuracy of the system".
 2. Not independent: Synthbuster is one of SPAI's own test sets and may overlap
    Community Forensics' training generators; AIGenImages2026 is from SPAI's
    authors' group.
-3. Output is uncalibrated (MM2.5 missed: ECE 0.113 on validation). A
-   confidence is a distance from the threshold, not a probability.
+3. Output is uncalibrated (MM2.5 missed: ECE 0.113 on validation for the
+   previous configuration; the current one is unmeasured). A confidence is a
+   distance from the threshold, not a probability.
 4. Resizing badly hurts the frequency branch (halving: recall 0.939 → 0.616);
    JPEG recompression barely does. Learned enhancement (phone pipelines,
    upscalers) makes real photos look synthetic.
@@ -210,6 +212,13 @@ photographs*, never as "the accuracy of the system".
    accuracy. It catches gross breakage, not subtle degradation.
 8. Latency budget MM2.7 (p95 ≤ 2.5 s) is met on the GPU for ordinary photos,
    missed for very large originals and on CPU.
+
+**Known issue (2026-10-10):** the evaluation images in
+`ml/datasets/synthbuster_raise/` and `ml/datasets/sbr_val/` were deleted by
+mistake during a clean-up and must be re-fetched (`ml/datasets/README.md`).
+Until then two slow tests in `test_model_management.py`, the regression check
+and rebuilding the gate reference cannot run. The gate's existing cache, the
+live system and all recorded results are unaffected.
 
 **Built and working:** sign-in with optional e-mail 2FA, password reset and
 change, login activity; upload validation; both branches; fusion and verdict;
@@ -230,13 +239,14 @@ confidence_score = fusion.confidence_in_prediction(fusion_score, tau, predicted_
 `semantic_score`, `frequency_score` and `fusion_score` are all **P(AI)**-like
 scores. `confidence_score` is the odd one out: confidence in **whichever class
 was predicted**, 0.5 exactly at the threshold and rising with the distance
-from it, so a verdict never shows below 50 %. Bands: High ≥ 85 %, Moderate
-65–85 %, Low < 65 %. It is a margin, not a calibrated probability. The exact
-rule is in `fusion.py` and `config.py`; user-facing docs describe it in words
-only — keep it that way. Stored rows were recomputed by migrations 0004 and
-0006c. Rendering `fusion_score` as a confidence is the integration bug PRD2
-FR-04 warned about: a confidently-real image would read as "8 %". Asserted in
-`test_fusion.py` and over HTTP in `test_api_predict.py`.
+from it to 100 % at the far end, so a verdict never shows below 50 %. Bands:
+High ≥ 85 %, Moderate 65–85 %, Low < 65 %. It is a margin, not a calibrated
+probability. The exact rule is in `fusion.py`; user-facing docs describe it in
+words. Stored rows were last recomputed by migration 0007 (0004 introduced
+the rule; 0006c applied a scale that 0007 removed again). Rendering
+`fusion_score` as a confidence is the integration bug PRD2 FR-04 warned about:
+a confidently-real image would read as "8 %". Asserted in `test_fusion.py`
+and over HTTP in `test_api_predict.py`.
 
 ---
 
@@ -259,12 +269,14 @@ FR-04 warned about: a confidently-real image would read as "8 %". Asserted in
 
 ## 8. Recent work (full entries: [docs/session-log.md](docs/session-log.md))
 
+- **2026-10-10** — confidence rule restored to the 2026-10-05 form (migration
+  0007); legacy M3 dashboard removed; unused local data cleaned up.
 - **2026-10-09/10** — Community Forensics replaced SigLIP 2 after AIGenImages2026
   showed SigLIP 2 at chance on 2025 generators; content detectors became a
   pinned set chosen by D3; TF32 numerics defect found and fixed.
 - **2026-10-09** — `main` rebuilt on `dd2ac49` (the calibrated-P(AI) work lives
   on `decision-map-1`); admin tab hidden from non-admins; readable PDF report;
-  confidence rule adjusted.
+  confidence rule adjusted (reverted 2026-10-10).
 - **2026-10-08** — forgot/change password, login activity.
 - **2026-10-05** — HTTPS (Caddy), auth hardening, OTP as a second factor.
 - **2026-10-03** — React UI (user + admin), model management with quality

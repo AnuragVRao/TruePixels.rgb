@@ -1,7 +1,7 @@
 # How a score is computed
 
 What happens between a user choosing an image and the result page showing
-"AI Generated, 61.3 %". Every number below is what the code does today; the
+"AI Generated, 63.1 %". Every number below is what the code does today; the
 constants live in [backend/app/shared/config.py](../backend/app/shared/config.py).
 
 ```
@@ -30,8 +30,9 @@ The image is accepted only if:
 - **both sides are at least 64 px**;
 - it decodes cleanly, so truncated or corrupted files are refused.
 
-The original file is stored exactly as uploaded. Both detectors read this
-original, not a resized copy, and each applies its own preprocessing.
+The original file is stored exactly as uploaded. Each detector reads this
+original file and applies its own preprocessing: the content detector resizes
+and crops it as its authors do, while the frequency detector never resizes it.
 
 ## 2. Two detectors, two kinds of evidence
 
@@ -129,15 +130,14 @@ photographs.
 ## 5. Confidence
 
 The percentage on the result page is **confidence in the verdict that was
-given**. It is not the combined score:
-
-It measures how far the combined score sits from the threshold τ, on the
-side of the verdict that was given:
+given**. It is not the combined score: it measures how far the combined score
+sits from the threshold τ, on the side of the verdict that was given.
 
 - **50 %** means the combined score sat exactly on the threshold, a coin
   toss.
 - The further the combined score is from τ (towards 1.0 for *AI Generated*,
-  towards 0.0 for *Real*), the higher the confidence.
+  towards 0.0 for *Real*), the higher the confidence, up to **100 %** at the
+  far end.
 - A verdict therefore never shows less than 50 %. The figure is a distance
   from the threshold, not a measured probability.
 
@@ -159,7 +159,7 @@ The hammer image (result #18), where the two detectors disagree:
 | Frequency score (SPAI) | 1.000 (rounded; the raw value is just under 1) |
 | Combined | 0.55 × 0.265 + 0.45 × 1.000 = **0.596** |
 | Verdict | 0.596 ≥ 0.4524 → **AI Generated** |
-| Confidence | 0.596 is above 0.4524, but not far above → **61.3 %, Low** |
+| Confidence | 0.596 is above 0.4524, but not far above → **63.1 %, Low** |
 
 The low confidence is the honest reading of a split decision: one kind of
 evidence says AI, the other does not.
@@ -169,20 +169,23 @@ And a photograph whose combined score is 0.30:
 | Step | Value |
 |---|---|
 | Verdict | 0.30 < 0.4524 → **Real** |
-| Confidence | 0.30 is below 0.4524, but not far below → **64.5 %, Low** |
+| Confidence | 0.30 is below 0.4524 by about a third of the way to 0 → **66.8 %, Moderate** |
 
 ## 7. What the numbers do *not* mean
 
 - **Confidence is not "the chance the verdict is right".** It is a distance
-  from the threshold. The detectors' outputs are not calibrated: on validation
-  their scores were off by 11 percentage points on average, against a target
-  of 5. Read a high figure as "far past the threshold", not as an exact probability.
+  from the threshold. The detectors' outputs are not calibrated (for the
+  previous configuration they were measured off by 11 percentage points on
+  average, against a target of 5; the current one has not been calibrated
+  either). Read a high figure as "far past the threshold", not as an exact
+  probability.
 - **A detector can be wrong with full conviction.** A genuine sunflower
   photograph once scored 1.000 on the frequency detector.
 - **Enhanced photos tend to look synthetic** to the frequency detector. This
   includes phone "AI enhancement", upscalers and beauty filters.
-- **Resizing hurts detection badly; JPEG compression barely does.** Halving an
-  image's size dropped SPAI's detection rate from 94 % to 62 %.
+- **Resizing hurts the frequency detector badly; JPEG compression barely
+  does.** Halving an image's size dropped SPAI's detection rate from 94 % to
+  62 %. Upload originals, not shrunken copies.
 - **Measured on two held-out tests, never used to choose any setting:**
   - **2025 generators** (AIGenImages2026: 559 generated images from 19
     generators, each paired with a real photo of similar content): accuracy
@@ -214,4 +217,4 @@ the score is final. They never change it.
 Further detail:
 - [ml/evaluation/RESULTS.md](../ml/evaluation/RESULTS.md): every measurement
   behind the figures above;
-- [CLAUDE.md](../CLAUDE.md) §2 and §7: the models, and the confidence formula.
+- [CLAUDE.md](../CLAUDE.md) §2 and §6: the models, and the confidence rule.
