@@ -178,3 +178,16 @@ own source) and user-agent.
 - Not recorded:
   - throttled attempts (429): they are refused before any account lookup;
   - which portal a 2FA code step came from: the role stands in.
+
+**Follow-up fixes (2026-10-08, after a browser and API review):**
+
+- **Reset e-mails are sent after the response.** `password_reset.issue` returns the code, and
+  `deliver` runs as a background task. Before this, the SMTP round-trip made `/password/forgot`
+  slower for real accounts than for unknown addresses. If delivery fails, the code is deleted
+  and the answer is unchanged. It used to be a 503, which only real accounts could trigger.
+- **Every error now uses the `{"error": {code, message, request_id}}` envelope.**
+  - Malformed requests return `VALIDATION_ERROR` (422) and plain HTTP errors return
+    `HTTP_<status>`. They used to return FastAPI's `{"detail": ...}` instead.
+  - The React client could not read that format, and showed "Request failed with status 422".
+  - Registration's weak-password refusal now uses `AUTH_WEAK_PASSWORD`. This is a one-line
+    change in M1's `register_user`.

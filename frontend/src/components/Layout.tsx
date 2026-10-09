@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, CheckCircle, Clock, Lock, LogOut, ScanSearch, ShieldAlert, ShieldCheck, UserCog } from 'lucide-react';
+import { BarChart3, CheckCircle, Clock, LogOut, ScanSearch, ShieldAlert, ShieldCheck, UserCog } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ThemeToggle } from './ThemeToggle';
 
 /**
- * Signed in: the four numbered tabs of M3's original dashboard (Forensic
- * Detection, User Scan History, Admin Dashboard & Analytics, 1-Click
- * Verification) and its header (email, role badge, Sign Out with a
+ * Signed in: the numbered tabs of M3's original dashboard (Forensic
+ * Detection, User Scan History, Admin Dashboard & Analytics - admins only,
+ * 1-Click Verification) and its header (email, role badge, Sign Out with a
  * confirmation). Signed out: M1's three entry points.
  */
 const tabClass = (active: boolean) =>
@@ -27,12 +27,14 @@ const Tabs: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
       <NavLink to="/history" className={({ isActive }) => tabClass(isActive)}>
         <Clock className="w-4 h-4" /> 2. User Scan History
       </NavLink>
-      <NavLink to="/admin" className={({ isActive }) => tabClass(isActive && pathname !== '/admin/login')}
-               title={isAdmin ? undefined : 'Administrators only'}>
-        {isAdmin ? <BarChart3 className="w-4 h-4" /> : <Lock className="w-4 h-4" />} 3. Admin Dashboard &amp; Analytics
-      </NavLink>
+      {/* Admins only: a User never sees the tab (AdminLayout and the API still enforce the role). */}
+      {isAdmin && (
+        <NavLink to="/admin" className={({ isActive }) => tabClass(isActive && pathname !== '/admin/login')}>
+          <BarChart3 className="w-4 h-4" /> 3. Admin Dashboard &amp; Analytics
+        </NavLink>
+      )}
       <NavLink to="/verification" className={({ isActive }) => tabClass(isActive)}>
-        <CheckCircle className="w-4 h-4" /> 4. 1-Click Verification
+        <CheckCircle className="w-4 h-4" /> {isAdmin ? 4 : 3}. 1-Click Verification
       </NavLink>
     </nav>
   );
@@ -103,12 +105,12 @@ export const Layout: React.FC = () => {
       </main>
       {user || pathname !== '/' ? (
         <footer className="border-t border-border py-5 px-6 flex flex-col items-center gap-1 text-center text-xs text-muted-foreground/80">
-          <span>&copy; {new Date().getFullYear()} TruePixels.rgb. All rights reserved.</span>
+          <span>&copy; {new Date().getFullYear()} Copyright TruePixels.rgb. All rights reserved.</span>
           <span>A result is a model&apos;s estimate, not proof.</span>
         </footer>
       ) : (
         <footer className="relative z-10 py-5 px-6 text-center text-xs text-muted-foreground">
-          &copy; {new Date().getFullYear()} TruePixels.rgb. All rights reserved.
+          &copy; {new Date().getFullYear()} Copyright TruePixels.rgb. All rights reserved.
         </footer>
       )}
 

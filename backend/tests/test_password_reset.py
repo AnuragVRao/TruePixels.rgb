@@ -211,3 +211,33 @@ def test_change_password_refuses_a_same_or_weak_password(new, why):
 def test_change_password_needs_a_session():
     assert client.post("/api/v1/auth/password/change",
                        json={"current_password": PASSWORD, "new_password": NEW}).status_code == 401
+
+
+def test_an_undeliverable_reset_code_is_discarded_and_the_answer_does_not_change(monkeypatch):
+    # Sent after the response, so a failed send cannot change the answer (a 503
+    # only for real accounts would reveal which addresses exist).
+    monkeypatch.setattr(email_service.EmailService, "send_password_reset_email",
+                        staticmethod(lambda email, code, name=None: False))
+    email = make_user()
+    r = forgot(email)
+    assert r.status_code == 200 and r.json()["message"] == forgot("nobody-else@example.com").json()["message"]
+    with SessionLocal() as db:
+        assert db.get(PasswordReset, db.query(User).filter(User.email == email).one().user_id) is None
+
+
+def test_errors_use_one_envelope_the_client_can_read():
+    # Malformed body: FastAPI's default {"detail": [...]} reached the UI as
+    # "Request failed with status 422".
+    r = client.post("/api/v1/auth/password/reset", json={"email": "not-an-email", "otp": "1"})
+    assert r.status_code == 422
+    error = r.json()["error"]
+    assert error["code"] == "VALIDATION_ERROR" and "email" in error["message"] and error["request_id"]
+    r = client.get("/api/v1/no-such-endpoint")
+    assert r.status_code == 404 and r.json()["error"]["code"] == "HTTP_404"
+
+
+def test_registration_names_the_weak_password_rule():
+    r = client.post("/api/v1/auth/register",
+                    json={"full_name": "Weak", "email": "weak-pw@example.com", "password": "password123"})
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "AUTH_WEAK_PASSWORD" and "common" in r.json()["error"]["message"]

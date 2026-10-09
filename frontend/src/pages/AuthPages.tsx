@@ -5,6 +5,7 @@ import { ApiError, postJson } from '../api/client';
 import type { LoginResponse, MessageResponse, OtpVerifyResponse, RegisterResponse } from '../api/types';
 import { useAuth } from '../context/AuthContext';
 import { ErrorNotice, Notice } from '../components/Feedback';
+import { PasswordInput } from '../components/PasswordInput';
 import { PasswordRules, passwordOk } from '../components/PasswordRules';
 
 const field =
@@ -109,7 +110,7 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
             Forgot password?
           </Link>
         </span>
-        <input className={admin ? adminField : field} type="password" autoComplete="current-password" required
+        <PasswordInput className={admin ? adminField : field} autoComplete="current-password" required
                value={password} onChange={(e) => setPassword(e.target.value)} />
       </label>
     </>
@@ -225,7 +226,7 @@ export const RegisterPage: React.FC = () => {
         </label>
         <label className="block space-y-1.5 text-sm">
           <span className="text-foreground/80">Password</span>
-          <input className={field} type="password" autoComplete="new-password" required value={password}
+          <PasswordInput className={field} autoComplete="new-password" required value={password}
                  onChange={(e) => setPassword(e.target.value)} />
         </label>
         <PasswordRules password={password} />
@@ -413,12 +414,12 @@ export const ForgotPasswordPage: React.FC = () => {
             </label>
             <label className="block space-y-1.5 text-sm">
               <span className="text-foreground/80">New password</span>
-              <input className={field} type="password" autoComplete="new-password" required value={password}
+              <PasswordInput className={field} autoComplete="new-password" required value={password}
                      onChange={(e) => setPassword(e.target.value)} />
             </label>
             <label className="block space-y-1.5 text-sm">
               <span className="text-foreground/80">Confirm new password</span>
-              <input className={field} type="password" autoComplete="new-password" required value={confirm}
+              <PasswordInput className={field} autoComplete="new-password" required value={confirm}
                      onChange={(e) => setConfirm(e.target.value)} />
             </label>
             <PasswordRules password={password} />
