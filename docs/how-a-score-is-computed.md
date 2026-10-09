@@ -151,7 +151,10 @@ The label next to it is a simple band of that number:
 
 ## 6. A worked example
 
-The hammer image (result #18), where the two detectors disagree:
+The hammer image, analysed with today's configuration, where the two
+detectors disagree. (Its stored result, #18, was produced on 2026-10-05 by the
+earlier SigLIP 2 configuration and keeps that configuration's scores; a stored
+result is never rescored by a later model.)
 
 | Step | Value |
 |---|---|

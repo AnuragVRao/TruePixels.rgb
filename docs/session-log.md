@@ -26,7 +26,8 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
   confidence is again 0.5 at the threshold rising to 1.0 at the far end
   (the 2026-10-05 rule). Migration `0007` recomputed stored rows; its
   downgrade restores `0006c` exactly. Worked examples in the docs updated
-  (#18: 63.1 %, Low).
+  (the hammer image analysed today: 63.1 %, Low; its stored result #18,
+  from the 2026-10-05 SigLIP 2 configuration, reads 99.7 % after 0007).
 
 ### 2026-10-10 — clean-up
 - Removed M3's legacy static dashboard (`frontend/m3_dashboard`, its dev-only
