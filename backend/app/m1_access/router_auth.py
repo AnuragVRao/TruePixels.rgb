@@ -4,7 +4,7 @@ Conforms to PRD Section 5.1 / 6.3 and SRS F.1, F.2, F.3, F.4.
 """
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -65,7 +65,7 @@ def register_user(
     try:
         validate_password_strength(body.password)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise AppException(code="AUTH_WEAK_PASSWORD", status_code=422, message=str(e))
 
     if REQUIRE_2FA:
         otp_challenge.ensure_delivery_possible()
@@ -397,6 +397,7 @@ def _strong(password: str) -> None:
 )
 def forgot_password(
     body: ForgotPasswordRequest,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     # Refused for EVERY address when no code could be delivered, so the
@@ -411,8 +412,10 @@ def forgot_password(
         create_otp_hash(generate_otp())  # same hashing cost as a real send
         emit("authentication", f"Password reset requested for {clean_email}: no active account", severity="warning")
         return answer
-    password_reset.issue(db, user)
-    emit("authentication", f"Password reset code sent: user_id={user.user_id}", severity="info", user_id=user.user_id)
+    code = password_reset.issue(db, user)
+    # Sent after the response: the answer takes the same time for every address.
+    background.add_task(password_reset.deliver, user.user_id, user.email, user.full_name, code)
+    emit("authentication", f"Password reset code issued: user_id={user.user_id}", severity="info", user_id=user.user_id)
     return answer
 
 

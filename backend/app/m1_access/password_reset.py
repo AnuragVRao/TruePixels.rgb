@@ -21,15 +21,21 @@ from app.m1_access.config import OTP_EXPIRE_MINUTES
 from app.m1_access.email_service import EmailService
 from app.m1_access.models import PasswordReset, User
 from app.m1_access.security import create_otp_hash, generate_otp, hash_password, verify_otp_hash
-from app.shared.errors import AppException
+from app.shared.db import SessionLocal
+from app.shared.logging import emit
 
 
 def _aware(moment: datetime) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)  # SQLite returns naive UTC
 
 
-def issue(db: Session, user: User) -> None:
-    """Create (or replace) the user's reset code and e-mail it."""
+def issue(db: Session, user: User) -> str:
+    """Create (or replace) the user's reset code and return it, NOT yet sent.
+
+    The caller sends it with ``deliver`` after the HTTP response has gone out,
+    so a real account and an unknown address answer in the same time (an SMTP
+    round-trip would otherwise reveal which addresses have accounts).
+    """
     code = generate_otp()
     row = db.get(PasswordReset, user.user_id) or PasswordReset(user_id=user.user_id)
     row.code_hash = create_otp_hash(code)
@@ -38,10 +44,19 @@ def issue(db: Session, user: User) -> None:
     db.add(row)
     db.commit()
     throttle.new_code_issued(user.user_id, scope="reset")
-    if not EmailService.send_password_reset_email(user.email, code, user.full_name):
-        clear(db, user)
-        raise AppException(code="OTP_DELIVERY_UNAVAILABLE", status_code=503,
-                           message="The reset code could not be sent. Please try again later.")
+    return code
+
+
+def deliver(user_id: int, email: str, full_name: str | None, code: str) -> None:
+    """Send a reset code (run as a background task). If it cannot be sent, the
+    code is deleted, so no undeliverable code stays redeemable."""
+    if EmailService.send_password_reset_email(email, code, full_name):
+        return
+    with SessionLocal() as db:
+        db.execute(delete(PasswordReset).where(PasswordReset.user_id == user_id))
+        db.commit()
+    emit("error", f"Password reset code for user_id={user_id} could not be sent; the code was discarded",
+         severity="error", user_id=user_id)
 
 
 def redeem(db: Session, user: User | None, code: str) -> bool:

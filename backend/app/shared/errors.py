@@ -163,3 +163,30 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
             }
         },
     )
+
+
+def _envelope(request: Request, status_code: int, code: str, message: str, headers=None) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(status_code=status_code, headers=headers,
+                        content={"error": {"code": code, "message": message,
+                                           "request_id": str(req_id) if req_id else None}})
+
+
+async def validation_exception_handler(request: Request, exc) -> JSONResponse:
+    """422 for a malformed request body or query (FastAPI's RequestValidationError),
+    in the same envelope as every other error. FastAPI's default was
+    ``{"detail": [...]}``, which the React client could not read, so users saw
+    "Request failed with status 422" instead of what was wrong."""
+    parts = []
+    for err in exc.errors()[:3]:
+        where = ".".join(str(p) for p in err.get("loc", ()) if p not in ("body", "query", "path"))
+        msg = str(err.get("msg", "invalid value")).removeprefix("Value error, ")
+        parts.append(f"{where}: {msg}" if where else msg)
+    return _envelope(request, 422, "VALIDATION_ERROR", "; ".join(parts) or "The request is not valid.")
+
+
+async def http_exception_handler(request: Request, exc) -> JSONResponse:
+    """Starlette/FastAPI HTTPException (e.g. an unknown route, 405) in the shared envelope."""
+    message = exc.detail if isinstance(exc.detail, str) else "Request failed."
+    return _envelope(request, exc.status_code, f"HTTP_{exc.status_code}", message,
+                     headers=getattr(exc, "headers", None))

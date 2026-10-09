@@ -20,6 +20,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -37,6 +39,8 @@ from app.shared.db import init_db
 from app.shared.errors import (
     AppException,
     app_exception_handler,
+    http_exception_handler,
+    validation_exception_handler,
     global_exception_handler,
 )
 
@@ -176,6 +180,10 @@ async def request_id_and_timing_middleware(request: Request, call_next):
 
 # Register exception handlers for contract compliance (M1; M3's were equivalent)
 app.add_exception_handler(AppException, app_exception_handler)
+# Malformed bodies and plain HTTPExceptions use the same {"error": ...} envelope
+# (FastAPI's default {"detail": ...} reached users as "Request failed with status 422").
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 
 # No static mount over the storage tree. It used to be served at /static

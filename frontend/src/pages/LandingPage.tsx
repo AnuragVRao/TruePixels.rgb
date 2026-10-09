@@ -25,17 +25,17 @@ export const LandingPage: React.FC = () => (
         TruePixels.rgb
       </h1>
       <p className="mt-2 text-xl sm:text-3xl font-semibold text-foreground">AI Image Detection System</p>
-      <p className="mt-3 text-base sm:text-xl text-foreground/80">Software Engineering Project</p>
+      <p className="mt-3 text-base sm:text-xl text-foreground/80">Carried out as part of the Software Engineering Project</p>
       <div className="mt-4 h-0.5 w-20 rounded-full bg-gradient-to-r from-primary to-secondary" />
 
-      <h2 className="mt-12 text-lg sm:text-xl font-semibold text-primary">Contributors</h2>
+      <h2 className="mt-12 text-lg sm:text-xl font-semibold text-primary">Team Members</h2>
       <ul className="mt-2 space-y-1.5 text-base sm:text-lg text-foreground">
         {CONTRIBUTORS.map((c) => (
           <li key={c.roll}>{c.name} - {c.roll}</li>
         ))}
       </ul>
 
-      <h2 className="mt-10 text-lg sm:text-xl font-semibold text-primary">Course Instructor</h2>
+      <h2 className="mt-10 text-lg sm:text-xl font-semibold text-primary">Under the guidance of Course Instructor</h2>
       <p className="mt-2 text-base sm:text-lg text-foreground">Prof. Jaidhar C D</p>
     </div>
   </>

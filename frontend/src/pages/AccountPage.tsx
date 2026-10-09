@@ -6,6 +6,7 @@ import type { LoginResponse, PaginatedLoginEvents } from '../api/types';
 import { useAuth } from '../context/AuthContext';
 import { ErrorNotice, Notice } from '../components/Feedback';
 import { LoginActivityTable } from '../components/LoginActivityTable';
+import { PasswordInput } from '../components/PasswordInput';
 import { PasswordRules, passwordOk } from '../components/PasswordRules';
 import { Pager } from './admin/AdminLayout';
 
@@ -50,7 +51,7 @@ const ChangePassword: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
   };
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-6 space-y-4">
+    <section className="max-w-md rounded-2xl border border-border bg-card p-6 space-y-4">
       <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
         <KeyRound className="w-5 h-5 text-primary" /> Change password
       </h2>
@@ -63,17 +64,17 @@ const ChangePassword: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
       <form onSubmit={submit} className="space-y-4" aria-label="Change password">
         <label className="block space-y-1.5 text-sm">
           <span className="text-foreground/80">Current password</span>
-          <input className={field} type="password" autoComplete="current-password" required value={current}
+          <PasswordInput className={field} autoComplete="current-password" required value={current}
                  onChange={(e) => setCurrent(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
           <span className="text-foreground/80">New password</span>
-          <input className={field} type="password" autoComplete="new-password" required value={password}
+          <PasswordInput className={field} autoComplete="new-password" required value={password}
                  onChange={(e) => setPassword(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
           <span className="text-foreground/80">Confirm new password</span>
-          <input className={field} type="password" autoComplete="new-password" required value={confirm}
+          <PasswordInput className={field} autoComplete="new-password" required value={confirm}
                  onChange={(e) => setConfirm(e.target.value)} />
         </label>
         <PasswordRules password={password} />
@@ -106,13 +107,14 @@ export const AccountPage: React.FC = () => {
   }, [page, reload]);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Account</h1>
         <p className="text-sm text-muted-foreground mt-1">{user?.email}</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[22rem_1fr] items-start">
+      {/* Stacked, not side by side: beside the form the table was too narrow and scrolled sideways. */}
+      <div className="space-y-8">
         <ChangePassword onChanged={() => setReload((n) => n + 1)} />
 
         <section className="space-y-4 min-w-0">
