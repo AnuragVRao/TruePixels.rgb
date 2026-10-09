@@ -1,7 +1,7 @@
 # How a score is computed
 
 What happens between a user choosing an image and the result page showing
-"AI Generated, 89.8 %". Every number below is what the code does today; the
+"AI Generated, 92.7 %". Every number below is what the code does today; the
 constants live in [backend/app/shared/config.py](../backend/app/shared/config.py).
 
 ```
@@ -12,7 +12,7 @@ upload ──► validate & store ──► semantic detector (SigLIP 2) ──�
                                                                ▼
                                         verdict: AI Generated if combined ≥ 0.7558
                                                                ▼
-                                        confidence: distance from 0.7558, shown as 50–90 %
+                                        confidence: distance from 0.7558, shown as a percentage
 ```
 
 ---
@@ -120,18 +120,15 @@ keep false alarms on genuine photographs low: the requirement is at most
 The percentage on the result page is **confidence in the verdict that was
 given**. It is not the combined score:
 
-```
-AI Generated:  confidence = 0.5 + 0.5 × 0.8 × (combined − τ) / (1 − τ)
-Real:          confidence = 0.5 + 0.5 × 0.8 × (τ − combined) / τ
-```
+It measures how far the combined score sits from the threshold τ, on the
+side of the verdict that was given:
 
 - **50 %** means the combined score sat exactly on the threshold, a coin
   toss.
-- **90 %** means it was at the far end: combined = 1.0 for *AI Generated*,
-  or 0.0 for *Real*.
-- A verdict therefore always shows between 50 % and 90 %. The 0.8 factor
-  (`CONFIDENCE_SCALE` in config.py) keeps it from ever claiming certainty: the
-  figure is a distance from the threshold, not a measured probability.
+- The further the combined score is from τ (towards 1.0 for *AI Generated*,
+  towards 0.0 for *Real*), the higher the confidence.
+- A verdict therefore never shows less than 50 %. The figure is a distance
+  from the threshold, not a measured probability.
 
 The label next to it is a simple band of that number:
 
@@ -151,21 +148,21 @@ The hammer image (result #18):
 | Frequency score (SPAI) | 1.000 (rounded; the raw value is just under 1) |
 | Combined | 0.25 × 0.994 + 0.75 × 1.000 = **0.9985** |
 | Verdict | 0.9985 ≥ 0.7558 → **AI Generated** |
-| Confidence | 0.5 + 0.5 × 0.8 × (0.9985 − 0.7558) / (1 − 0.7558) = **0.898 → 89.8 %, High** |
+| Confidence | 0.9985 is far above 0.7558 → **92.7 %, High** |
 
 And a photograph whose combined score is 0.52:
 
 | Step | Value |
 |---|---|
 | Verdict | 0.52 < 0.7558 → **Real** |
-| Confidence | 0.5 + 0.5 × 0.8 × (0.7558 − 0.52) / 0.7558 = **0.625 → 62.5 %, Low** |
+| Confidence | 0.52 is below 0.7558, but not far below → **63.4 %, Low** |
 
 ## 7. What the numbers do *not* mean
 
 - **Confidence is not "the chance the verdict is right".** It is a distance
   from the threshold. The detectors' outputs are not calibrated: on validation
   their scores were off by 11 percentage points on average, against a target
-  of 5. Read 89.8 % as "far past the threshold", not as an exact probability.
+  of 5. Read 92.7 % as "far past the threshold", not as an exact probability.
 - **A detector can be wrong with full conviction.** A genuine sunflower
   photograph once scored 1.000 on the frequency detector.
 - **Enhanced photos tend to look synthetic** to the frequency detector. This

@@ -357,6 +357,6 @@ CALIBRATION_TEMPERATURE = 1.0
 #   Real:          0.5 + 0.5 * CONFIDENCE_SCALE * (tau - fusion) / tau
 #
 # 0.5 at tau, rising to 0.5 + 0.5 * CONFIDENCE_SCALE at the far end, so with
-# 0.8 a verdict reads between 50 % and 90 % and never claims certainty. A
+# 0.86 a verdict reads between 50 % and 93 % and never claims certainty. A
 # margin fitted to no data - NOT a calibrated probability.
-CONFIDENCE_SCALE = 0.8
+CONFIDENCE_SCALE = 0.86

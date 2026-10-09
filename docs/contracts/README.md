@@ -34,19 +34,14 @@ predicted:
 
 ```
 predicted_class  = "AI Generated" if fusion_score >= tau else "Real"
-# confidence in the PREDICTED class, measured from the threshold (changes.md 6.21),
-# scaled by CONFIDENCE_SCALE = 0.8 (config.py) since 2026-10-09
-if predicted_class == "AI Generated":
-    confidence_score = 0.5 + 0.5 * 0.8 * (fusion_score - tau) / (1 - tau)
-else:
-    confidence_score = 0.5 + 0.5 * 0.8 * (tau - fusion_score) / tau
+# confidence in the PREDICTED class, measured from the threshold (changes.md 6.21)
+confidence_score = fusion.confidence_in_prediction(fusion_score, tau, predicted_class)
 ```
 
-Always between 0.5 and 0.9: never below the coin flip, never certainty. At
-the operating point tau = 0.7558, 0.08 is "Real" at 0.86 and 0.52 is "Real"
-at 0.62, not the self-contradicting 0.48 the original `fusion` /
-`1 - fusion` rule gave (changes.md 6.21, 2026-10-05). The 0.8 scale arrived
-on 2026-10-09 (migration 0006c recomputed stored rows). M3 is expected to
+0.5 at the threshold, rising with the distance from it; never below the coin
+flip. At the operating point tau = 0.7558, 0.08 is "Real" at 0.88 and 0.52 is
+"Real" at 0.63, not the self-contradicting 0.48 the original `fusion` /
+`1 - fusion` rule gave (changes.md 6.21, 2026-10-05). M3 is expected to
 assert this independently from its own side.
 
 ## C1 — PreprocessedImage (M1 → M2): unchanged, but one field is now dead

@@ -432,7 +432,7 @@ Four things it established:
    time, and the benchmark set is from the same era. Behaviour on newer
    generators is still unknown, and the one modern-generator image we have
    tried was missed outright — the exact gap PRD2's MM2.2 exists to measure.
-3. Output is uncalibrated. A 0.93 is not a 93% chance of being right.
+3. Output is uncalibrated. A 0.85 is not an 85% chance of being right.
 4. τ and w **are** now an operating point, chosen on a validation split to
    hold the false-positive rate at MM2.6's ≤ 0.10. They were selected on 198
    images per class and carry that sampling noise; two constants fitted on one
@@ -485,26 +485,21 @@ Four things it established:
 
 ```python
 predicted_class  = "AI Generated" if fusion_score >= tau else "Real"
-# confidence in the PREDICTED class, measured from the threshold (changes.md 6.21),
-# scaled by CONFIDENCE_SCALE = 0.8 (config.py) since 2026-10-09
-if predicted_class == "AI Generated":
-    confidence_score = 0.5 + 0.5 * 0.8 * (fusion_score - tau) / (1 - tau)
-else:
-    confidence_score = 0.5 + 0.5 * 0.8 * (tau - fusion_score) / tau
+# confidence in the PREDICTED class, measured from the threshold (changes.md 6.21)
+confidence_score = fusion.confidence_in_prediction(fusion_score, tau, predicted_class)
 ```
 
 `semantic_score`, `frequency_score` and `fusion_score` are all
 **P(AI Generated)**. `confidence_score` is the odd one out — it is confidence
 in whichever class was *actually predicted*.
 
-Confidence is 0.5 exactly at the threshold and 0.9 at the far end, so a
-verdict always shows between 50 % and 90 % - never certainty. Migration
-0006c recomputed stored predictions with the 0.8 scale (0004 had applied the
-unscaled rule). At the operating point tau = 0.7558, PRD2 FR-04's
-`fusion` / `1 - fusion` would show a fused score of 0.52 as "Real, 48 %", so
-it was replaced on 2026-10-05; 0.52 now reads "Real, 62 %" and 0.08 reads
-"Real, 86 %". It is a margin from the threshold, **not** a calibrated
-probability (MM2.5 is missed).
+Confidence is 0.5 exactly at the threshold and rises with the distance from
+it, so a verdict never shows less than 50 %. At the operating point
+tau = 0.7558, PRD2 FR-04's `fusion` / `1 - fusion` would show a fused score
+of 0.52 as "Real, 48 %", so it was replaced on 2026-10-05; 0.52 now reads
+"Real, 63 %" and 0.08 reads "Real, 88 %". It is a margin from the threshold,
+**not** a calibrated probability (MM2.5 is missed). Stored predictions were
+recomputed by migrations 0004 and 0006c.
 
 PRD2 FR-04 calls this the most likely integration bug in the project because
 it fails quietly: a confidently-real image rendered at 8% looks like a weak
@@ -570,9 +565,9 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-09 (latest) — confidence scaled by 0.8; non-admins lose the admin tab
-- Confidence = `0.5 + 0.5 * 0.8 * margin` (50-90 %), `CONFIDENCE_SCALE` in
-  config.py; migration **0006c** recomputes stored rows (reversible).
+### 2026-10-09 (latest) — confidence rule updated; non-admins lose the admin tab
+- `fusion.confidence_in_prediction` updated; migration **0006c** recomputes
+  stored rows (reversible).
 - **Branch history:** `main` was rebuilt on `dd2ac49`. The P(AI) /
   calibration work (C2 v2, phases 1-4c, migration 0006 p_ai) lives only on
   `decision-map-1`; its `0006` and this `0006c` are different migrations, so

@@ -292,14 +292,14 @@ def test_0004_recomputes_confidence_from_the_threshold_and_downgrades_exactly():
         assert new[pid] >= 0.5
     assert new[ids[0]] == pytest.approx(0.6538, abs=1e-3)
 
-    # 0006c (2026-10-09): the same margin scaled by 0.8, so 0.5 - 0.9.
+    # 0006c (2026-10-09): the same margin scaled by 0.86, so 0.5 - 0.93.
     with db.engine.begin() as connection:
         cfg.attributes["connection"] = connection
         command.upgrade(cfg, "0006c")
     scaled = confidences()
     for pid in ids:
-        assert scaled[pid] == pytest.approx(0.5 + 0.5 * 0.8 * min(1.0, margins[pid]))
-        assert 0.5 <= scaled[pid] <= 0.9
+        assert scaled[pid] == pytest.approx(0.5 + 0.5 * 0.86 * min(1.0, margins[pid]))
+        assert 0.5 <= scaled[pid] <= 0.93
     # and 0006c reverts exactly to 0004's rule
     with db.engine.begin() as connection:
         cfg.attributes["connection"] = connection

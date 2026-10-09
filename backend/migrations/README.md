@@ -15,7 +15,7 @@ alembic revision --autogenerate -m "describe the change"   # new migration
 ```
 
 **Two histories (2026-10-09).** `main`: `0001 … 0005 → 0006c` (0006c
-rescales the stored confidence by 0.8). Branch `decision-map-1`:
+recomputes the stored confidence). Branch `decision-map-1`:
 `0001 … 0005 → 0006` (p_ai / certainty columns). The two are different
 migrations with different ids on purpose. To move a database from one branch
 to the other, check out the branch it is on, `alembic downgrade 0005`, then

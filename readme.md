@@ -311,9 +311,7 @@ The whole system on one machine. Set up as above, then:
      patch spectrum;
    - **PDF report**.
 
-   Confidence is always in the predicted class, between 50 % (on the
-   threshold) and 90 % (as far from it as possible): it never claims
-   certainty.
+   Confidence is always in the predicted class and never below 50 %.
 5. **Good images to try**, from the evaluation set: a DALL·E 2 image, a real
    camera photo, and a real photo the system gets **wrong** (to show its
    limits).
@@ -364,7 +362,7 @@ class.* It is not "the accuracy of the system".
 - **The false-positive target is still missed, narrowly:** 0.111 against a
   requirement of ≤ 0.10.
 - **Scores are uncalibrated.** A confidence of 85 % is not an 85 % chance of
-  being right; it is a distance from the threshold, capped at 90 %.
+  being right; it is a distance from the threshold.
 - **Behaviour on post-2023 generators is unknown.** Real photos that went
   through a learned enhancer (phone pipelines, upscalers) look synthetic to
   the frequency branch.

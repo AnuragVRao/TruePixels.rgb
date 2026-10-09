@@ -1,15 +1,15 @@
-"""Recompute stored confidence_score with the 0.8 scale (2026-10-09).
+"""Recompute stored confidence_score with the 0.86 scale (2026-10-09).
 
 Revision ID: 0006c
 Revises: 0005
 Create Date: 2026-10-09
 
 The displayed confidence (confidence in the PREDICTED class, a margin from
-tau) gains a scale of 0.8, so a verdict reads between 50 % and 90 % and never
+tau) gains a scale of 0.86, so a verdict reads between 50 % and 93 % and never
 100 % (app/m2_analysis/fusion.py, confidence_in_prediction):
 
-    AI Generated:  0.5 + 0.5 * 0.8 * (fusion - tau) / (1 - tau)
-    Real:          0.5 + 0.5 * 0.8 * (tau - fusion) / tau
+    AI Generated:  0.5 + 0.5 * 0.86 * (fusion - tau) / (1 - tau)
+    Real:          0.5 + 0.5 * 0.86 * (tau - fusion) / tau
 
 Every stored D4 row is recomputed from its own fusion_score, its own
 predicted_class and the tau of the fusion configuration that produced it
@@ -33,7 +33,7 @@ down_revision: Union[str, Sequence[str], None] = "0005"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-SCALE = 0.8
+SCALE = 0.86
 
 
 def _rows(conn):

@@ -70,7 +70,7 @@ THE INVERSION (PRD2 section 8.3, Contract C2 section 5.2). Three of the
     four score fields - semantic, frequency, fusion - are P("AI Generated").
     ``confidence_score`` is the odd one out: it is confidence in whichever
     class was actually predicted - see ``confidence_in_prediction``. At
-    tau = 0.5 a fusion_score of 0.08 yields "Real" with confidence 0.836.
+    tau = 0.5 a fusion_score of 0.08 yields "Real" with confidence 0.861.
 
     PRD2 FR-04 names this the single most likely integration bug in the whole
     project, because it fails quietly and plausibly: a confidently-real image
@@ -105,11 +105,11 @@ def confidence_in_prediction(fusion_score: float, tau: float, predicted_class: s
     """Confidence in the PREDICTED class, measured from the decision threshold.
 
     0.5 exactly at tau, rising linearly to ``0.5 + 0.5 * scale`` at the far end
-    of the predicted side - 0.9 with the configured scale of 0.8 (2026-10-09;
+    of the predicted side - 0.93 with the configured scale of 0.86 (2026-10-09;
     the unscaled rule of 2026-10-05, changes.md 6.21, reached 1.0):
 
-        AI Generated:  0.5 + 0.5 * 0.8 * (fusion - tau) / (1 - tau)
-        Real:          0.5 + 0.5 * 0.8 * (tau - fusion) / tau
+        AI Generated:  0.5 + 0.5 * 0.86 * (fusion - tau) / (1 - tau)
+        Real:          0.5 + 0.5 * 0.86 * (tau - fusion) / tau
 
     The scale keeps a verdict from ever reading 100 %: this is a margin fitted
     to no data, so it should not claim certainty.
