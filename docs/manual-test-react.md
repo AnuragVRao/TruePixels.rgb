@@ -84,14 +84,6 @@ database (`truepixels_regression`), with all 8 checks passing:
   - A5 restores the original fusion configuration by rollback before it
     ends.
   - A4 re-enables every account it changed.
-- `frontend/e2e/check_legacy_dashboard.py` checks the legacy dashboard
-  (`/`, `/api-tester`), with all 9 checks passing:
-  - a seeded `<img onerror>`/`<script>` log row is shown as text and does
-    not execute;
-  - there are no CLIP labels and no hard-coded health tile;
-  - the error tile equals `/admin/summary`;
-  - "Run All" reports `8 passed, 4 failed`. The 4 are example ids that do
-    not belong to this admin, so they are reported, not hidden.
 
 **Not exercised in a browser:**
 - uploading semantic or SPAI head files through the form (the backend

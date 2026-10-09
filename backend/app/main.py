@@ -23,7 +23,6 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 
 from app.m1_access.router_auth import router as auth_router
 from app.m1_access.router_images import router as images_router
@@ -43,9 +42,6 @@ from app.shared.errors import (
     validation_exception_handler,
     global_exception_handler,
 )
-
-# M3's dashboard (a static page) lives in the repository's frontend/ tree.
-M3_DASHBOARD_DIR = config.REPO_ROOT / "frontend" / "m3_dashboard"
 
 # The static mount below needs its directory to exist at import time.
 config.ensure_storage_dirs()
@@ -206,34 +202,13 @@ app.include_router(history_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 
-
-# M3's legacy static dashboard and API tester: development only (Phase 6).
-# In production these paths do not exist; the React app is the interface.
-def serve_frontend_dashboard():
-    """Serves the interactive Module M3 web application."""
-    index_path = M3_DASHBOARD_DIR / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-    return {"message": "TruePixels.rgb API is live. See /docs."}
-
-
-def serve_api_tester_console():
-    """Serves M3's Developer & API Seam Testing Console."""
-    tester_path = M3_DASHBOARD_DIR / "api_tester.html"
-    if tester_path.exists():
-        return FileResponse(tester_path)
-    return {"message": "API Tester Console not found."}
-
-
-if _DEV:
-    app.add_api_route("/", serve_frontend_dashboard, methods=["GET"], include_in_schema=False)
-    for _path in ("/api-tester", "/developer", "/playground"):
-        app.add_api_route(_path, serve_api_tester_console, methods=["GET"], include_in_schema=False)
+# (M3's legacy static dashboard and API tester were removed on 2026-10-10;
+# the React app in frontend/ is the only interface.)
 
 
 @app.get("/api/v1/health", tags=["Health"])
 def api_health_check():
-    """M3's liveness route, kept for its dashboard's diagnostics panel."""
+    """M3's liveness route (the React app's 1-Click Verification uses it)."""
     return {"status": "ok", "service": "TruePixels.rgb API", "version": "1.0.0"}
 
 

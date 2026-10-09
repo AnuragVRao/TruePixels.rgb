@@ -163,7 +163,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers  
   between them. `start.ps1` applies pending migrations — take a backup first.
 - `GET /ready` is 503 until warm-up succeeds; `/health` shows the device, the
   baseline and every pinned content detector, and which are loaded.
-- `ENVIRONMENT` defaults to production (no `/docs`, no legacy dashboard).
+- `ENVIRONMENT` defaults to production (no `/docs`).
   2FA and SMTP settings: `backend/.env.example`, [docs/auth-hardening.md](docs/auth-hardening.md).
   HTTPS: [docs/https.md](docs/https.md).
 - **VRAM on Windows:** when VRAM runs out under WDDM, CUDA does not raise — it
@@ -217,9 +217,6 @@ explanation panels (content-detector attention rollout drawn inside the
 crop it saw, SPAI patch spectrum); history; PDF reports; admin dashboard,
 users, logs and model management (register, gate preview, activate,
 rollback); PostgreSQL + Alembic; HTTPS via Caddy.
-
-**Known issue:** the legacy dev-only dashboard's History tab calls an
-undefined `loadHistory()`; the React app is the real UI.
 
 ---
 

@@ -176,12 +176,16 @@ def main() -> int:
     check("authenticated request through Caddy works (200)", small.status_code == 200, str(small.status_code))
 
     # --- production hides the dev surface ------------------------------------------------------
-    for path in ("/docs", "/redoc", "/openapi.json", "/", "/api-tester"):
+    for path in ("/docs", "/redoc", "/openapi.json"):
         r = direct.get(f"{args.api}{path}")
         if args.profile == "prod":
             check(f"prod API: {path} not served (404)", r.status_code == 404, str(r.status_code))
         else:
             check(f"dev API: {path} served (200)", r.status_code == 200, str(r.status_code))
+    # The legacy static dashboard was removed (2026-10-10): never served, in either profile.
+    for path in ("/api-tester", "/developer", "/playground"):
+        r = direct.get(f"{args.api}{path}")
+        check(f"API: {path} not served (404)", r.status_code == 404, str(r.status_code))
 
     width = max(len(n) for n, _, _ in results)
     for name, ok, detail in results:

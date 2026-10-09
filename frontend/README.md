@@ -11,7 +11,6 @@ commands are in the [repository README](../readme.md).
 | `src/api/` | The fetch client (sessionStorage token, error mapping) and response types |
 | `src/context/`, `src/hooks/` | Session state; loading files with the Authorization header as blob URLs |
 | `e2e/` | Playwright suites. Run them against a scratch API only. |
-| `m3_dashboard/` | M3's legacy static dashboard. The API serves it in development only. |
 
 ```powershell
 npm run dev          # http://localhost:3000, /api proxied to :8000 (TP_API_TARGET overrides)

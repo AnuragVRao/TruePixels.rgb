@@ -62,8 +62,6 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers -
 - **`ENVIRONMENT` defaults to production.** Only an explicit
   `ENVIRONMENT=development` enables:
   - `/docs`, `/redoc` and `/openapi.json`;
-  - the legacy dashboard at `/` and `/api-tester` (port 8000 only, never
-    through Caddy);
   - console delivery of OTP codes;
   - the plain-HTTP CORS defaults.
 
@@ -122,8 +120,8 @@ Run one profile at a time: both use ports 80 and 443.
 - **Images:** `blob:` because results, thumbnails, panels and PDFs are
   fetched with the Authorization header and shown as blob URLs.
 
-**The legacy dashboard is never served through Caddy.** In production the
-API does not serve it at all, and `/docs` is off as well.
+**In production `/docs` is off.** (M3's legacy static dashboard, once served
+in development at `/` and `/api-tester`, was removed on 2026-10-10.)
 
 **CORS.** The React app is same-origin, both behind Caddy and behind Vite's
 dev proxy, so it needs none.

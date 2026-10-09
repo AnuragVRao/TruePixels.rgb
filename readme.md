@@ -107,7 +107,7 @@ Then edit `backend/.env`. It is gitignored: **never commit it**.
 
 | Key | What to set |
 |---|---|
-| `ENVIRONMENT` | `development` for local work. **Unset means production**: no `/docs`, no legacy dashboard, and no OTP codes printed to the console. |
+| `ENVIRONMENT` | `development` for local work. **Unset means production**: no `/docs`, and no OTP codes printed to the console. |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Database credentials. Generate the password with `python -c "import secrets; print(secrets.token_hex(32))"`. |
 | `DATABASE_URL` | `postgresql+psycopg://<user>:<password>@127.0.0.1:5433/<db>`, using the same three values |
 | `JWT_SECRET_KEY` | Session signing key: `python -c "import secrets; print(secrets.token_hex(48))"` |
@@ -205,8 +205,8 @@ The interface works like this:
      User Scan History, 1-Click Verification);
   4. 1-Click Verification.
 
-With `ENVIRONMENT=development`, M3's legacy static dashboard is also served
-at <http://127.0.0.1:8000/>, and the API reference at `/docs`.
+With `ENVIRONMENT=development`, the API reference is also served at
+<http://127.0.0.1:8000/docs>.
 
 ## HTTPS
 
@@ -424,7 +424,6 @@ backend/
 frontend/
   src/               the React app (pages/, pages/admin/, components/, api/)
   e2e/               Playwright suites
-  m3_dashboard/      M3's legacy static dashboard (development only)
 infra/               Caddyfiles (dev/prod) and the HTTPS acceptance checks
 ml/evaluation/       benchmark, threshold selection, regression check, RESULTS.md
 ml/datasets/         fetch scripts for the evaluation sets (no images committed)

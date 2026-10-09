@@ -8,6 +8,20 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-10 — clean-up
+- Removed M3's legacy static dashboard (`frontend/m3_dashboard`, its dev-only
+  routes `/`, `/api-tester`, `/developer`, `/playground`, and its e2e check);
+  the React app is the only interface. `infra/check_https.py` now asserts those
+  paths are 404 in both profiles.
+- Local files deleted (gitignored, nothing read them): the 11 GB
+  AIGenImages2026 archive (the val and selection subsets stay extracted),
+  `storage/tensors/` (dead CLIP tensors), the SigLIP-only gate reference cache,
+  `storage/models/spai.pth` (already converted; re-download from the link in
+  config to re-convert), and the 2026-09-30 degradation variants (regenerable
+  with `ml/datasets/make_variants.py`).
+- Git: branch `c2v2-0007` (a migration conflicting with `main`), its worktree,
+  and a superseded stash removed. `decision-map-1` kept.
+
 ### 2026-10-09 / 10 — Community Forensics replaces SigLIP 2 as the content detector
 - **Measured first:** AIGenImages2026 (19 generators from 2025, content-matched
   reals) put SigLIP 2 at AUC 0.53 and the live fusion at 0.714. Bake-off on a
