@@ -40,8 +40,9 @@ The confidence inversion rule (Contract C2 section 5.2, PRD2 section 8.3) is
 the single most likely integration bug in the project, so it is restated here:
 ``semantic_score``, ``frequency_score`` and ``fusion_score`` are all
 P(AI Generated). ``confidence_score`` is the odd one out - it is confidence in
-whichever class was actually predicted. A fusion_score of 0.08 yields
-("Real", 0.92). Never render fusion_score as a confidence figure.
+whichever class was actually predicted, a margin from tau scaled to run
+from 0.5 to 0.9 (2026-10-09). At tau 0.7558 a fusion_score of 0.08 yields
+("Real", 0.86). Never render fusion_score as a confidence figure.
 """
 
 from __future__ import annotations

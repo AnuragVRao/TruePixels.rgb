@@ -25,20 +25,22 @@ def config(tau: float = 0.5, weight: float = 0.5, temperature: float = 1.0):
 
 
 def test_confidence_inversion_for_a_confidently_real_image():
-    """PRD2 section 8.3, stated verbatim: 0.08 must yield ("Real", 0.92)."""
+    """PRD2 section 8.3: 0.08 yields "Real" with HIGH confidence, never 0.08.
+    PRD2's 0.92 is the unscaled rule; with the 0.8 scale (2026-10-09) it is
+    0.5 + 0.4 * 0.84 = 0.836."""
     fusion_score, predicted_class, confidence = combine(0.08, 0.08, config())
 
     assert fusion_score == pytest.approx(0.08)
     assert predicted_class == "Real"
-    assert confidence == pytest.approx(0.92)
+    assert confidence == pytest.approx(0.836)
 
 
-def test_confidence_is_the_fused_score_when_the_class_is_ai_generated():
+def test_confidence_grows_from_one_half_when_the_class_is_ai_generated():
     fusion_score, predicted_class, confidence = combine(0.9, 0.9, config())
 
     assert predicted_class == "AI Generated"
-    assert confidence == pytest.approx(fusion_score)
-    assert confidence == pytest.approx(0.9)
+    assert confidence == pytest.approx(0.5 + 0.4 * (fusion_score - 0.5) / 0.5)
+    assert confidence == pytest.approx(0.82)
 
 
 def test_threshold_boundary_resolves_to_ai_generated():
@@ -70,13 +72,14 @@ def test_grid_of_branch_pairs_including_the_boundaries(semantic, frequency):
     assert 0.0 <= confidence <= 1.0
     assert predicted_class in {"Real", "AI Generated"}
 
+    # At tau = 0.5: FR-04's fusion / 1 - fusion, scaled by 0.8 towards 0.5.
     if predicted_class == "AI Generated":
-        assert confidence == pytest.approx(fusion_score)
+        assert confidence == pytest.approx(0.5 + 0.8 * (fusion_score - 0.5))
     else:
-        assert confidence == pytest.approx(1.0 - fusion_score)
+        assert confidence == pytest.approx(0.5 + 0.8 * (0.5 - fusion_score))
 
-    # Confidence in the predicted class can never be below the coin flip.
-    assert confidence >= 0.5 - 1e-9
+    # Confidence in the predicted class: never below the coin flip, never above 0.9.
+    assert 0.5 - 1e-9 <= confidence <= 0.9 + 1e-9
 
 
 def test_weighted_average_respects_the_weight():
@@ -98,13 +101,13 @@ def test_missing_frequency_score_is_a_passthrough_not_an_average_with_zero():
 
     assert fusion_score == pytest.approx(0.9)
     assert predicted_class == "AI Generated"
-    assert confidence == pytest.approx(0.9)
+    assert confidence == pytest.approx(0.82)
 
     fusion_score, predicted_class, confidence = combine(0.1, None, config())
 
     assert fusion_score == pytest.approx(0.1)
     assert predicted_class == "Real"
-    assert confidence == pytest.approx(0.9)
+    assert confidence == pytest.approx(0.82)
 
 
 def test_temperature_of_one_is_a_no_op():
@@ -130,20 +133,20 @@ def test_a_real_verdict_never_shows_below_half_confidence_at_the_operating_point
     fusion_score, predicted_class, confidence = combine(0.837, 0.419, config(tau=OPERATING_TAU, weight=0.25))
     assert predicted_class == "Real"
     assert fusion_score == pytest.approx(0.25 * 0.837 + 0.75 * 0.419)
-    assert confidence == pytest.approx(0.5 + 0.5 * (OPERATING_TAU - fusion_score) / OPERATING_TAU)
-    assert confidence > 0.5 and confidence == pytest.approx(0.6538, abs=1e-3)
+    assert confidence == pytest.approx(0.5 + 0.5 * 0.8 * (OPERATING_TAU - fusion_score) / OPERATING_TAU)
+    assert confidence > 0.5 and confidence == pytest.approx(0.6229, abs=1e-3)
 
 
 @pytest.mark.parametrize("tau", [0.3, 0.5, 0.6, OPERATING_TAU, 0.9])
 @pytest.mark.parametrize("score", [0.0, 0.1, 0.29, 0.3, 0.45, 0.5, 0.52, 0.6, 0.75, 0.7558, 0.8, 0.95, 1.0])
 def test_confidence_is_at_least_half_for_every_threshold(tau, score):
     _, predicted_class, confidence = combine(score, score, config(tau=tau))
-    assert 0.5 - 1e-12 <= confidence <= 1.0
-    # 0.5 exactly at the threshold, 1.0 at the far ends.
+    assert 0.5 - 1e-12 <= confidence <= 0.9 + 1e-12
+    # 0.5 exactly at the threshold, 0.9 at the far ends (the 0.8 scale, 2026-10-09).
     if score == tau:
         assert confidence == pytest.approx(0.5)
     if score in (0.0, 1.0):
-        assert confidence == pytest.approx(1.0)
+        assert confidence == pytest.approx(0.9)
 
 
 @pytest.mark.parametrize("tau", [0.3, OPERATING_TAU, 0.9])
@@ -154,7 +157,7 @@ def test_confidence_grows_with_distance_from_the_threshold(tau):
 
 
 @pytest.mark.parametrize("score", [0.0, 0.08, 0.3, 0.49, 0.5, 0.7, 0.92, 1.0])
-def test_at_tau_one_half_it_is_exactly_the_original_fr04_rule(score):
+def test_at_tau_one_half_it_is_the_fr04_rule_scaled_by_0_8(score):
     fusion_score, predicted_class, confidence = combine(score, score, config(tau=0.5))
-    expected = fusion_score if predicted_class == "AI Generated" else 1.0 - fusion_score
-    assert confidence == pytest.approx(expected)
+    fr04 = fusion_score if predicted_class == "AI Generated" else 1.0 - fusion_score
+    assert confidence == pytest.approx(0.5 + 0.8 * (fr04 - 0.5))

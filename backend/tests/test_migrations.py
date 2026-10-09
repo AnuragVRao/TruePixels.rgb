@@ -282,11 +282,29 @@ def test_0004_recomputes_confidence_from_the_threshold_and_downgrades_exactly():
     assert old[ids[0]] == pytest.approx(1 - 0.5233)  # the reported "Real, 47.7 %"
     with db.engine.begin() as connection:
         cfg.attributes["connection"] = connection
-        command.upgrade(cfg, "head")  # through 0004, back to head for the tests that follow
+        command.upgrade(cfg, "0005")  # through 0004: margin from tau, unscaled
     new = confidences()
     tau = 0.7558
+    margins = {}
     for pid, (fusion, cls) in zip(ids, cases):
-        margin = (fusion - tau) / (1 - tau) if cls == "AI Generated" else (tau - fusion) / tau
-        assert new[pid] == pytest.approx(0.5 + 0.5 * margin)
+        margins[pid] = (fusion - tau) / (1 - tau) if cls == "AI Generated" else (tau - fusion) / tau
+        assert new[pid] == pytest.approx(0.5 + 0.5 * margins[pid])
         assert new[pid] >= 0.5
     assert new[ids[0]] == pytest.approx(0.6538, abs=1e-3)
+
+    # 0006c (2026-10-09): the same margin scaled by 0.8, so 0.5 - 0.9.
+    with db.engine.begin() as connection:
+        cfg.attributes["connection"] = connection
+        command.upgrade(cfg, "0006c")
+    scaled = confidences()
+    for pid in ids:
+        assert scaled[pid] == pytest.approx(0.5 + 0.5 * 0.8 * min(1.0, margins[pid]))
+        assert 0.5 <= scaled[pid] <= 0.9
+    # and 0006c reverts exactly to 0004's rule
+    with db.engine.begin() as connection:
+        cfg.attributes["connection"] = connection
+        command.downgrade(cfg, "0005")
+    assert confidences() == pytest.approx(new)
+    with db.engine.begin() as connection:
+        cfg.attributes["connection"] = connection
+        command.upgrade(cfg, "head")  # back to head for the tests that follow

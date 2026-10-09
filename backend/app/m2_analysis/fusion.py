@@ -24,6 +24,7 @@ import math
 from typing import Literal
 
 from app.m2_analysis.registry import FusionModelConfig
+from app.shared.config import CONFIDENCE_SCALE
 from app.shared.contracts.errors import InferenceError
 
 PredictedClass = Literal["Real", "AI Generated"]
@@ -69,7 +70,7 @@ THE INVERSION (PRD2 section 8.3, Contract C2 section 5.2). Three of the
     four score fields - semantic, frequency, fusion - are P("AI Generated").
     ``confidence_score`` is the odd one out: it is confidence in whichever
     class was actually predicted - see ``confidence_in_prediction``. At
-    tau = 0.5 a fusion_score of 0.08 yields "Real" with confidence 0.92.
+    tau = 0.5 a fusion_score of 0.08 yields "Real" with confidence 0.836.
 
     PRD2 FR-04 names this the single most likely integration bug in the whole
     project, because it fails quietly and plausibly: a confidently-real image
@@ -99,22 +100,26 @@ THE INVERSION (PRD2 section 8.3, Contract C2 section 5.2). Three of the
     return fusion_score, predicted_class, confidence_score
 
 
-def confidence_in_prediction(fusion_score: float, tau: float, predicted_class: str) -> float:
+def confidence_in_prediction(fusion_score: float, tau: float, predicted_class: str,
+                             scale: float = CONFIDENCE_SCALE) -> float:
     """Confidence in the PREDICTED class, measured from the decision threshold.
 
-    0.5 exactly at tau, rising linearly to 1.0 at the far end of the predicted
-    side (2026-10-05, changes.md 6.21):
+    0.5 exactly at tau, rising linearly to ``0.5 + 0.5 * scale`` at the far end
+    of the predicted side - 0.9 with the configured scale of 0.8 (2026-10-09;
+    the unscaled rule of 2026-10-05, changes.md 6.21, reached 1.0):
 
-        AI Generated:  0.5 + 0.5 * (fusion - tau) / (1 - tau)
-        Real:          0.5 + 0.5 * (tau - fusion) / tau
+        AI Generated:  0.5 + 0.5 * 0.8 * (fusion - tau) / (1 - tau)
+        Real:          0.5 + 0.5 * 0.8 * (tau - fusion) / tau
+
+    The scale keeps a verdict from ever reading 100 %: this is a margin fitted
+    to no data, so it should not claim certainty.
 
     Why not PRD2 FR-04's ``fusion`` / ``1 - fusion``: that rule assumes
     tau = 0.5. With the operating point tau = 0.7558 (chosen on a validation
     split to hold false positives down), every fused score in [0.5, tau) is
     called "Real" while ``1 - fusion`` is below 0.5 - a verdict displayed as
     e.g. "Real, 47.7 %", which contradicts itself. This formula can never
-    fall below 0.5, is monotonic, and at tau = 0.5 reduces EXACTLY to the old
-    rule (so FR-04's "0.08 -> Real at 0.92" still holds there).
+    fall below 0.5 and is monotonic in the margin from tau.
 
     It is a margin from the threshold, not a calibrated probability: the
     detectors' outputs are uncalibrated (MM2.5 is missed).
@@ -123,4 +128,5 @@ def confidence_in_prediction(fusion_score: float, tau: float, predicted_class: s
         margin = (fusion_score - tau) / (1.0 - tau) if tau < 1.0 else 1.0
     else:
         margin = (tau - fusion_score) / tau if tau > 0.0 else 1.0
-    return min(1.0, max(0.5, 0.5 + 0.5 * margin))
+    margin = min(1.0, max(0.0, margin))
+    return 0.5 + 0.5 * scale * margin

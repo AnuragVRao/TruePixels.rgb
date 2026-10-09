@@ -485,25 +485,26 @@ Four things it established:
 
 ```python
 predicted_class  = "AI Generated" if fusion_score >= tau else "Real"
-# confidence in the PREDICTED class, measured from the threshold (changes.md 6.21)
+# confidence in the PREDICTED class, measured from the threshold (changes.md 6.21),
+# scaled by CONFIDENCE_SCALE = 0.8 (config.py) since 2026-10-09
 if predicted_class == "AI Generated":
-    confidence_score = 0.5 + 0.5 * (fusion_score - tau) / (1 - tau)
+    confidence_score = 0.5 + 0.5 * 0.8 * (fusion_score - tau) / (1 - tau)
 else:
-    confidence_score = 0.5 + 0.5 * (tau - fusion_score) / tau
+    confidence_score = 0.5 + 0.5 * 0.8 * (tau - fusion_score) / tau
 ```
 
 `semantic_score`, `frequency_score` and `fusion_score` are all
 **P(AI Generated)**. `confidence_score` is the odd one out — it is confidence
 in whichever class was *actually predicted*.
 
-Confidence is 0.5 exactly at the threshold and 1.0 at the far end, so a
-verdict can never show less than 50 %. At tau = 0.5 this is exactly PRD2
-FR-04's `fusion` / `1 - fusion` (0.08 means **"Real" at 0.92**). At the
-operating point tau = 0.7558, FR-04's rule would show a fused score of 0.52 as
-"Real, 48 %", so it was replaced on 2026-10-05; 0.52 now reads "Real, 65 %"
-and 0.08 reads "Real, 95 %". It is a margin from the threshold, **not** a
-calibrated probability (MM2.5 is missed). Stored predictions were recomputed
-by migration 0004.
+Confidence is 0.5 exactly at the threshold and 0.9 at the far end, so a
+verdict always shows between 50 % and 90 % - never certainty. Migration
+0006c recomputed stored predictions with the 0.8 scale (0004 had applied the
+unscaled rule). At the operating point tau = 0.7558, PRD2 FR-04's
+`fusion` / `1 - fusion` would show a fused score of 0.52 as "Real, 48 %", so
+it was replaced on 2026-10-05; 0.52 now reads "Real, 62 %" and 0.08 reads
+"Real, 86 %". It is a margin from the threshold, **not** a calibrated
+probability (MM2.5 is missed).
 
 PRD2 FR-04 calls this the most likely integration bug in the project because
 it fails quietly: a confidently-real image rendered at 8% looks like a weak
@@ -569,7 +570,18 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-08 (latest) — forgot password, change password, login activity
+### 2026-10-09 (latest) — confidence scaled by 0.8; non-admins lose the admin tab
+- Confidence = `0.5 + 0.5 * 0.8 * margin` (50-90 %), `CONFIDENCE_SCALE` in
+  config.py; migration **0006c** recomputes stored rows (reversible).
+- **Branch history:** `main` was rebuilt on `dd2ac49`. The P(AI) /
+  calibration work (C2 v2, phases 1-4c, migration 0006 p_ai) lives only on
+  `decision-map-1`; its `0006` and this `0006c` are different migrations, so
+  a database must be downgraded to 0005 on one branch before following the
+  other.
+- Admin Dashboard tab hidden from non-admins; reset e-mail sent after the
+  response; one error envelope (cherry-picked from `decision-map-1`).
+
+### 2026-10-08 — forgot password, change password, login activity
 - Migration 0005:
   - `users.token_version` (the `ver` claim) and `users.password_changed_at`;
   - `password_resets`, one hashed code per user;

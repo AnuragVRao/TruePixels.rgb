@@ -197,7 +197,7 @@ def test_confidence_follows_the_inversion_rule_over_http(sample_png, auth):
 
     expected = confidence_in_prediction(body["fusion_score"], config.FUSION_TAU, body["predicted_class"])
     assert body["confidence_score"] == pytest.approx(expected)
-    assert body["confidence_score"] >= 0.5
+    assert 0.5 <= body["confidence_score"] <= 0.9 + 1e-9
 
 
 def test_the_activation_bundle_never_crosses_the_http_boundary(sample_png, auth):

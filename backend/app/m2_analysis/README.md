@@ -43,9 +43,10 @@ that is not a single logit, because a partially loaded model still emits
 plausible numbers.
 
 **`confidence_score` is not `fusion_score`.** It is confidence in the
-predicted class, measured from the decision threshold (0.5 at tau, 1.0 at the far end; never below 0.5).
-At the operating point tau = 0.7558 a `fusion_score` of 0.08 means "Real" at 0.95 confidence, and 0.52
-means "Real" at 0.65 - not the 0.48 the old `1 - fusion` rule gave (changes.md 6.21).
+predicted class, measured from the decision threshold and scaled by 0.8 (0.5 at tau, 0.9 at the far
+end; never below 0.5, never above 0.9 - since 2026-10-09).
+At the operating point tau = 0.7558 a `fusion_score` of 0.08 means "Real" at 0.86 confidence, and 0.52
+means "Real" at 0.62 - not the 0.48 the old `1 - fusion` rule gave (changes.md 6.21).
 
 M2 owns D3 Models and D4 Predictions (neither built yet). It consumes Contract
 C1 and produces Contract C2; see `docs/contracts/` for the documented C2

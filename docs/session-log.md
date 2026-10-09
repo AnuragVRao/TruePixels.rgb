@@ -7,6 +7,17 @@ is in `CLAUDE.md` §9; measurement detail is in
 
 ---
 
+### 2026-10-09 — main rebuilt on dd2ac49; confidence scaled by 0.8
+- `main` was reset to `dd2ac49` and rebuilt. The calibrated-P(AI) work
+  (phases 1–4c, C2 v2, migration 0006 with p_ai / certainty) stays on
+  `decision-map-1` only.
+- On `main`: confidence = `0.5 + 0.5 × 0.8 × margin` from tau, so 50–90 %
+  (`CONFIDENCE_SCALE`); migration `0006c` recomputes stored rows and reverts
+  exactly. Docs, tests and examples updated (99.7 % → 89.8 %, 65.6 % → 62.5 %).
+- Cherry-picked from `decision-map-1`: the Admin Dashboard tab hidden from
+  non-admins; reset e-mail sent after the response; one error envelope;
+  `PasswordInput`.
+
 ### 2026-09-30 — M1 and M3 integrated
 - Teammates' M1 (auth, upload, validation, C1 preprocess, React UI) and M3
   (results, history, reports, admin, logs, dashboard) merged into one app.

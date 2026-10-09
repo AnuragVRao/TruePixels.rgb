@@ -344,3 +344,19 @@ FUSION_TAU = 0.7558
 # only then compares it to tau - so adopting a T means re-selecting tau
 # underneath it, and changes every confidence figure shown to a user.
 CALIBRATION_TEMPERATURE = 1.0
+
+
+# --------------------------------------------------------------------------
+# Confidence shown to the user (2026-10-09)
+# --------------------------------------------------------------------------
+#
+# Confidence in the PREDICTED class, a margin from tau
+# (fusion.confidence_in_prediction):
+#
+#   AI Generated:  0.5 + 0.5 * CONFIDENCE_SCALE * (fusion - tau) / (1 - tau)
+#   Real:          0.5 + 0.5 * CONFIDENCE_SCALE * (tau - fusion) / tau
+#
+# 0.5 at tau, rising to 0.5 + 0.5 * CONFIDENCE_SCALE at the far end, so with
+# 0.8 a verdict reads between 50 % and 90 % and never claims certainty. A
+# margin fitted to no data - NOT a calibrated probability.
+CONFIDENCE_SCALE = 0.8

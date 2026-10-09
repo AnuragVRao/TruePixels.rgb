@@ -122,6 +122,11 @@ cd ..
   `-v`**, which deletes the data volume.
 - **SQLite instead of Docker:** set `DATABASE_URL=sqlite:///./truepixels.db`
   and run `alembic upgrade head` as above.
+- **Branches:** `main` runs the migration chain `0001 … 0005 → 0006c`. The
+  `decision-map-1` branch holds the calibrated-P(AI) work and has a
+  *different* `0006`. A database migrated on one branch must be taken back to
+  `0005` on that branch (`alembic downgrade 0005`) before the other branch
+  will start on it.
 
 ## Run
 
@@ -178,7 +183,9 @@ The interface works like this:
 - **Signed in:** four tabs:
   1. Forensic Detection;
   2. User Scan History;
-  3. Admin Dashboard & Analytics;
+  3. Admin Dashboard & Analytics - **administrators only**; a normal user
+     does not see this tab, so their tabs run 1, 2, 3 (Forensic Detection,
+     User Scan History, 1-Click Verification);
   4. 1-Click Verification.
 
 With `ENVIRONMENT=development`, M3's legacy static dashboard is also served
@@ -304,13 +311,15 @@ The whole system on one machine. Set up as above, then:
      patch spectrum;
    - **PDF report**.
 
-   Confidence is always in the predicted class and never below 50 %.
+   Confidence is always in the predicted class, between 50 % (on the
+   threshold) and 90 % (as far from it as possible): it never claims
+   certainty.
 5. **Good images to try**, from the evaluation set: a DALL·E 2 image, a real
    camera photo, and a real photo the system gets **wrong** (to show its
    limits).
 6. **2. User Scan History:** past results, then **Test Security Barrier**,
    which proves another user's result cannot be opened.
-7. **4. 1-Click Verification → Run Verification:** live checks against every
+7. **1-Click Verification → Run Verification** (tab 3 for a normal user): live checks against every
    seam.
 8. **Sign Out** (it asks first). Then **Admin Login** → **3. Admin Dashboard
    & Analytics**:
@@ -354,8 +363,8 @@ class.* It is not "the accuracy of the system".
   worse than SPAI alone; under degradation it is better.
 - **The false-positive target is still missed, narrowly:** 0.111 against a
   requirement of ≤ 0.10.
-- **Scores are uncalibrated.** A confidence of 0.93 is not a 93 % chance of
-  being right.
+- **Scores are uncalibrated.** A confidence of 85 % is not an 85 % chance of
+  being right; it is a distance from the threshold, capped at 90 %.
 - **Behaviour on post-2023 generators is unknown.** Real photos that went
   through a learned enhancer (phone pipelines, upscalers) look synthetic to
   the frequency branch.

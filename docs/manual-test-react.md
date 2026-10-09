@@ -21,7 +21,7 @@ backend terminal (with no SMTP configured, OTP codes are printed there).
 | 5 | OTP right code | Enter the console code | Signed in, back on `/` (or the `next` page) |
 | 6 | Upload validation | Choose a `.gif`, a >10 MB file, a 32x32 PNG | Each is refused before upload with a specific message |
 | 7 | Analyse (xai on) | Choose a normal JPG/PNG, keep "Include explainability" ticked, Analyse | "Uploading…", then "Analysing… Ns" with a live timer; then the results page |
-| 8 | Results | On the results page | Verdict, confidence %, band; three branch scores; original image; "SigLIP 2 attention rollout" and "SPAI patch spectrum" panels with the backend's captions as text; model rows listed |
+| 8 | Results | On the results page | Verdict, confidence % (50-90 %), band; three branch scores; original image; "SigLIP 2 attention rollout" and "SPAI patch spectrum" panels with the backend's captions as text; model rows listed |
 | 9 | PDF | Click "PDF report" | A PDF downloads (fetched with the Authorization header; no token in the URL) |
 | 10 | Small image | Analyse a 160x160 PNG | Results show "not measured" for the frequency score, the semantic-only warning, and the partial-explainability note |
 | 11 | xai off | Untick explainability, Analyse | Results show no panels and "No explainability panels were requested" |
@@ -64,7 +64,7 @@ screens comes from the API; none is hard-coded.
 
 | # | Flow | Steps | Expected |
 |---|---|---|---|
-| A1 | Non-admin | Sign in as a normal user, open `/admin/users` | No "Admin" link; "Administrators only."; the API answers 403 `AUTH_FORBIDDEN` to `/admin/*` and `/models*` with that token |
+| A1 | Non-admin | Sign in as a normal user, open `/admin/users` | No "Admin Dashboard & Analytics" tab (tabs read 1. Forensic Detection, 2. User Scan History, 3. 1-Click Verification); "Administrators only."; the API answers 403 `AUTH_FORBIDDEN` to `/admin/*` and `/models*` with that token |
 | A2 | Overview | `/admin` | Tiles show `/admin/summary` and `/admin/analytics`: errors in the last 24 h, active models, warm-only p50/p95 latency with the count of excluded cold starts; empty states when there is no data |
 | A3 | Logs | `/admin/logs`; Next/Previous; Severity = error | 25 per page; filters narrow the list; log text that contains HTML is shown literally and never runs |
 | A4 | Users | `/admin/users`; Disable / Enable / Remove another account | A confirmation explains that nothing is deleted (images, results and files are kept); your own row has no actions; the API refuses self-changes and leaving no active admin (409 `ADM_ACTION_NOT_PERMITTED`) |
