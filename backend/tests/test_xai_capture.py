@@ -33,14 +33,14 @@ def test_recomputed_attention_equals_eager_attention(image_path):
     attention weights for the same input, layer by layer."""
     from transformers import AutoModelForImageClassification
 
-    captured = detectors.primary.attention_maps(
-        detectors.primary.score(image_path, capture=True).activations)
+    siglip = detectors.semantic(config.SEMANTIC_SIGLIP)  # SigLIP-specific: compared with transformers' eager path
+    captured = siglip.attention_maps(siglip.score(image_path, capture=True).activations)
     ours = captured["attention"]
     assert ours.shape == (12, 12, 196, 196) and captured["patch_grid"] == (14, 14)
     assert np.allclose(ours.sum(axis=-1), 1.0, atol=1e-5)  # each row is a distribution
 
     eager = AutoModelForImageClassification.from_pretrained(
-        detectors.primary.checkpoint, use_safetensors=True
+        siglip.checkpoint, revision=siglip.revision, use_safetensors=True
     ).eval().to(config.DEVICE)
     # attn_implementation="eager" in from_pretrained does NOT reach the vision
     # sub-config of this composite checkpoint (it stays on SDPA, which returns
@@ -52,7 +52,7 @@ def test_recomputed_attention_equals_eager_attention(image_path):
              for layer in eager.vision_model.encoder.layers]
     try:
         with Image.open(image_path) as handle:
-            inputs = detectors.primary._processor(images=handle.convert("RGB"), return_tensors="pt")
+            inputs = siglip._processor(images=handle.convert("RGB"), return_tensors="pt")
         with torch.inference_mode():
             eager(**{k: v.to(config.DEVICE) for k, v in inputs.items()})
         reference = torch.stack(weights).float().cpu().numpy()

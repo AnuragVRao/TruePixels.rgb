@@ -77,7 +77,9 @@ class ActivationBundle(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    backbone: Literal["clip_vit_b32", "clip_vit_l14", "siglip_b16"]
+    # "commfor_vits16" (2026-10-09): Community Forensics ViT-S/16 at 384 px -
+    # CLS token + a 24x24 patch grid, pooling "cls".
+    backbone: Literal["clip_vit_b32", "clip_vit_l14", "siglip_b16", "commfor_vits16"]
     patch_grid: tuple[int, int]  # e.g. (7, 7) for ViT-B/32 at 224px
     attention: Any | None = None  # (layers, heads, tokens, tokens)
     patch_embeddings: Any | None = None  # (tokens, dim)
@@ -86,6 +88,10 @@ class ActivationBundle(BaseModel):
     pooling: Literal["cls", "mean"] = "cls"
     spectrum_meta: dict | None = None  # {"patch_size", "patches", "mask_radius", ...}
     timings_ms: dict | None = None  # capture costs, for the XAI cost measurement
+    # (2026-10-09) The part of the image the attention grid covers, as fractions
+    # (x0, y0, x1, y1) of width/height. None = the whole image (SigLIP squashes
+    # it to 224x224); Community Forensics sees a centre crop.
+    attention_region: tuple[float, float, float, float] | None = None
 
 
 class InferenceOutput(BaseModel):

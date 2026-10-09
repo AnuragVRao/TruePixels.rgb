@@ -7,6 +7,19 @@ is in `CLAUDE.md` §9; measurement detail is in
 
 ---
 
+### 2026-10-09 / 10 — Community Forensics replaces SigLIP 2 as the content detector
+- AIGenImages2026 (19 generators from 2025, content-matched reals) measured
+  the live system: SigLIP 2 AUC 0.53, fused 0.714.
+- Bake-off, selection on AIGenImages2026 train + sbr_val, held out on
+  AIGenImages2026 val and Synthbuster: Community Forensics + SPAI at w 0.55,
+  τ 0.4524 → 0.798 / AUC 0.895 and 0.939 / AUC 0.986.
+- Content detectors became a pinned set chosen by the active D3 row; gate
+  reference rebuilt for both; SigLIP 2 stays one rollback away.
+- Found: cuDNN TF32 convolutions shifted Community Forensics' scores
+  (reference 0.7860 → 0.7655). Fixed with an exact unfold + matmul patch
+  projection; bake-off re-scored, same operating point.
+- Details: ml/evaluation/RESULTS.md 2026-10-09.
+
 ### 2026-10-09 — main rebuilt on dd2ac49; confidence rule updated
 - `main` was reset to `dd2ac49` and rebuilt. The calibrated-P(AI) work
   (phases 1–4c, C2 v2, migration 0006 with p_ai / certainty) stays on

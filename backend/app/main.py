@@ -263,9 +263,12 @@ def health() -> dict:
 
     ``loaded`` is true once the startup warm-up has run (WARMUP_ON_STARTUP,
     the default); with the warm-up off, both branches load lazily and stay
-    false until the first prediction. ``ai_index`` is the output index resolved from the primary's own
-    id2label; the frequency detector has no labels, so what it reports instead
-    is the documented sign convention it is running under.
+    false until the first prediction. ``primary`` is the published BASELINE
+    content detector; which content detector a prediction runs is the active D3
+    row (``content_detectors`` lists every pinned one and whether it is loaded).
+    ``ai_index`` is resolved from a Hugging Face checkpoint's own id2label;
+    single-logit detectors (Community Forensics, SPAI) report the documented
+    sign convention instead.
     """
     from app.m2_analysis import detectors, frequency_detector
     from app.m2_analysis.warmup import STATE as warmup_state
@@ -284,6 +287,12 @@ def health() -> dict:
                 "checkpoint": detectors.primary.checkpoint,
                 "loaded": detectors.primary.is_loaded,
                 "ai_index": detectors.primary.ai_index,
+                "ai_is_positive": getattr(detectors.primary, "ai_is_positive", None),
+            },
+            "content_detectors": {
+                checkpoint: {"loaded": detectors.semantic(checkpoint).is_loaded,
+                             "revision": spec["revision"], "label": spec["label"]}
+                for checkpoint, spec in config.SEMANTIC_BACKBONES.items()
             },
             "frequency": {
                 "name": spectral.name,

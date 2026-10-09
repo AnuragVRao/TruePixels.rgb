@@ -93,7 +93,10 @@ def _expected_head(model_type: str) -> dict[str, torch.Tensor]:
     from app.m2_analysis import detectors, frequency_detector, heads
 
     if model_type == registry.TYPE_SEMANTIC:
-        return {heads.SEMANTIC_PREFIX + k: v for k, v in detectors.primary.classifier_state().items()}
+        # Semantic head uploads target SigLIP 2's classifier (Community
+        # Forensics rows carry no uploaded head - registry._valid_semantic).
+        return {heads.SEMANTIC_PREFIX + k: v
+                for k, v in detectors.semantic(config.SEMANTIC_SIGLIP).classifier_state().items()}
     return {heads.FREQUENCY_PREFIX + k: v for k, v in frequency_detector.frequency.cls_head_state().items()}
 
 
@@ -172,7 +175,9 @@ def register(db: Session, *, model_type: str, name: str, version: str, training_
         elif not isinstance(ai_is_positive, bool):
             _refuse("a frequency head needs ai_is_positive (true/false): which sign of the logit means AI")
         head["file"] = _store(data, sha)
-        base = registry.baseline_rows()[model_type]["hyperparameters"]
+        base = (registry.semantic_row_spec(config.SEMANTIC_SIGLIP)["hyperparameters"]
+                if model_type == registry.TYPE_SEMANTIC
+                else registry.baseline_rows()[model_type]["hyperparameters"])
         hyper = {**base, "head": head}
         if model_type == registry.TYPE_FREQUENCY:
             hyper["ai_is_positive"] = ai_is_positive

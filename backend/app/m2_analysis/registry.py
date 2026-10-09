@@ -2,7 +2,7 @@
 
 What runs is decided by the ACTIVE rows of D3, one per model type:
 
-    semantic-classifier            the SigLIP 2 backbone (pinned revision) + head
+    semantic-classifier            one of config.SEMANTIC_BACKBONES (pinned revision) + head
     frequency-artifact-classifier  SPAI (pinned weights digest) + head + sign convention
     fusion-configuration           weight, tau, temperature
 
@@ -22,10 +22,12 @@ transaction with the rows of that type locked; the partial unique index
 leave two active rows. Every switch is recorded in ``model_activations`` -
 the audit trail and the basis of one-call ``rollback``.
 
-The backbones themselves are never swapped (out of scope): a row must name
-the same checkpoint + revision (semantic) or weights digest (SPAI) as the
-resident model. Uploads replace only the final head, or the fusion
-configuration.
+Backbones come only from a fixed, pinned set: a semantic row must name one of
+config.SEMANTIC_BACKBONES at exactly its revision (since 2026-10-09: SigLIP 2
+and Community Forensics, so switching content detector is an audited
+activation and switching back is one rollback); a frequency row must name
+SPAI's pinned weights digest. Uploads replace only a final head (SigLIP 2 and
+SPAI; Community Forensics rows carry none), or the fusion configuration.
 """
 
 from __future__ import annotations
@@ -158,9 +160,17 @@ def canonical_sha256(payload: dict) -> str:
 _semantic_weights_digest: dict[str, str | None] = {}
 
 
-def semantic_weights_digest() -> str | None:
-    """SHA-256 of the cached model.safetensors at the pinned revision (memoised)."""
-    key = config.DETECTOR_PRIMARY_REVISION
+def semantic_weights_digest(checkpoint: str | None = None) -> str | None:
+    """SHA-256 of the cached model.safetensors at a pinned revision (memoised).
+
+    Community Forensics' digest is pinned in config and verified at load; for
+    a Hugging Face classifier it is read from the local cache (None if absent).
+    """
+    checkpoint = checkpoint or config.DETECTOR_PRIMARY
+    spec = config.SEMANTIC_BACKBONES[checkpoint]
+    if spec.get("weights_digest"):
+        return spec["weights_digest"]
+    key = spec["revision"]
     if key not in _semantic_weights_digest:
         digest = None
         try:
@@ -168,7 +178,7 @@ def semantic_weights_digest() -> str | None:
 
             from app.m2_analysis.heads import file_sha256
 
-            path = try_to_load_from_cache(config.DETECTOR_PRIMARY, "model.safetensors", revision=key)
+            path = try_to_load_from_cache(checkpoint, "model.safetensors", revision=key)
             if isinstance(path, str):
                 digest = file_sha256(path)
         except Exception:  # noqa: BLE001 - no cache yet: recorded as unknown, never invented
@@ -179,14 +189,24 @@ def semantic_weights_digest() -> str | None:
 
 BASELINE_REFERENCE = (
     "Published checkpoint, unmodified (no training). Evaluated in this project only as part of "
-    "the full system: ml/evaluation/RESULTS.md, 2026-10-01 held-out test, at fusion w=0.25, "
-    "tau=0.7558 - metrics quoted there describe that model + fusion configuration together."
+    "the full system (ml/evaluation/RESULTS.md) - metrics quoted there describe a model + fusion "
+    "configuration together, never the checkpoint alone."
 )
+
+
+def semantic_row_spec(checkpoint: str, head: dict | None = None) -> dict:
+    """The D3 row fields for one pinned content detector (published head unless ``head``)."""
+    spec = config.SEMANTIC_BACKBONES[checkpoint]
+    rev = spec["revision"]
+    return dict(
+        model_name=checkpoint, model_version=f"rev-{rev[:12]}",
+        artifact_ref=f"hf://{checkpoint}@{rev}", artifact_sha256=semantic_weights_digest(checkpoint),
+        hyperparameters={"checkpoint": checkpoint, "revision": rev, "head": head},
+        training_reference=BASELINE_REFERENCE)
 
 
 def baseline_rows() -> dict[str, dict]:
     """The D3 rows that describe the published baseline, one per type."""
-    rev = config.DETECTOR_PRIMARY_REVISION
     digest = config.DETECTOR_FREQUENCY_WEIGHTS_DIGEST
     resize = "native" if config.DETECTOR_FREQUENCY_RESIZE_TO is None else f"resize{config.DETECTOR_FREQUENCY_RESIZE_TO}"
     sign = "pos" if config.DETECTOR_FREQUENCY_AI_IS_POSITIVE else "neg"
@@ -196,12 +216,7 @@ def baseline_rows() -> dict[str, dict]:
         "temperature": config.CALIBRATION_TEMPERATURE,
     }
     rows = {
-        TYPE_SEMANTIC: dict(
-            model_name=config.DETECTOR_PRIMARY, model_version=f"rev-{rev[:12]}",
-            artifact_ref=f"hf://{config.DETECTOR_PRIMARY}@{rev}",
-            artifact_sha256=semantic_weights_digest(),
-            hyperparameters={"checkpoint": config.DETECTOR_PRIMARY, "revision": rev, "head": None},
-            training_reference=BASELINE_REFERENCE),
+        TYPE_SEMANTIC: semantic_row_spec(config.DETECTOR_PRIMARY),
         TYPE_FUSION: dict(
             model_name=f"{config.FUSION_STRATEGY} fusion",
             model_version=f"w{config.FUSION_WEIGHT}-tau{config.FUSION_TAU}-T{config.CALIBRATION_TEMPERATURE}",
@@ -227,8 +242,14 @@ def baseline_rows() -> dict[str, dict]:
 # --------------------------------------------------------------------------
 
 def _valid_semantic(h: dict | None) -> bool:
-    return bool(h) and h.get("checkpoint") == config.DETECTOR_PRIMARY \
-        and h.get("revision") == config.DETECTOR_PRIMARY_REVISION and "head" in h
+    """One of the pinned content detectors at exactly its revision; an uploaded
+    head only on a backbone that supports one (a Hugging Face classifier)."""
+    if not h or "head" not in h:
+        return False
+    spec = config.SEMANTIC_BACKBONES.get(h.get("checkpoint"))
+    if spec is None or h.get("revision") != spec["revision"]:
+        return False
+    return h["head"] is None or spec["kind"] == "hf-classifier"
 
 
 def _valid_frequency(h: dict | None) -> bool:
@@ -364,7 +385,7 @@ def canary(row) -> dict:
             h = row.hyperparameters
             if row.model_type == TYPE_SEMANTIC:
                 head = heads.semantic_head(row.model_id, h.get("head"))
-                score = detectors.primary.score(str(path), head=head).score
+                score = detectors.semantic(h["checkpoint"]).score(str(path), head=head).score
             else:
                 head = heads.frequency_head(row.model_id, h.get("head"))
                 score = frequency_detector.frequency.score(

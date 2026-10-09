@@ -74,7 +74,10 @@ def build_relevance_map(
     if bundle.attention is not None:
         attention_arr = np.asarray(bundle.attention, dtype=np.float32)
         raw_relevance = compute_attention_rollout(attention_arr, pooling=bundle.pooling)
-        technique = "attention-rollout"
+        # Community Forensics (CLS-pooled ViT on a centre crop) gets its own
+        # technique name so its panel carries its own caption; every other
+        # backbone keeps "attention-rollout" (SigLIP 2's caption).
+        technique = "commfor-attention-rollout" if bundle.backbone == "commfor_vits16" else "attention-rollout"
     elif bundle.patch_embeddings is not None and bundle.head_gradients is not None:
         # Gradient-weighted patch attribution
         patches = np.asarray(bundle.patch_embeddings, dtype=np.float32)
@@ -130,6 +133,13 @@ CAPTIONS: dict[str, str] = {
         "It is not a measurement of what caused the verdict, not a map of where an image "
         "was edited or generated, and it does not say whether a region pushed the verdict "
         "towards Real or towards AI Generated."
+    ),
+    "commfor-attention-rollout": (
+        "Attention rollout of the content detector (Community Forensics ViT) - an "
+        "attention-based proxy for which parts of its 384x384 centre crop the token it "
+        "classifies from attended to. It is not a measurement of what caused the verdict, "
+        "not a map of where an image was edited or generated, and it does not say whether "
+        "a region pushed the verdict towards Real or towards AI Generated."
     ),
     "spai-patch-spectrum": (
         "Average frequency content of the 224x224 patches the frequency detector (SPAI) "

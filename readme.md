@@ -3,9 +3,10 @@
 Detects AI-generated images by running **two independently pretrained models**
 over the same picture and fusing their verdicts:
 
-- a **semantic** branch — [`prithivMLmods/AIorNot-SigLIP2`](https://huggingface.co/prithivMLmods/AIorNot-SigLIP2),
-  a SigLIP 2 fine-tune, which asks *what is this a picture of, and does it look
-  like the AI images it was trained on*;
+- a **content** branch — [Community Forensics](https://github.com/JeongsooP/Community-Forensics)
+  ([`OwensLab/commfor-model-384`](https://huggingface.co/OwensLab/commfor-model-384),
+  CVPR 2025, MIT), a ViT trained by its authors on images from ~4,800
+  generators, which asks *does what this picture shows look generated*;
 - a **frequency-domain** branch — [SPAI](https://github.com/mever-team/spai)
   (CVPR 2025), which ignores content and asks *does this pixel grid carry the
   spectral signature of a synthesis pipeline*.
@@ -13,6 +14,12 @@ over the same picture and fusing their verdicts:
 A generator that defeats one kind of evidence has no particular reason to
 have defeated the other. The measurements below show where that holds and
 where it does not.
+
+Until 2026-10-09 the content branch was a SigLIP 2 fine-tune
+([`prithivMLmods/AIorNot-SigLIP2`](https://huggingface.co/prithivMLmods/AIorNot-SigLIP2)).
+On 2025 generators it could barely separate AI from real (AUC 0.53), so it was
+replaced after a measured comparison. It remains installed and pinned; an
+administrator can switch back with one rollback in *Admin → Models*.
 
 > **This project never trains, fine-tunes or retrains a model.** Every score
 > comes from a third-party checkpoint used exactly as published. Where the
@@ -35,7 +42,7 @@ where it does not.
 | Node.js | 20 or newer, for the React front end |
 | Docker Desktop | PostgreSQL 16 and the Caddy HTTPS proxy run in containers |
 | GPU (optional) | An NVIDIA card with CUDA 12.6 drivers. About 25× faster than the CPU; developed on an RTX 4050 (6 GB). |
-| Disk | About 2 GB for model weights (SPAI 560 MB, SigLIP 2 about 370 MB) |
+| Disk | About 2 GB for model weights (SPAI 560 MB, SigLIP 2 about 370 MB, Community Forensics 87 MB) |
 
 The commands below are written for **Windows PowerShell**, the development
 platform. On Linux or macOS, use `source .venv/bin/activate` and `cp`.
@@ -77,8 +84,10 @@ The converter:
 - writes `storage/models/spai.safetensors` and prints its digest.
 
 The server then loads that file **strictly** (all 324 weights) and checks it
-against the pinned digest. SigLIP 2 downloads itself from Hugging Face the
-first time the server starts.
+against the pinned digest. Community Forensics (87 MB) and SigLIP 2 download
+themselves from Hugging Face at their pinned revisions the first time they are
+needed; Community Forensics is loaded only if its SHA-256 matches the pinned
+value.
 
 **4. Configuration.**
 
@@ -306,8 +315,8 @@ The whole system on one machine. Set up as above, then:
 4. **Analyse an image** (drag and drop or choose a file; JPG/PNG, at most
    10 MB). Show:
    - the verdict, the confidence and its band;
-   - the three scores: semantic, frequency and fused;
-   - the two explanation panels: the SigLIP 2 attention rollout and the SPAI
+   - the three scores: content, frequency and fused;
+   - the two explanation panels: the content detector's attention rollout and the SPAI
      patch spectrum;
    - **PDF report**.
 
@@ -338,36 +347,54 @@ The whole system on one machine. Set up as above, then:
 
 ## What it measures, honestly
 
-Benchmarked on **Synthbuster** (9 generators) against **RAISE-1k** camera
-originals: 99 images per class, scene-paired, with 95 % intervals. The fusion
-weights are equal (w = 0.5) and the threshold (τ = 0.6665) was chosen on a
-**separate validation split** that shares no scene with this one, so these
-are held-out figures:
+The fusion weight (0.55 on the content branch) and the threshold (τ = 0.4524)
+were chosen on a **selection set** (698 real / 697 generated, from 2025 and
+2022–23 generators) by one rule: the lowest τ that keeps false alarms on real
+photographs at or below 10 %, then the weight that catches the most generated
+images. Both test sets below were **never used for any choice**. 95 % intervals.
 
-| branch | accuracy | recall | false positives on real | AUC |
+**2025 generators** - AIGenImages2026 evaluation split: 559 images from 19
+text-to-image models released in 2025, each paired with a real photograph of
+similar content:
+
+| configuration | accuracy | recall | false positives on real | AUC |
 |---|---|---|---|---|
-| SigLIP 2 | 0.672 [0.60, 0.73] | 0.475 | 0.131 | 0.728 [0.66, 0.80] |
-| SPAI | 0.884 [0.83, 0.92] | 0.909 | 0.141 | **0.967 [0.95, 0.98]** |
-| **fused (what the system returns)** | 0.783 [0.72, 0.83] | 0.657 | **0.091 [0.05, 0.16]** | 0.928 [0.89, 0.96] |
+| **Community Forensics + SPAI (what the system returns)** | **0.798 [0.77, 0.82]** | 0.626 | **0.030 [0.02, 0.05]** | **0.895 [0.88, 0.91]** |
+| SigLIP 2 + SPAI (until 2026-10-09) | 0.666 [0.64, 0.69] | 0.476 | 0.143 | 0.714 [0.68, 0.74] |
+| SPAI alone | 0.664 | 0.411 | 0.084 | 0.763 |
 
-**The claim this supports, and no more:** *detection of whole-image synthesis
-from 2022–23 generators versus pristine Nikon RAW-derived TIFFs, 99 images per
-class.* It is not "the accuracy of the system".
+**2022–23 generators** - Synthbuster (9 generators) against RAISE-1k camera
+originals, 99 per class, scene-paired:
+
+| configuration | accuracy | recall | false positives on real | AUC |
+|---|---|---|---|---|
+| **Community Forensics + SPAI (what the system returns)** | **0.939 [0.90, 0.96]** | 0.949 | **0.071 [0.03, 0.14]** | **0.986 [0.97, 1.00]** |
+| SigLIP 2 + SPAI (until 2026-10-09) | 0.783 [0.72, 0.83] | 0.657 | 0.091 | 0.928 [0.89, 0.96] |
+| SPAI alone | 0.869 | 0.788 | 0.051 | 0.967 |
+
+**The claims these support, and no more:** separation of generated images
+from these 19 (2025) and 9 (2022–23) generators from the real photographs
+they were paired with. They are not "the accuracy of the system".
 
 - **Resizing breaks this system; recompression barely touches it.** JPEG q75
   costs 0.019 AUC. Halving both classes takes SPAI's recall from 0.939 to
   0.616. Never downscale before analysis.
 - **Fusion buys robustness, not peak accuracy.** On pristine images it is
   worse than SPAI alone; under degradation it is better.
-- **The false-positive target is met, at a cost in recall:** 0.091 against a
-  requirement of ≤ 0.10, but only 66 % of generated images are caught. Giving
-  the stronger frequency detector more weight (w = 0.25, τ = 0.7558) caught
-  84 % at 0.111 false positives; equal weights were chosen instead.
+- **The false-positive target is met on both test sets** (0.030 and 0.071
+  against ≤ 0.10).
+- **Some 2025 generators still get through most of the time:** FLUX.2 pro
+  (23 % caught), FLUX.2 max (17 %), FLUX 1.1 pro (26 %), GPT-image-1 (29 %).
+- **Synthbuster is not independent for either detector.** It is one of SPAI's
+  own published test sets, and Community Forensics was trained on thousands of
+  generators that may include Synthbuster's. AIGenImages2026 comes from SPAI's
+  authors' group; its 2025 generators post-date Community Forensics' training
+  data.
 - **Scores are uncalibrated.** A confidence of 85 % is not an 85 % chance of
   being right; it is a distance from the threshold.
-- **Behaviour on post-2023 generators is unknown.** Real photos that went
-  through a learned enhancer (phone pipelines, upscalers) look synthetic to
-  the frequency branch.
+- **Generators released after these tests are untested.** Real photos that
+  went through a learned enhancer (phone pipelines, upscalers) look synthetic
+  to the frequency branch.
 
 Every control, degradation arm and per-generator figure:
 **[ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md)**.
@@ -379,6 +406,7 @@ backend/
   app/m1_access/     M1 - accounts, sign-in + OTP, throttling, upload validation, storage
   app/m2_analysis/   M2 - the two detectors, fusion, explainability, model registry
     vendor/spai/     SPAI's model code as published (Apache-2.0) + LICENSE + NOTICE
+    vendor/commfor/  Community Forensics' model class (MIT) + LICENSE + NOTICE
   app/m3_results/    M3 - results, history, PDF reports, administration, audit log
   app/shared/        config, database, proxy trust, the C1-C5 module contracts
   migrations/        Alembic - the schema

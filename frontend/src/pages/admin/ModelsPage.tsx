@@ -16,7 +16,8 @@ const UPLOAD_RULES: Record<ModelType, { ext: string; maxBytes: number; hint: str
   'fusion-configuration': { ext: '.json', maxBytes: 16 * 1024,
     hint: 'JSON with exactly strategy ("weighted_average"), weight_semantic, tau, temperature. Max 16 KB.' },
   'semantic-classifier': { ext: '.safetensors', maxBytes: 1024 * 1024,
-    hint: 'safetensors with exactly classifier.weight [2, 768] and classifier.bias [2]. Max 1 MB.' },
+    hint: 'A SigLIP 2 classifier head: safetensors with exactly classifier.weight [2, 768] and classifier.bias [2]. '
+      + 'Activating it makes SigLIP 2 the content detector (Community Forensics takes no uploaded head). Max 1 MB.' },
   'frequency-artifact-classifier': { ext: '.safetensors', maxBytes: 64 * 1024 * 1024,
     hint: "safetensors with exactly SPAI's cls_head tensors. Max 64 MB." },
 };
@@ -38,8 +39,9 @@ function describeConfig(row: ModelRow): string {
   if (row.model_type === 'fusion-configuration') {
     return `w(semantic) = ${c.weight_semantic}, τ = ${c.tau}, temperature = ${c.temperature}`;
   }
-  if (row.head) return `uploaded head, sha256 ${row.head.sha256.slice(0, 12)}…`;
-  return 'published head';
+  const backbone = row.model_type === 'semantic-classifier' && typeof c.checkpoint === 'string' ? `${c.checkpoint} · ` : '';
+  if (row.head) return `${backbone}uploaded head, sha256 ${row.head.sha256.slice(0, 12)}…`;
+  return `${backbone}published head`;
 }
 
 const fmt = (v: number | undefined) => (v == null ? '—' : v.toFixed(3));

@@ -6,8 +6,16 @@ import type { ResultView, Visualization, XaiStatus } from '../api/types';
 import { AuthImage } from '../components/AuthImage';
 import { ErrorNotice, Notice } from '../components/Feedback';
 
+/** Display name of the content detector that produced THIS result (its D3 row). */
+function contentDetectorName(result: ResultView): string {
+  const name = result.models?.semantic?.model_name ?? '';
+  if (/commfor/i.test(name)) return 'Community Forensics';
+  if (/siglip/i.test(name)) return 'SigLIP 2';
+  return name || 'Content detector';
+}
+
 const PANEL_LABEL: Record<Visualization['branch'], string> = {
-  semantic: 'SigLIP 2 attention rollout',
+  semantic: 'Content detector attention rollout',
   frequency: 'SPAI patch spectrum',
 };
 
@@ -78,15 +86,15 @@ const ScoreCard: React.FC<{ icon: React.ReactNode; title: string; value: string 
   </div>
 );
 
-const Panel: React.FC<{ v: Visualization }> = ({ v }) => {
+const Panel: React.FC<{ v: Visualization; label?: string }> = ({ v, label = PANEL_LABEL[v.branch] }) => {
   const tipId = `panel-tip-${v.branch}`;
   return (
     <figure className="space-y-2">
       <figcaption className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-        {PANEL_LABEL[v.branch]}
+        {label}
         {/* The backend's caption, rendered as text, exactly as returned - shown on hover, focus or tap. */}
         <span className="group relative inline-flex">
-          <button type="button" aria-label={`About the ${PANEL_LABEL[v.branch]}`} aria-describedby={tipId}
+          <button type="button" aria-label={`About the ${label}`} aria-describedby={tipId}
                   className="rounded-full text-muted-foreground hover:text-primary focus:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <Info className="w-4 h-4" />
           </button>
@@ -96,7 +104,7 @@ const Panel: React.FC<{ v: Visualization }> = ({ v }) => {
           </span>
         </span>
       </figcaption>
-      <AuthImage src={v.visualization_url} alt={PANEL_LABEL[v.branch]}
+      <AuthImage src={v.visualization_url} alt={label}
                  className="w-full rounded-xl border border-border object-contain bg-card min-h-40" />
     </figure>
   );
@@ -187,7 +195,7 @@ export const ResultsPage: React.FC = () => {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <ScoreCard icon={<Brain className="w-7 h-7" />} title="Semantic detector (SigLIP 2)"
+        <ScoreCard icon={<Brain className="w-7 h-7" />} title={`Content detector (${contentDetectorName(result)})`}
                    value={pct(result.semantic_score)} />
         <ScoreCard icon={<Activity className="w-7 h-7" />} title="Frequency detector (SPAI)"
                    value={result.frequency_score === null ? 'not measured' : pct(result.frequency_score)} />
@@ -212,7 +220,10 @@ export const ResultsPage: React.FC = () => {
             </Notice>
           )}
         </figure>
-        {ordered.map((v) => <Panel key={v.branch} v={v} />)}
+        {ordered.map((v) => (
+          <Panel key={v.branch} v={v}
+                 label={v.branch === 'semantic' ? `${contentDetectorName(result)} attention rollout` : undefined} />
+        ))}
       </div>
       {xai && <Notice tone={xai.tone}>{xai.text}</Notice>}
 

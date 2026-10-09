@@ -2,8 +2,9 @@
 
 Two pieces of the Contract C2 ActivationBundle are assembled here:
 
-* the semantic branch's attention, recomputed from what the SigLIP detector
-  captured during its normal scoring pass (``detectors.attention_maps``);
+* the content branch's attention, recomputed from what the active content
+  detector (SigLIP 2 or Community Forensics) captured during its normal
+  scoring pass (``attention_maps`` on either detector class);
 * the **frequency panel's spectrum**, defined to be what the frequency
   detector actually looks at - not an illustration of it.
 

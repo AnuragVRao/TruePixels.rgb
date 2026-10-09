@@ -131,7 +131,7 @@ export interface Activation {
 }
 
 export const MODEL_TYPE_LABEL: Record<ModelType, string> = {
-  'semantic-classifier': 'Semantic head (SigLIP 2)',
+  'semantic-classifier': 'Content detector',
   'frequency-artifact-classifier': 'Frequency head (SPAI)',
   'fusion-configuration': 'Fusion configuration',
 };

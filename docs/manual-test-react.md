@@ -21,7 +21,7 @@ backend terminal (with no SMTP configured, OTP codes are printed there).
 | 5 | OTP right code | Enter the console code | Signed in, back on `/` (or the `next` page) |
 | 6 | Upload validation | Choose a `.gif`, a >10 MB file, a 32x32 PNG | Each is refused before upload with a specific message |
 | 7 | Analyse (xai on) | Choose a normal JPG/PNG, keep "Include explainability" ticked, Analyse | "Uploading…", then "Analysing… Ns" with a live timer; then the results page |
-| 8 | Results | On the results page | Verdict, confidence %, band; three branch scores; original image; "SigLIP 2 attention rollout" and "SPAI patch spectrum" panels with the backend's captions as text; model rows listed |
+| 8 | Results | On the results page | Verdict, confidence %, band; three branch scores; original image; "Community Forensics attention rollout" (inside an outlined centre square) and "SPAI patch spectrum" panels, each with an ⓘ caption with the backend's captions as text; model rows listed |
 | 9 | PDF | Click "PDF report" | A PDF downloads (fetched with the Authorization header; no token in the URL) |
 | 10 | Small image | Analyse a 160x160 PNG | Results show "not measured" for the frequency score, the semantic-only warning, and the partial-explainability note |
 | 11 | xai off | Untick explainability, Analyse | Results show no panels and "No explainability panels were requested" |

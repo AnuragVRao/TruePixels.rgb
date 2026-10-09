@@ -82,6 +82,32 @@ def _register(admin, model_type, name, version, data: bytes, **form):
     return client.post("/api/v1/models", headers=admin, data=fields, files=files)
 
 
+# Candidate thresholds, chosen (2026-10-09) on the gate reference for the
+# Community Forensics baseline (w 0.55, tau 0.4524: accuracy 0.96, FPR 0.04):
+#   0.56  accuracy 0.94, FPR 0.00 - a moderate change: passes, flips 6 labels (AI -> Real),
+#                                   including small DALL-E images that can be uploaded
+#   0.50  accuracy 0.95           - passes (used where a test needs any active candidate)
+#   0.56 -> 0.63 -> 0.69          - accuracy 0.94 -> 0.90 -> 0.86: each step within 0.05 of
+#                                   the last, the third > 0.08 below the baseline
+MODERATE_TAU = 0.56
+PASSING_TAU = 0.50
+
+
+@pytest.fixture
+def siglip_baseline(monkeypatch):
+    """A test D3 seeded with SigLIP 2 as the published baseline (its fusion
+    operating point w 0.5, tau 0.6665), for the SigLIP-only head-upload paths.
+    Each test starts from an empty D3 (conftest), so the bootstrap reads this."""
+    monkeypatch.setattr(config, "DETECTOR_PRIMARY", config.SEMANTIC_SIGLIP)
+    monkeypatch.setattr(config, "DETECTOR_PRIMARY_REVISION", config.SEMANTIC_SIGLIP_REVISION)
+    monkeypatch.setattr(config, "FUSION_WEIGHT", 0.5)
+    monkeypatch.setattr(config, "FUSION_TAU", 0.6665)
+
+
+def _siglip_head_state() -> dict:
+    return detectors.semantic(config.SEMANTIC_SIGLIP).classifier_state()
+
+
 def _fusion(tau: float, w: float = config.FUSION_WEIGHT, t: float = 1.0) -> bytes:
     return json.dumps({"strategy": "weighted_average", "weight_semantic": w, "tau": tau,
                        "temperature": t}).encode()
@@ -92,17 +118,22 @@ def _activate(admin, model_id, **body):
 
 
 def _flip_image() -> bytes:
-    """A validation-split image whose fused score lies between tau 0.60 and the
-    baseline tau, so moving tau to 0.60 must change its label."""
+    """An uploadable validation-split image whose fused score lies between the
+    baseline tau and MODERATE_TAU, so raising tau to MODERATE_TAU must change
+    its label from AI Generated to Real."""
     ref = gate.load_reference()
     names = [item[0] for item in json.loads(gate.reference_path().with_suffix(".json").read_text())["images"]]
-    fused = config.FUSION_WEIGHT * ref["semantic_scores"] + (1 - config.FUSION_WEIGHT) * ref["frequency_scores"]
-    candidates = [i for i, f in enumerate(fused) if 0.62 <= f < config.FUSION_TAU - 0.01]
-    assert candidates, "no reference image between the two thresholds"
-    with Image.open(REPO / names[candidates[0]]) as handle:
-        buffer = io.BytesIO()
-        handle.convert("RGB").save(buffer, format="PNG")  # lossless; M1 accepts PNG/JPEG only
-    return buffer.getvalue()
+    semantic = ref[f"semantic_scores__{gate.slug(config.DETECTOR_PRIMARY)}"]
+    fused = config.FUSION_WEIGHT * semantic + (1 - config.FUSION_WEIGHT) * ref["frequency_scores"]
+    candidates = [i for i, f in enumerate(fused) if config.FUSION_TAU + 0.005 <= f < MODERATE_TAU - 0.002]
+    from app.m1_access.config import MAX_UPLOAD_SIZE_BYTES as limit
+    for i in candidates:
+        with Image.open(REPO / names[i]) as handle:
+            buffer = io.BytesIO()
+            handle.convert("RGB").save(buffer, format="PNG")  # lossless; M1 accepts PNG/JPEG only
+        if buffer.tell() <= limit:  # the camera TIFFs are too large to upload as PNG
+            return buffer.getvalue()
+    raise AssertionError("no uploadable reference image between the two thresholds")
 
 
 def _predict(headers, payload: bytes) -> dict:
@@ -143,13 +174,15 @@ def test_empty_d3_bootstraps_the_pinned_baseline():
 
 def test_pinned_revision_loads_with_the_network_switched_off():
     code = ("import sys; sys.path.insert(0, 'backend'); "
-            "from app.m2_analysis import detectors; detectors.primary.load(); "
-            "print('ai_index', detectors.primary.ai_index)")
+            "from app.shared import config; from app.m2_analysis import detectors; "
+            "s = detectors.semantic(config.SEMANTIC_SIGLIP); s.load(); "
+            "c = detectors.semantic(config.SEMANTIC_COMMFOR); c.load(); "
+            "print('ai_index', s.ai_index, 'commfor_loaded', c.is_loaded)")
     env = {**__import__("os").environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
     done = subprocess.run([sys.executable, "-c", code], cwd=REPO, env=env, capture_output=True,
                           text=True, timeout=300)
     assert done.returncode == 0, done.stderr[-2000:]
-    assert "ai_index 1" in done.stdout
+    assert "ai_index 1 commfor_loaded True" in done.stdout
 
 
 # --------------------------------------------------------------------------
@@ -162,11 +195,12 @@ def test_moderate_fusion_change_passes_the_gate_and_changes_what_runs():
     payload = _flip_image()
     before = _predict(user, payload)
     baseline_fusion = _active_id(registry.TYPE_FUSION)
-    assert before["model_id"] == baseline_fusion and before["predicted_class"] == "Real"
+    assert before["model_id"] == baseline_fusion and before["predicted_class"] == "AI Generated"
 
-    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "tau0.60", _fusion(0.60),
-                    training_reference="test: tau 0.60 on the same branch models; evaluated on the "
-                                       "sbr_val gate reference only")
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"tau{MODERATE_TAU}",
+                    _fusion(MODERATE_TAU),
+                    training_reference=f"test: tau {MODERATE_TAU} on the same branch models; evaluated on "
+                                       "the sbr_val gate reference only")
     assert reg.status_code == 201, reg.text
     act = _activate(admin, reg.json()["model_id"])
     assert act.status_code == 200, act.text
@@ -177,7 +211,7 @@ def test_moderate_fusion_change_passes_the_gate_and_changes_what_runs():
     after = _predict(user, payload)
     assert after["model_id"] == reg.json()["model_id"] != before["model_id"]
     assert after["fusion_score"] == before["fusion_score"]  # same branches, same fused score
-    assert after["predicted_class"] == "AI Generated"       # different threshold, different label
+    assert after["predicted_class"] == "Real"               # different threshold, different label
     assert _prediction_row(after["prediction_id"]).model_id == reg.json()["model_id"]
 
 
@@ -209,15 +243,14 @@ def test_extreme_fusion_change_is_refused_by_the_gate():
 def test_rollback_restores_the_previous_model_in_one_call():
     _, admin = _user("Admin")
     baseline_fusion = _active_id(registry.TYPE_FUSION)
-    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "tau0.65", _fusion(0.65))
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "tau0.50", _fusion(PASSING_TAU))
     assert _activate(admin, reg.json()["model_id"]).status_code == 200
     assert _active_id(registry.TYPE_FUSION) == reg.json()["model_id"]
     rb = client.post("/api/v1/models/rollback", headers=admin, json={"model_type": registry.TYPE_FUSION})
     assert rb.status_code == 200, rb.text
     assert rb.json()["action"] == "rollback" and _active_id(registry.TYPE_FUSION) == baseline_fusion
-    # The gate is advisory for a rollback: recorded, not enforced. (Here the
-    # baseline scores LOWER than tau 0.65 on the reference sample, which a
-    # blocking gate would have refused - the case that motivated this rule.)
+    # The gate is advisory for a rollback: recorded, not enforced (a rollback
+    # returns to a model that already ran; gating it could block the exit).
     assert rb.json()["gate"]["advisory"] is True and rb.json()["forced"] is False
 
 
@@ -238,11 +271,11 @@ def _perturbed(state: dict, prefix: str, scale: float = 1e-3) -> bytes:
                              .contiguous() for k, v in state.items()})
 
 
-def test_perturbed_semantic_head_registers_activates_and_is_used():
+def test_perturbed_semantic_head_registers_activates_and_is_used(siglip_baseline):
     _, admin = _user("Admin")
     _, user = _user()
-    data = _perturbed(detectors.primary.classifier_state(), heads.SEMANTIC_PREFIX)
-    reg = _register(admin, registry.TYPE_SEMANTIC, config.DETECTOR_PRIMARY, "test-perturbed-head",
+    data = _perturbed(_siglip_head_state(), heads.SEMANTIC_PREFIX)
+    reg = _register(admin, registry.TYPE_SEMANTIC, config.SEMANTIC_SIGLIP, "test-perturbed-head",
                     data, id2label=json.dumps({"0": "Real", "1": "AI"}))
     assert reg.status_code == 201, reg.text
     sha = reg.json()["artifact_sha256"]
@@ -290,7 +323,7 @@ def test_perturbed_spai_head_registers_and_passes_the_canary():
 
 def test_bad_artefacts_are_refused_and_nothing_is_registered():
     _, admin = _user("Admin")
-    state = detectors.primary.classifier_state()
+    state = _siglip_head_state()
     pickle_bytes = io.BytesIO()
     torch.save({k: v.cpu() for k, v in state.items()}, pickle_bytes)
     wrong_shape = save_safetensors({"classifier.weight": torch.zeros(3, 768), "classifier.bias": torch.zeros(3)})
@@ -339,8 +372,8 @@ def test_no_route_serves_model_files():
     from starlette.routing import Mount
 
     _, admin = _user("Admin")
-    data = _perturbed(detectors.primary.classifier_state(), heads.SEMANTIC_PREFIX, scale=2e-3)
-    reg = _register(admin, registry.TYPE_SEMANTIC, config.DETECTOR_PRIMARY, "test-not-served",
+    data = _perturbed(_siglip_head_state(), heads.SEMANTIC_PREFIX, scale=2e-3)
+    reg = _register(admin, registry.TYPE_SEMANTIC, config.SEMANTIC_SIGLIP, "test-not-served",
                     data, id2label=json.dumps({"0": "Real", "1": "AI"}))
     sha, model_id = reg.json()["artifact_sha256"], reg.json()["model_id"]
     assert not [r for r in app.routes if isinstance(r, Mount)]  # no static mounts at all
@@ -379,7 +412,7 @@ def test_concurrent_activations_leave_exactly_one_active_row():
         pytest.skip("row locking and true concurrency: PostgreSQL")
     _, admin = _user("Admin")
     ids = [_register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"race-{t}",
-                     _fusion(t)).json()["model_id"] for t in (0.66, 0.70)]
+                     _fusion(t)).json()["model_id"] for t in (0.50, 0.54)]
     barrier, outcomes = threading.Barrier(2), {}
 
     def worker(model_id):
@@ -419,11 +452,11 @@ def test_baseline_anchor_stops_a_ratchet_of_small_steps():
     """Each step is within 0.05 of the last, but the third drifts more than
     0.08 below the published baseline: refused by the anchor alone."""
     _, admin = _user("Admin")
-    for tau in (0.85, 0.88):
+    for tau in (0.56, 0.63):
         reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"ratchet-{tau}", _fusion(tau))
         act = _activate(admin, reg.json()["model_id"])
         assert act.status_code == 200, act.text
-    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "ratchet-0.94", _fusion(0.94))
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "ratchet-0.69", _fusion(0.69))
     act = _activate(admin, reg.json()["model_id"])
     assert act.status_code == 409, act.text
     reasons = act.json()["gate"]["reasons"]
@@ -444,7 +477,7 @@ def test_rollback_path_refuses_a_never_activated_row():
 
 def test_rollback_canary_stays_blocking(monkeypatch):
     _, admin = _user("Admin")
-    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "rb-canary", _fusion(0.65))
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "rb-canary", _fusion(PASSING_TAU))
     assert _activate(admin, reg.json()["model_id"]).status_code == 200
     current = _active_id(registry.TYPE_FUSION)
 
@@ -459,7 +492,7 @@ def test_rollback_canary_stays_blocking(monkeypatch):
 
 def test_rollback_is_audited_as_rollback_with_metrics():
     admin_id, admin = _user("Admin")
-    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "rb-audit", _fusion(0.65))
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "rb-audit", _fusion(PASSING_TAU))
     assert _activate(admin, reg.json()["model_id"]).status_code == 200
     assert client.post("/api/v1/models/rollback", headers=admin,
                        json={"model_type": registry.TYPE_FUSION}).status_code == 200
@@ -495,9 +528,10 @@ def test_an_in_flight_request_keeps_the_model_set_it_started_with(monkeypatch):
     runs and records the set it resolved at its start; the next one uses the new set."""
     _, admin = _user("Admin")
     _, user = _user()
-    payload = _flip_image()  # fused score between 0.62 and the baseline tau
+    payload = _flip_image()  # fused score between the baseline tau and MODERATE_TAU
     before_fusion = _active_id(registry.TYPE_FUSION)
-    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", "midflight-0.60", _fusion(0.60))
+    reg = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"midflight-{MODERATE_TAU}",
+                    _fusion(MODERATE_TAU))
     new_fusion = reg.json()["model_id"]
 
     real_score = detectors.primary.score
@@ -517,10 +551,10 @@ def test_an_in_flight_request_keeps_the_model_set_it_started_with(monkeypatch):
     monkeypatch.setattr(detectors.primary, "score", score_and_activate)
     in_flight = _predict(user, payload)
     assert fired and _active_id(registry.TYPE_FUSION) == new_fusion
-    assert in_flight["model_id"] == before_fusion and in_flight["predicted_class"] == "Real"
+    assert in_flight["model_id"] == before_fusion and in_flight["predicted_class"] == "AI Generated"
     monkeypatch.setattr(detectors.primary, "score", real_score)
     after = _predict(user, payload)
-    assert after["model_id"] == new_fusion and after["predicted_class"] == "AI Generated"
+    assert after["model_id"] == new_fusion and after["predicted_class"] == "Real"
 
 
 def test_gate_refuses_a_stale_or_unkeyed_reference_cache(monkeypatch):
@@ -542,7 +576,8 @@ def test_gate_preview_reports_the_verdict_without_switching():
     _, user = _user("User")
     baseline_fusion = _active_id(registry.TYPE_FUSION)
     bad = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"prev{next(_n)}", _fusion(0.05))
-    good = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"prev{next(_n)}", _fusion(0.74))
+    good = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"prev{next(_n)}",
+                     _fusion(PASSING_TAU))
     assert bad.status_code == 201 and good.status_code == 201
     db = SessionLocal()
     try:
@@ -597,8 +632,8 @@ def test_gate_preview_is_strictly_read_only():
 
     _, admin = _user("Admin")
     _active_id(registry.TYPE_FUSION)  # registry bootstrapped BEFORE the snapshot
-    head = _register(admin, registry.TYPE_SEMANTIC, config.DETECTOR_PRIMARY, f"ro-{next(_n)}",
-                     _perturbed(detectors.primary.classifier_state(), heads.SEMANTIC_PREFIX, scale=2e-3),
+    head = _register(admin, registry.TYPE_SEMANTIC, config.SEMANTIC_SIGLIP, f"ro-{next(_n)}",
+                     _perturbed(_siglip_head_state(), heads.SEMANTIC_PREFIX, scale=2e-3),
                      id2label=json.dumps({"0": "Real", "1": "AI"}))
     fusion = _register(admin, registry.TYPE_FUSION, "weighted_average fusion", f"ro{next(_n)}", _fusion(0.70))
     assert head.status_code == 201 and fusion.status_code == 201

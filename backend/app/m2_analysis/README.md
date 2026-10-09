@@ -11,9 +11,10 @@ randomly initialised weight anywhere in the inference path. See `CLAUDE.md`
 
 | File | Role |
 |---|---|
-| `detectors.py` | The semantic branch: a pretrained SigLIP 2 fine-tune, plus `resolve_ai_index` |
+| `detectors.py` | The content (semantic) branch: `semantic(checkpoint)` over the pinned set — Community Forensics (in use) and a SigLIP 2 fine-tune — plus `resolve_ai_index` |
 | `frequency_detector.py` | The frequency branch: SPAI, a pretrained spectral detector; digest-verified, strictly loaded |
 | `vendor/spai/` | SPAI's model code, vendored as published (Apache-2.0) — see its `NOTICE` |
+| `vendor/commfor/` | Community Forensics' model class (MIT) — see its `NOTICE` |
 | `pipeline.py` | `run_detection()` — the single entry point and Contract C2 producer |
 | `fusion.py` | Score fusion, thresholding, and the confidence inversion |
 | `frequency.py` | Hand-written spectral **features** for explainability — produces no score |
@@ -45,8 +46,9 @@ plausible numbers.
 **`confidence_score` is not `fusion_score`.** It is confidence in the
 predicted class, measured from the decision threshold (0.5 at tau, rising with the distance from it;
 never below 0.5).
-At the operating point tau = 0.6665 a `fusion_score` of 0.08 means "Real" at 0.88 confidence, and 0.52
-means "Real" at 0.59 - not the 0.48 the old `1 - fusion` rule gave (changes.md 6.21).
+At the operating point tau = 0.4524 a `fusion_score` of 0.08 means "Real" at 0.85 confidence, and 0.30
+means "Real" at 0.64 - never the self-contradicting below-0.5 figures of the old `1 - fusion` rule
+(changes.md 6.21).
 
 M2 owns D3 Models and D4 Predictions (neither built yet). It consumes Contract
 C1 and produces Contract C2; see `docs/contracts/` for the documented C2

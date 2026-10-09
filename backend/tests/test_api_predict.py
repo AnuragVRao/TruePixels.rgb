@@ -150,15 +150,18 @@ def test_upload_returns_a_complete_prediction(sample_png, auth):
 def test_both_branches_load_after_a_prediction(sample_png, auth):
     """After a prediction, /health shows both models resident.
 
-    The primary reports the AI index it resolved from its own labels; the
-    frequency detector reports the sign convention it is running under.
+    The primary (Community Forensics since 2026-10-09, one logit) and the
+    frequency detector both report the sign convention they run under; every
+    pinned content detector is listed.
     """
     predict(upload(sample_png, auth), auth)
 
     detectors = client.get("/health").json()["detectors"]
 
     assert detectors["primary"]["loaded"] is True
-    assert detectors["primary"]["ai_index"] == 1
+    assert detectors["primary"]["checkpoint"] == config.SEMANTIC_COMMFOR
+    assert detectors["primary"]["ai_index"] is None and detectors["primary"]["ai_is_positive"] is True
+    assert set(detectors["content_detectors"]) == {config.SEMANTIC_COMMFOR, config.SEMANTIC_SIGLIP}
     assert detectors["frequency"]["loaded"] is True
     assert detectors["frequency"]["ai_is_positive"] is True
 

@@ -47,6 +47,25 @@ def compute_confidence_band(score: float) -> str:
         return "Low"
 
 
+def _content_detector_name(prediction: Prediction) -> str:
+    """Display name of the content detector that produced THIS prediction (its D3 row)."""
+    from sqlalchemy.orm import object_session
+
+    from app.m2_analysis.models import ModelRegistry
+
+    session = object_session(prediction)
+    row_id = getattr(prediction, "semantic_model_id", None)
+    name = ""
+    if session is not None and row_id is not None:
+        row = session.get(ModelRegistry, row_id)
+        name = row.model_name if row else ""
+    if "commfor" in name.lower():
+        return "Community Forensics"
+    if "siglip" in name.lower():
+        return "SigLIP 2"
+    return name or "content detector"
+
+
 def _tau(prediction: Prediction) -> float | None:
     hyper = getattr(prediction.model, "hyperparameters", None) if prediction.model else None
     tau = (hyper or {}).get("tau") if isinstance(hyper, dict) else None
@@ -206,7 +225,7 @@ def build_pdf_report(
     score_cell = style("Score", fontName="Helvetica-Bold", fontSize=12, leading=15, textColor=INK)
     rows = [
         [Paragraph("Detector", head), Paragraph("Score", head), Paragraph("What it looks at", head)],
-        [Paragraph("Content detector<br/><font size=9 color='#64748b'>SigLIP 2</font>", cell),
+        [Paragraph(f"Content detector<br/><font size=9 color='#64748b'>{_content_detector_name(prediction)}</font>", cell),
          Paragraph(f"{prediction.semantic_score:.3f}", score_cell),
          Paragraph("What the picture shows, compared with AI images it learned from.", cell)],
         [Paragraph("Frequency detector<br/><font size=9 color='#64748b'>SPAI</font>", cell),

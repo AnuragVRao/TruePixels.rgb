@@ -1,14 +1,21 @@
-"""Pretrained Hugging Face image classifiers - the semantic branch.
+"""Pretrained content detectors - the semantic branch.
 
 TruePixels.rgb does not train models. Every score exposed as an AI-generated
 probability comes from a checkpoint someone else trained for exactly that
 task. There is no randomly initialised layer anywhere in this path.
 
-The primary detector is an ordinary Hugging Face image classifier
-(``AutoModelForImageClassification`` + ``AutoImageProcessor``). The frequency
-branch is a different kind of model with its own loader - see
+The content branch is one of a fixed, pinned set (config.SEMANTIC_BACKBONES),
+chosen by the active D3 semantic row - ``semantic(checkpoint)`` returns the
+cached detector:
+
+- ``PretrainedDetector``: an ordinary Hugging Face image classifier
+  (``AutoModelForImageClassification`` + ``AutoImageProcessor``) - SigLIP 2;
+- ``CommForDetector``: Community Forensics, a timm ViT-S/16 with one logit
+  (vendor/commfor), the content detector since 2026-10-09.
+
+The frequency branch is a different kind of model with its own loader - see
 ``frequency_detector.py``; ``BranchResult`` is shared so the pipeline treats
-both alike.
+all of them alike.
 
 ----------------------------------------------------------------------------
 THE LABEL-ORDER HAZARD
@@ -248,6 +255,22 @@ class PretrainedDetector:
         self.load()
         return {k: v.detach() for k, v in self._model.classifier.state_dict().items()}
 
+    # The quality gate's view of a content detector (shared with CommForDetector):
+    # the module whose INPUT is cached per reference image, how its outputs
+    # become P(AI), and what preprocessing the cached inputs depend on.
+    supports_uploaded_heads = True
+
+    def head_module(self):
+        self.load()
+        return self._model.classifier
+
+    def head_probabilities(self, outputs: torch.Tensor, ai_index: int | None = None) -> torch.Tensor:
+        return torch.softmax(outputs, dim=-1)[:, self._ai_index if ai_index is None else ai_index]
+
+    def preprocess_signature(self) -> dict:
+        self.load()
+        return self._processor.to_dict()
+
     def _encoder_layers(self):
         return self._model.vision_model.encoder.layers
 
@@ -299,14 +322,253 @@ class PretrainedDetector:
             self._ai_index = None
 
 
-# Module-level instance, so the weights are shared across all requests.
-primary = PretrainedDetector(config.DETECTOR_PRIMARY, role="primary",
-                             revision=config.DETECTOR_PRIMARY_REVISION)
+class _ExactPatchProjection(torch.nn.Module):
+    """The ViT patch embedding (Conv2d, kernel = stride = 16) computed as
+    unfold + matmul - the same linear map, without cuDNN.
+
+    Why: on CUDA, PyTorch runs convolutions in TF32 by default
+    (torch.backends.cudnn.allow_tf32 = True), and for this model that alone
+    moved a published reference score from 0.7860 to 0.7655 (measured
+    2026-10-09; CPU and the authors' notebook agree on 0.7860). Matmul TF32 is
+    off by default, so this projection reproduces the full-precision result on
+    every device - without touching the process-wide cuDNN flags, which SPAI and
+    SigLIP 2 also run under.
+    """
+
+    def __init__(self, conv: torch.nn.Conv2d) -> None:
+        super().__init__()
+        assert conv.kernel_size == conv.stride and conv.padding == (0, 0) and conv.groups == 1
+        self.kernel = conv.kernel_size
+        self.weight = conv.weight  # shared Parameters: the loaded tensors, unchanged
+        self.bias = conv.bias
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        batch, _, height, width = x.shape
+        kh, kw = self.kernel
+        patches = torch.nn.functional.unfold(x, kernel_size=self.kernel, stride=self.kernel)  # (B, C*kh*kw, N)
+        out = torch.matmul(self.weight.reshape(self.weight.shape[0], -1), patches)  # (B, D, N)
+        if self.bias is not None:
+            out = out + self.bias[None, :, None]
+        return out.reshape(batch, -1, height // kh, width // kw)
+
+
+class CommForDetector:
+    """Community Forensics (Park & Owens, CVPR 2025) as the content branch.
+
+    A timm ViT-S/16 at 384 px with a single-logit head (vendor/commfor). Same
+    interface as PretrainedDetector, so the pipeline, gate and warm-up treat
+    both alike. Loading is fail-closed: the safetensors file at the pinned
+    revision must match the pinned SHA-256, and load_state_dict is strict.
+    There is no id2label; the sign is config's documented convention
+    (SEMANTIC_COMMFOR_AI_IS_POSITIVE), verified by tests/test_commfor.py.
+    """
+
+    supports_uploaded_heads = False
+    # The authors' test transform (dataloader.get_transform(mode="test")).
+    RESIZE, CROP = 440, 384
+    MEAN, STD = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+
+    def __init__(self, checkpoint: str, *, revision: str, weights_digest: str, ai_is_positive: bool,
+                 role: str = "primary") -> None:
+        self.checkpoint = checkpoint
+        self.revision = revision
+        self.weights_digest = weights_digest
+        self.ai_is_positive = ai_is_positive
+        self.role = role
+        self._lock = threading.Lock()
+        self._model = None
+        self._transform = None
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._model is not None
+
+    @property
+    def ai_index(self) -> None:
+        return None  # single logit: see ai_is_positive
+
+    def _weights_path(self) -> str:
+        from huggingface_hub import hf_hub_download
+
+        try:
+            return hf_hub_download(self.checkpoint, "model.safetensors", revision=self.revision,
+                                   local_files_only=True)
+        except Exception:  # noqa: BLE001 - not cached yet: fetch the pinned revision once
+            return hf_hub_download(self.checkpoint, "model.safetensors", revision=self.revision)
+
+    def load(self) -> None:
+        if self._model is not None:
+            return
+        with self._lock:
+            if self._model is not None:
+                return
+            import hashlib
+
+            from safetensors.torch import load_file
+            from torchvision import transforms as T
+
+            from app.m2_analysis.vendor.commfor.models import ViTClassifier
+
+            try:
+                path = self._weights_path()
+                digest = hashlib.sha256()
+                with open(path, "rb") as handle:
+                    for block in iter(lambda: handle.read(1 << 20), b""):
+                        digest.update(block)
+                if digest.hexdigest() != self.weights_digest:
+                    raise ModelUnavailableError(
+                        f"{self.checkpoint}@{self.revision[:12]} weights digest {digest.hexdigest()} "
+                        f"!= pinned {self.weights_digest}; refusing to load")
+                model = ViTClassifier(model_size="small", input_size=384, patch_size=16)
+                # The checkpoint's keys are the wrapper's ("vit.*"); strict=True
+                # refuses any missing or unexpected tensor.
+                model.load_state_dict(load_file(path), strict=True)
+            except ModelUnavailableError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                raise ModelUnavailableError(
+                    f"could not load the {self.role} detector {self.checkpoint!r}: {exc}") from exc
+            model.eval()
+            # Exact patch projection (no cuDNN TF32) - see _ExactPatchProjection.
+            model.vit.patch_embed.proj = _ExactPatchProjection(model.vit.patch_embed.proj)
+            self._transform = T.Compose([
+                T.Resize(self.RESIZE),
+                T.CenterCrop(self.CROP),
+                T.ToTensor(),
+                T.Normalize(mean=self.MEAN, std=self.STD),
+            ])
+            self._model = model.to(config.DEVICE)
+
+    def _probability(self, logits: torch.Tensor) -> torch.Tensor:
+        p = torch.sigmoid(logits.reshape(-1))
+        return p if self.ai_is_positive else 1.0 - p
+
+    def score(self, image_path: str, *, capture: bool = False, head=None) -> BranchResult:
+        """P(AI Generated) for an image on disk, by the authors' test transform."""
+        if head is not None:
+            raise InferenceError("uploaded heads are not supported for the Community Forensics detector")
+        self.load()
+        try:
+            with Image.open(image_path) as handle:
+                image_size = handle.size
+                x = self._transform(handle.convert("RGB")).unsqueeze(0)
+        except Exception as exc:  # noqa: BLE001
+            raise InferenceError(f"{self.role} detector could not preprocess {image_path!r}: {exc}") from exc
+        x = x.to(config.DEVICE)
+        captured: list[torch.Tensor] = []
+        handles = self._attach_attention_capture(captured) if capture else []
+        try:
+            with torch.inference_mode():
+                probability = self._probability(self._model(x))
+        finally:
+            for handle in handles:
+                handle.remove()
+        return BranchResult(score=float(probability[0].item()),
+                            activations={"hidden_states": captured, "image_size": image_size}
+                            if capture else None)
+
+    def crop_region(self, width: int, height: int) -> tuple[float, float, float, float]:
+        """The centre crop the model sees, as fractions of the original image:
+        shortest side scaled to RESIZE, then a CROP x CROP centre square."""
+        side = self.CROP * min(width, height) / self.RESIZE  # crop side in original pixels
+        fx, fy = min(1.0, side / width), min(1.0, side / height)
+        return ((1 - fx) / 2, (1 - fy) / 2, (1 + fx) / 2, (1 + fy) / 2)
+
+    # Gate interface (see PretrainedDetector) -----------------------------
+    def head_module(self):
+        self.load()
+        return self._model.vit.head
+
+    def head_probabilities(self, outputs: torch.Tensor, ai_index: int | None = None) -> torch.Tensor:
+        return self._probability(outputs)
+
+    def preprocess_signature(self) -> dict:
+        return {"transform": "Resize(440) -> CenterCrop(384) -> ToTensor -> Normalize",
+                "mean": list(self.MEAN), "std": list(self.STD), "weights_digest": self.weights_digest,
+                "ai_is_positive": self.ai_is_positive}
+
+    # Explainability -------------------------------------------------------
+    # Same passive scheme as SigLIP: a forward PRE-hook on each block's attn
+    # records its input (norm1(x), shape (1, 577, 384)); the weights are
+    # recomputed afterwards with the module's own qkv, as timm's non-fused
+    # path does: softmax((q * scale) @ k^T). The score is untouched.
+    def _blocks(self):
+        return self._model.vit.blocks
+
+    def _attach_attention_capture(self, captured: list) -> list:
+        def record(_module, args):
+            captured.append(args[0].detach())
+
+        return [block.attn.register_forward_pre_hook(record) for block in self._blocks()]
+
+    def attention_maps(self, activations: dict) -> dict:
+        captured: list[torch.Tensor] = activations["hidden_states"]
+        blocks = self._blocks()
+        if len(captured) != len(blocks):
+            raise InferenceError(f"attention capture saw {len(captured)} of {len(blocks)} layers")
+        maps = []
+        with torch.inference_mode():
+            for block, hidden in zip(blocks, captured):
+                attn = block.attn
+                batch, tokens, _ = hidden.shape
+                qkv = attn.qkv(hidden).reshape(batch, tokens, 3, attn.num_heads, attn.head_dim).permute(2, 0, 3, 1, 4)
+                q, k = attn.q_norm(qkv[0]), attn.k_norm(qkv[1])
+                weights = torch.softmax(torch.matmul(q * attn.scale, k.transpose(-2, -1)),
+                                        dim=-1, dtype=torch.float32)
+                maps.append(weights[0])
+        stacked = torch.stack(maps).cpu().numpy()  # (layers, heads, 1 + patches, 1 + patches)
+        prefix = int(getattr(self._model.vit, "num_prefix_tokens", 1))
+        side = int(round((stacked.shape[-1] - prefix) ** 0.5))
+        if prefix != 1 or side * side != stacked.shape[-1] - prefix:
+            raise InferenceError(f"{stacked.shape[-1]} tokens do not form CLS + a square patch grid")
+        return {
+            "attention": stacked,
+            "patch_grid": (side, side),
+            # global_pool="token": the head reads the CLS token only.
+            "pooling": "cls",
+            "backbone": "commfor_vits16",
+            "region": self.crop_region(*activations["image_size"]) if activations.get("image_size") else None,
+        }
+
+    def reset_cache(self) -> None:
+        with self._lock:
+            self._model = None
+            self._transform = None
+
+
+def _build(checkpoint: str):
+    spec = config.SEMANTIC_BACKBONES.get(checkpoint)
+    if spec is None:
+        raise ModelUnavailableError(f"{checkpoint!r} is not one of the pinned content detectors "
+                                    f"{sorted(config.SEMANTIC_BACKBONES)}")
+    if spec["kind"] == "commfor-vit":
+        return CommForDetector(checkpoint, revision=spec["revision"], weights_digest=spec["weights_digest"],
+                               ai_is_positive=spec["ai_is_positive"])
+    return PretrainedDetector(checkpoint, role="primary", revision=spec["revision"])
+
+
+# One cached instance per pinned content detector, created on first use, so the
+# weights are shared across all requests. Which one RUNS is decided by the
+# active D3 semantic row: callers use semantic(models.primary.checkpoint).
+_SEMANTIC: dict[str, object] = {}
+_SEMANTIC_LOCK = threading.Lock()
+
+
+def semantic(checkpoint: str):
+    with _SEMANTIC_LOCK:
+        if checkpoint not in _SEMANTIC:
+            _SEMANTIC[checkpoint] = _build(checkpoint)
+        return _SEMANTIC[checkpoint]
+
+
+# The published BASELINE content detector (config.DETECTOR_PRIMARY).
+primary = semantic(config.DETECTOR_PRIMARY)
 
 
 def reset_cache() -> None:
-    """Drop every cached detector, this branch and the frequency branch alike."""
+    """Drop every cached detector, both content detectors and the frequency branch."""
     from app.m2_analysis import frequency_detector
 
-    primary.reset_cache()
+    for detector in list(_SEMANTIC.values()):
+        detector.reset_cache()
     frequency_detector.frequency.reset_cache()

@@ -103,8 +103,11 @@ def semantic_head(model_id: int, spec: dict | None) -> LoadedHead | None:
 
     with _lock:
         if model_id not in _cache:
-            detectors.primary.load()
-            module = build_semantic_head(_tensors(spec), detectors.primary._model.classifier)
+            # Uploaded semantic heads are SigLIP 2 classifier heads (the only
+            # pinned content detector with a swappable head; registry._valid_semantic).
+            siglip = detectors.semantic(config.SEMANTIC_SIGLIP)
+            siglip.load()
+            module = build_semantic_head(_tensors(spec), siglip._model.classifier)
             ai_index = detectors.resolve_ai_index({int(k): v for k, v in spec["id2label"].items()})
             loaded = LoadedHead(model_id, module, ai_index, spec["sha256"])
             if _no_store.get():

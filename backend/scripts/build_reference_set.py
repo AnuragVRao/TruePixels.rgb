@@ -5,9 +5,10 @@
 
 Takes the first ``--per-class`` images of each class from
 ``ml/datasets/sbr_val`` (validation split, scenes 99-296 - never the
-held-out test set ``synthbuster_raise``), runs both PUBLISHED branches once,
-and stores per image: label, live semantic and frequency scores, and the
-exact inputs of each branch's final head (captured with forward pre-hooks).
+held-out test set ``synthbuster_raise``), runs EVERY pinned content detector
+(config.SEMANTIC_BACKBONES) and SPAI once, and stores per image: label, each
+detector's live score, and the exact inputs of each final head (captured with
+forward pre-hooks).
 Writes storage/models/reference/<file named by backbone revision + weights
 digest>.npz (gitignored), plus a .json manifest listing the images.
 
@@ -30,6 +31,7 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
 from app.m2_analysis import detectors, frequency_detector, gate  # noqa: E402
+from app.shared import config  # noqa: E402
 
 VAL = REPO / "ml" / "datasets" / "sbr_val"
 SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff"}
@@ -47,15 +49,18 @@ def main() -> int:
     if not items:
         raise SystemExit(f"no images under {VAL}")
 
-    detectors.primary.load()
+    content = {checkpoint: detectors.semantic(checkpoint) for checkpoint in sorted(config.SEMANTIC_BACKBONES)}
+    for detector in content.values():
+        detector.load()
     frequency_detector.frequency.load()
     grabbed: dict[str, torch.Tensor] = {}
-    hooks = [
-        detectors.primary._model.classifier.register_forward_pre_hook(
-            lambda _m, inputs: grabbed.__setitem__("semantic", inputs[0].detach().float().cpu())),
-        frequency_detector.frequency._model.cls_head.register_forward_pre_hook(
-            lambda _m, inputs: grabbed.__setitem__("frequency", inputs[0].detach().float().cpu())),
-    ]
+
+    def grab(key):
+        return lambda _m, inputs: grabbed.__setitem__(key, inputs[0].detach().float().cpu())
+
+    hooks = [detector.head_module().register_forward_pre_hook(grab(checkpoint))
+             for checkpoint, detector in content.items()]
+    hooks.append(frequency_detector.frequency._model.cls_head.register_forward_pre_hook(grab("frequency")))
     import hashlib
 
     def file_sha256(path: Path) -> str:
@@ -65,20 +70,24 @@ def main() -> int:
                 digest.update(block)
         return digest.hexdigest()
 
-    names, labels, sem_f, freq_f, sem_s, freq_s, hashes = [], [], [], [], [], [], []
+    names, labels, freq_f, freq_s, hashes = [], [], [], [], []
+    sem_f = {c: [] for c in content}
+    sem_s = {c: [] for c in content}
     try:
         for n, (path, label) in enumerate(items, 1):
             grabbed.clear()
-            s = detectors.primary.score(str(path)).score
+            scores = {c: d.score(str(path)).score for c, d in content.items()}
             f = frequency_detector.frequency.score(str(path)).score
             names.append(str(path.relative_to(REPO)))
             hashes.append(file_sha256(path))
             labels.append(label)
-            sem_f.append(grabbed["semantic"][0].numpy())
+            for c in content:
+                sem_f[c].append(grabbed[c][0].numpy())
+                sem_s[c].append(scores[c])
             freq_f.append(grabbed["frequency"][0].numpy())
-            sem_s.append(s)
             freq_s.append(f)
-            print(f"  [{n}/{len(items)}] {label} sem={s:.4f} freq={f:.4f} {path.name}")
+            shown = " ".join(f"{c.split('/')[-1]}={v:.4f}" for c, v in scores.items())
+            print(f"  [{n}/{len(items)}] {label} {shown} freq={f:.4f} {path.name}")
     finally:
         for hook in hooks:
             hook.remove()
@@ -89,10 +98,11 @@ def main() -> int:
     key = gate.reference_key(images)
     out = gate.reference_path()
     out.parent.mkdir(parents=True, exist_ok=True)
+    arrays = {f"semantic_features__{gate.slug(c)}": np.stack(sem_f[c]) for c in content}
+    arrays.update({f"semantic_scores__{gate.slug(c)}": np.array(sem_s[c], dtype=np.float64) for c in content})
     np.savez(out, cache_key=np.array(key), labels=np.array(labels, dtype=np.int64),
-             semantic_features=np.stack(sem_f), frequency_features=np.stack(freq_f),
-             semantic_scores=np.array(sem_s, dtype=np.float64),
-             frequency_scores=np.array(freq_s, dtype=np.float64))
+             frequency_features=np.stack(freq_f), frequency_scores=np.array(freq_s, dtype=np.float64),
+             **arrays)
     out.with_suffix(".json").write_text(json.dumps(
         {"split": "sbr_val (validation, scenes 99-296)", "per_class": args.per_class,
          "cache_key": key, "images": images,

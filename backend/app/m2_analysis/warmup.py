@@ -46,6 +46,20 @@ def mark_disabled() -> None:
     STATE.update(status="disabled", branches={})
 
 
+def _active_content_detector():
+    """The content detector the ACTIVE D3 semantic row names (what requests will
+    run); the config baseline if the registry cannot be read yet."""
+    try:
+        from app.m2_analysis import registry
+        from app.shared.db import SessionLocal
+
+        with SessionLocal() as db:
+            return detectors.semantic(registry.active(db).primary.checkpoint)
+    except Exception as exc:  # noqa: BLE001 - warm-up never blocks startup
+        logger.warning("warm-up: could not read the active content detector (%s); warming the baseline", exc)
+        return detectors.primary
+
+
 def warm_up() -> dict[str, float | str]:
     """Load and exercise each enabled branch once. Returns seconds per branch.
 
@@ -59,7 +73,7 @@ def warm_up() -> dict[str, float | str]:
         pixels = np.random.default_rng(0).integers(0, 256, size=(_SIZE, _SIZE, 3), dtype=np.uint8)
         Image.fromarray(pixels, mode="RGB").save(path)
 
-        branches = [("semantic", detectors.primary)]
+        branches = [("semantic", _active_content_detector())]
         if config.DETECTOR_FREQUENCY_ENABLED:
             branches.append(("frequency", frequency_detector.frequency))
 

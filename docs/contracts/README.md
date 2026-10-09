@@ -15,9 +15,9 @@ meanings.
 
 | Field | Status | Meaning now |
 |---|---|---|
-| `semantic_score` | unchanged | P(AI Generated) from the semantic branch, a pretrained SigLIP 2 fine-tune |
+| `semantic_score` | unchanged | P(AI Generated) from the content branch — Community Forensics since 2026-10-09 (a SigLIP 2 fine-tune before) |
 | `frequency_score` | **populated again**, typed `float \| None` | P(AI Generated) from the frequency branch — SPAI, a pretrained spectral detector reading the native-resolution image. Null **only** if that branch is disabled by configuration, in which case fusion is a documented passthrough of `semantic_score`. Never a stand-in number |
-| `fusion_score` | unchanged | `0.5 · semantic + 0.5 · frequency` (PRD2 FR-03 strategy A), P(AI Generated) |
+| `fusion_score` | unchanged | `w · semantic + (1 − w) · frequency` (PRD2 FR-03 strategy A, w = 0.55), P(AI Generated) |
 | `confidence_score` | unchanged | Confidence in the **predicted class** — see the inversion rule below |
 
 `secondary_score` (interim, 2026-09-07 → 2026-09-12) **no longer exists**.
@@ -39,16 +39,17 @@ confidence_score = fusion.confidence_in_prediction(fusion_score, tau, predicted_
 ```
 
 0.5 at the threshold, rising with the distance from it; never below the coin
-flip. At the operating point tau = 0.6665, 0.08 is "Real" at 0.88 and 0.52 is
-"Real" at 0.59, not the self-contradicting 0.48 the original `fusion` /
-`1 - fusion` rule gave (changes.md 6.21, 2026-10-05). M3 is expected to
+flip. At the operating point tau = 0.4524, 0.08 is "Real" at 0.85 and 0.30 is
+"Real" at 0.64, never the self-contradicting below-0.5 figures the original
+`fusion` / `1 - fusion` rule gave (changes.md 6.21, 2026-10-05). M3 is expected to
 assert this independently from its own side.
 
 ## C1 — PreprocessedImage (M1 → M2): unchanged, but one field is now dead
 
 M2 **no longer reads `tensor_ref`**. Both branches preprocess the
-native-resolution `source_reference` themselves: SigLIP 2 with its own
-`AutoImageProcessor`, and SPAI by tiling the full image into 224×224 patches
+native-resolution `source_reference` themselves: the content detector with
+its own transform (Community Forensics: resize + 384 centre crop; SigLIP 2: its
+`AutoImageProcessor`), and SPAI by tiling the full image into 224×224 patches
 that must never come from a resized copy. No single shared tensor can serve
 both.
 

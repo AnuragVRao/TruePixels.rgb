@@ -5,7 +5,9 @@ configuration on a fixed reference sample from the VALIDATION split
 (``sbr_val``, scenes 99-296) - never the held-out test set. The sample is
 cached once by ``backend/scripts/build_reference_set.py``: per image, the
 label, the live branch scores, and the exact inputs of each branch's final
-head (SigLIP's pooled 768-d features, SPAI's 1096-d features). A candidate
+head - for EVERY pinned content detector (SigLIP 2's pooled 768-d features,
+Community Forensics' 384-d CLS features) and for SPAI (1096-d). A candidate
+may therefore name either content detector (2026-10-09). A candidate
 head or fusion configuration is then evaluated on those cached inputs in
 milliseconds - no image is decoded or re-run through a backbone.
 
@@ -62,12 +64,12 @@ def key_inputs(images: list) -> dict:
     """
     from app.m2_analysis import detectors, xai
 
-    detectors.primary.load()
-    processor = detectors.primary._processor.to_dict()
     return {
-        "semantic_checkpoint": config.DETECTOR_PRIMARY,
-        "semantic_revision": config.DETECTOR_PRIMARY_REVISION,
-        "semantic_processor": processor,
+        "semantic_backbones": {
+            checkpoint: {"revision": spec["revision"],
+                         "preprocess": detectors.semantic(checkpoint).preprocess_signature()}
+            for checkpoint, spec in sorted(config.SEMANTIC_BACKBONES.items())
+        },
         "spai_weights_digest": config.DETECTOR_FREQUENCY_WEIGHTS_DIGEST,
         "spai_preprocess": {"resize_to": config.DETECTOR_FREQUENCY_RESIZE_TO,
                             "patch_size": xai.PATCH_SIZE, "patch_stride": xai.PATCH_STRIDE,
@@ -85,10 +87,20 @@ def reference_key(images: list) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def slug(checkpoint: str) -> str:
+    """An npz-safe key for one content detector's arrays."""
+    import re
+
+    return re.sub(r"[^A-Za-z0-9]", "_", checkpoint)
+
+
 def reference_path():
-    rev = config.DETECTOR_PRIMARY_REVISION[:12]
+    import hashlib
+
+    revs = ",".join(f"{c}@{s['revision']}" for c, s in sorted(config.SEMANTIC_BACKBONES.items()))
+    tag = hashlib.sha256(revs.encode()).hexdigest()[:12]
     digest = config.DETECTOR_FREQUENCY_WEIGHTS_DIGEST[:12]
-    return config.MODELS_DIR / "reference" / f"reference_sbr_val_{rev}_{digest}.npz"
+    return config.MODELS_DIR / "reference" / f"reference_sbr_val_{tag}_{digest}.npz"
 
 
 def load_reference() -> dict | None:
@@ -114,18 +126,22 @@ def stale_reason(reference: dict) -> str | None:
     return None
 
 
-def _semantic_probs(features: np.ndarray, head_spec: dict | None, model_id: int | None) -> np.ndarray:
+def _semantic_probs(reference: dict, checkpoint: str, head_spec: dict | None,
+                    model_id: int | None) -> np.ndarray:
+    """P(AI) from one content detector's head applied to its cached head inputs."""
     from app.m2_analysis import detectors, heads
 
-    detectors.primary.load()
+    detector = detectors.semantic(checkpoint)
+    features = reference[f"semantic_features__{slug(checkpoint)}"]
+    ai_index = None
     if head_spec:
         loaded = heads.semantic_head(model_id, head_spec)
         module, ai_index = loaded.module, loaded.ai_index
     else:
-        module, ai_index = detectors.primary._model.classifier, detectors.primary.ai_index
+        module = detector.head_module()
     with torch.inference_mode():
         x = torch.from_numpy(features).to(config.DEVICE, dtype=next(module.parameters()).dtype)
-        probs = torch.softmax(module(x), dim=-1)[:, ai_index]
+        probs = detector.head_probabilities(module(x), ai_index)
     return probs.double().cpu().numpy()
 
 
@@ -162,7 +178,8 @@ def _metrics(semantic: np.ndarray, frequency: np.ndarray, fusion_cfg, labels: np
 
 
 def _branch_probs(model_set, reference) -> tuple[np.ndarray, np.ndarray]:
-    sem = _semantic_probs(reference["semantic_features"], model_set.primary.head, model_set.primary.model_id)
+    sem = _semantic_probs(reference, model_set.primary.checkpoint, model_set.primary.head,
+                          model_set.primary.model_id)
     fr = model_set.frequency_detector
     freq = _frequency_probs(reference["frequency_features"], fr.head, fr.model_id, fr.ai_is_positive)
     return sem, freq
@@ -184,11 +201,18 @@ def evaluate(current_set, candidate_row) -> dict:
         return {"passed": False, "available": False, "reasons": [stale]}
     labels = reference["labels"].astype(int)
 
-    # Integrity: published heads on cached inputs must reproduce the cached live scores.
+    # Integrity: every pinned content detector's published head, and SPAI's, on
+    # the cached inputs must reproduce the cached live scores.
+    missing = [c for c in config.SEMANTIC_BACKBONES if f"semantic_scores__{slug(c)}" not in reference]
+    if missing:
+        return {"passed": False, "available": False,
+                "reasons": [f"reference cache has no scores for {missing}; rebuild it"]}
     published = registry.baseline()
     sem_pub, freq_pub = _branch_probs(published, reference)
-    drift = max(float(np.max(np.abs(sem_pub - reference["semantic_scores"]))),
-                float(np.max(np.abs(freq_pub - reference["frequency_scores"]))))
+    drift = float(np.max(np.abs(freq_pub - reference["frequency_scores"])))
+    for checkpoint in config.SEMANTIC_BACKBONES:
+        cached = reference[f"semantic_scores__{slug(checkpoint)}"]
+        drift = max(drift, float(np.max(np.abs(_semantic_probs(reference, checkpoint, None, None) - cached))))
     if drift > REPRODUCTION_TOLERANCE:
         return {"passed": False, "available": False,
                 "reasons": [f"reference cache does not reproduce the live scores (max diff {drift:.2e}); rebuild it"]}
@@ -196,8 +220,9 @@ def evaluate(current_set, candidate_row) -> dict:
     h = candidate_row.hyperparameters
     candidate_set = current_set
     if candidate_row.model_type == registry.TYPE_SEMANTIC:
-        candidate_set = replace(current_set, primary=replace(current_set.primary,
-                                model_id=candidate_row.model_id, head=h.get("head")))
+        candidate_set = replace(current_set, primary=replace(
+            current_set.primary, model_id=candidate_row.model_id, checkpoint=h["checkpoint"],
+            revision=h["revision"], head=h.get("head")))
     elif candidate_row.model_type == registry.TYPE_FREQUENCY:
         candidate_set = replace(current_set, frequency_detector=replace(
             current_set.frequency_detector, model_id=candidate_row.model_id, head=h.get("head"),

@@ -6,7 +6,7 @@ are in the [repository README](../readme.md).
 | Path | Contents |
 |---|---|
 | `app/m1_access/` | M1: accounts, sign-in and OTP challenges, throttling, upload validation, image storage |
-| `app/m2_analysis/` | M2: the SigLIP 2 and SPAI detectors, fusion, explainability capture, model registry and quality gate |
+| `app/m2_analysis/` | M2: the content detector (Community Forensics; SigLIP 2 pinned as rollback) and SPAI, fusion, explainability capture, model registry and quality gate |
 | `app/m3_results/` | M3: results, history, PDF reports, administration, analytics, audit log |
 | `app/shared/` | Configuration, database engine, proxy trust, errors, and the C1-C5 contracts between modules |
 | `app/stubs/` | Fake M1/M2 used **only** by M3's test suite. Nothing under `app/` may import it. |

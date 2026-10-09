@@ -3,10 +3,12 @@
 Every number this project has produced, with what it does and does not
 support. `CLAUDE.md` §6 carries the summary; this file carries the evidence.
 
-Rule that governs all of it: **nothing here was ever used to fit anything.**
-Thresholds, fusion weight and temperature are fixed constants in
-`backend/app/shared/config.py` (CLAUDE.md §0). Where a figure suggests a
-better operating point, that is recorded as a finding, not applied.
+Rule that governs all of it: **no model weight is ever fitted.** The fusion
+weight and threshold are configuration constants in
+`backend/app/shared/config.py`, chosen only on selection/validation splits
+(2026-10-01, 2026-10-09) and reported on held-out sets that played no part in
+the choice (CLAUDE.md §0). Where a held-out figure suggests a better operating
+point, that is recorded as a finding, not applied.
 
 Tooling: `ml/evaluation/evaluate.py` runs any `<root>/0_real` + `<root>/1_fake`
 set through the production path and reports per-branch and fused metrics with
@@ -15,6 +17,81 @@ detection rates when the fake class is split into subfolders. Per-image CSVs
 and summary JSON land in `ml/outputs/`.
 
 ---
+
+### 2025 generators, and a new content detector, 2026-10-09
+
+**Set.** [AIGenImages2026](https://huggingface.co/datasets/pthan12/AIGenImages2026)
+(CC-BY-4.0; Pantsios et al., MAD '26, arXiv 2605.02567 - the SPAI authors'
+group, so not independent of SPAI). Its evaluation (`val`) split pairs 559
+images from **19 text-to-image models released in 2025** with 559 real
+photographs of similar content (`eval_real_pairs.csv`). Real: all JPEG; AI: 64 %
+PNG. No image under 224 px. Extracted from the 11 GB archive by a script that
+never writes by archive path; per-image scores in `ml/outputs/`.
+
+**1. The live system on it** (SigLIP 2 + SPAI, w 0.5, τ 0.6665), 95 % intervals:
+
+| branch | accuracy | recall | FPR on real | AUC |
+|---|---|---|---|---|
+| SigLIP 2 | 0.508 [0.48, 0.54] | 0.492 | 0.476 | **0.533 [0.50, 0.57]** |
+| SPAI | 0.701 [0.67, 0.73] | 0.592 | 0.190 | 0.763 [0.73, 0.79] |
+| fused | 0.666 [0.64, 0.69] | 0.476 | 0.143 | 0.714 [0.68, 0.74] |
+
+SigLIP 2 is at chance on 2025 generators, and every weight it is given lowers
+the fused AUC. Format control: on JPEG-only images (559 real / 201 AI) the fused
+AUC is 0.679 - the result is not a PNG-vs-JPEG artefact.
+
+**2. Bake-off** (evaluation only, nothing trained). Candidates had to be
+published, pretrained and licensable: **Community Forensics** (Park & Owens,
+CVPR 2025; `OwensLab/commfor-model-384` @ `6076002b`, MIT, ViT-S/16, trained on
+~4,800 generators) qualified. B-Free (CVPR 2025) was not used: its licence is
+"informational and nonprofit purposes" and no weight download was found.
+
+- Selection pool (choices only): 499 AI + 500 real from the AIGenImages2026
+  TRAIN split (seeded draw) plus `sbr_val` (198 + 198).
+- Rule (as in 2026-10-01): for each w in 0, 0.05, …, 1, the smallest τ with
+  FPR ≤ 0.10 on the pool's reals; keep the w with the highest recall.
+- SigLIP 2 + SPAI: best w = **0** (SPAI alone) - SigLIP 2 adds nothing.
+- Community Forensics + SPAI: best **w = 0.55, τ = 0.452349 → 0.4524** (rounded
+  up; selection FPR 0.0989, recall 0.723).
+
+Held out (never used for any choice), 95 % intervals:
+
+| configuration | AIGen2026 acc | recall | FPR | AUC | Synthbuster acc | recall | FPR | AUC |
+|---|---|---|---|---|---|---|---|---|
+| SigLIP 2 + SPAI, w 0.5 (was live) | 0.666 | 0.476 | 0.143 | 0.714 | 0.783 | 0.657 | 0.091 | 0.928 |
+| SigLIP 2 + SPAI, w 0.25 | 0.701 | 0.549 | 0.147 | 0.734 | 0.864 | 0.838 | 0.111 | 0.941 |
+| SPAI alone | 0.664 | 0.411 | 0.084 | 0.763 | 0.869 | 0.788 | 0.051 | 0.967 |
+| Community Forensics alone | 0.750 | 0.530 | 0.029 | 0.926 | 0.869 | 0.909 | 0.172 | 0.946 |
+| **Community Forensics + SPAI, w 0.55** | **0.798 [0.77, 0.82]** | **0.626** | **0.030** | **0.895 [0.88, 0.91]** | **0.939 [0.90, 0.96]** | **0.949** | **0.071** | **0.986 [0.97, 1.00]** |
+
+Per generator (AIGenImages2026 val, share caught, live → new): FLUX.2 0.23 →
+0.77; Ideogram v3 0.35 → 0.71; Midjourney v7 0.55 → 0.84; Firefly 0.47 → 0.88;
+GPT-image-1 0.00 → 0.29; z-image turbo 0.39 → 0.68. Worse: GPT-image-1.5 0.71
+→ 0.42; Seedream 4.5 0.87 → 0.84; FLUX 1.1 pro 0.35 → 0.26. Still mostly missed:
+FLUX.2 max 0.17, FLUX.2 pro 0.23.
+
+**Caveats.** Synthbuster is SPAI's own test set, and Community Forensics'
+~4,800 training generators may include Synthbuster's, so its 0.986 there may be
+optimistic; AIGenImages2026's 2025 generators post-date Community Forensics'
+training data and carry the weight of the claim. Community Forensics sees a
+384 px centre crop (its authors' test transform); SPAI still reads the native
+file.
+
+**A numerics defect, found and fixed before activation.** On CUDA, PyTorch runs
+convolutions in TF32 by default; for Community Forensics this moved the
+authors' published reference score 0.7860 to 0.7655 (CPU and the authors'
+notebook agree on 0.7860). The patch projection is now computed as unfold +
+matmul (same linear map, same tensors; matmul TF32 is off by default), which
+reproduces all five reference scores to four decimals on CPU and GPU. The
+bake-off's first pass had run with TF32; its Community Forensics scores were
+recomputed with the production detector (|change| median 0, p95 0.007, max
+0.05) and the selection re-run: same w and τ, held-out figures within 0.004 -
+the table above is the corrected run (`ml/outputs/bakeoff_report_exact.txt`).
+
+**Activated 2026-10-09** through the registry: semantic row #7 (canary ok, gate
+passed: reference accuracy 0.78 → 0.89, FPR 0.12 → 0.00, AUC 0.898 → 0.979),
+then fusion row #8 (→ 0.96 / 0.04 / 0.982). SigLIP 2 (#4) and w 0.5 / τ 0.6665
+(#6) are one rollback each.
 
 ### Explainability: faithfulness and cost, 2026-10-03
 

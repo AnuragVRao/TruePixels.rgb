@@ -95,7 +95,7 @@ def test_generated_panels_are_linked_served_captioned_and_in_the_pdf():
 
     rows = {row.branch: row for row in _d5(body["prediction_id"])}
     assert set(rows) == {"semantic", "frequency"}
-    assert rows["semantic"].technique == "attention-rollout"
+    assert rows["semantic"].technique == "commfor-attention-rollout"  # Community Forensics: its own caption
     assert rows["frequency"].technique == "spai-patch-spectrum"
     for row in rows.values():  # stored relative, never an absolute machine path
         assert not row.visualization_reference.startswith(("/", "\\")) and ":" not in row.visualization_reference

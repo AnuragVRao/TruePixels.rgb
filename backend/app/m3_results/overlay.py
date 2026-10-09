@@ -70,14 +70,17 @@ def generate_semantic_overlay(
     target_height: int,
     output_path: str,
     alpha: float = 0.45,
+    region: tuple[float, float, float, float] | None = None,
 ) -> str:
     """
     Upsamples 2D relevance map to native image dimensions (W, H), applies colormap,
     and alpha-blends over original image at ~0.45 opacity.
 
-    The relevance grid covers the WHOLE image: the semantic model's processor
-    resizes the full image to 224x224 (no crop), so grid cell (i, j) is the
-    i-th/j-th fourteenth of the image's height/width.
+    ``region`` is the part of the image the grid covers, as fractions
+    (x0, y0, x1, y1). None = the WHOLE image (SigLIP resizes the full image to
+    224x224, no crop). Community Forensics sees a centre crop: the map is drawn
+    only inside that box, which is outlined, and the rest of the image is left
+    as it is - nothing is invented for pixels the model never saw.
     """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -99,9 +102,19 @@ def generate_semantic_overlay(
     if orig_img.size != (target_width, target_height):
         orig_img = orig_img.resize((target_width, target_height), Image.Resampling.BICUBIC)
 
-    # 1. Upsample relevance map bicubically to native image dimensions
+    # The box the grid covers, in target pixels (the whole image by default).
+    if region is None:
+        box = (0, 0, target_width, target_height)
+    else:
+        x0, y0, x1, y1 = region
+        box = (round(x0 * target_width), round(y0 * target_height),
+               max(round(x0 * target_width) + 1, round(x1 * target_width)),
+               max(round(y0 * target_height) + 1, round(y1 * target_height)))
+    box_w, box_h = box[2] - box[0], box[3] - box[1]
+
+    # 1. Upsample relevance map bicubically to the box
     heatmap_pil = Image.fromarray((np.clip(relevance_2d, 0.0, 1.0) * 255).astype(np.uint8))
-    upsampled_heatmap = heatmap_pil.resize((target_width, target_height), Image.Resampling.BICUBIC)
+    upsampled_heatmap = heatmap_pil.resize((box_w, box_h), Image.Resampling.BICUBIC)
     heatmap_arr = np.array(upsampled_heatmap, dtype=np.float32) / 255.0
 
     # 2. Apply perceptually uniform colormap (turbo)
@@ -109,8 +122,14 @@ def generate_semantic_overlay(
     colored_heatmap = (colormap(heatmap_arr)[:, :, :3] * 255).astype(np.uint8)
     colored_pil = Image.fromarray(colored_heatmap)
 
-    # 3. Alpha-blend over original image at opacity alpha
-    blended = Image.blend(orig_img, colored_pil, alpha=alpha)
+    # 3. Alpha-blend over the box only, at opacity alpha
+    blended = orig_img.copy()
+    blended.paste(Image.blend(orig_img.crop(box), colored_pil, alpha=alpha), box[:2])
+    if region is not None:
+        from PIL import ImageDraw
+
+        ImageDraw.Draw(blended).rectangle((box[0], box[1], box[2] - 1, box[3] - 1), outline=(255, 255, 255),
+                                          width=max(2, round(min(target_width, target_height) / 200)))
     _save_clean_png(blended, output_path, PANEL_MAX_SIDE)
     return output_path
 
@@ -236,6 +255,7 @@ def persist_explainability(
             target_height=h,
             output_path=sem_path,
             alpha=0.45,
+            region=getattr(activation_bundle, "attention_region", None),
         )
         rows.append(Explainability(prediction_id=prediction_id, branch="semantic",
                                    technique=technique,

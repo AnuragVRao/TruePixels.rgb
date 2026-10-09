@@ -175,7 +175,7 @@ export const UploadPage: React.FC = () => {
 
       <div className="grid sm:grid-cols-3 gap-4 pt-2">
         <Feature icon={<Images className="w-6 h-6" />} title="Two independent detectors">
-          One for semantic content (SigLIP 2) and one for frequency patterns (SPAI).
+          One for image content (Community Forensics) and one for frequency patterns (SPAI).
         </Feature>
         <Feature icon={<ShieldCheck className="w-6 h-6" />} title="Explainable results">
           See attention maps, the frequency spectrum and an interpretable verdict.

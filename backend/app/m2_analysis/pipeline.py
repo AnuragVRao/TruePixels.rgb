@@ -8,7 +8,7 @@ persistence.
        v
     registry.active(db) -- the ACTIVE D3 rows; raises INF_MODEL_UNAVAILABLE if none
        |
-       +--> 2.1 semantic branch  (SigLIP 2 fine-tune) -> semantic_score  --\\
+       +--> 2.1 content branch   (active D3 row)     -> semantic_score  --\\
        |                                                                   \\
        +--> 2.2 frequency branch (SPAI, spectral)     -> frequency_score ---+--> 2.3 fusion
        |                                                                          |
@@ -83,6 +83,8 @@ async def run_detection(
     session = SessionLocal() if owns_session else db
     try:
         models = registry.active(session)
+        # The content detector the ACTIVE D3 row names (one of config's pinned set).
+        content_detector = detectors.semantic(models.primary.checkpoint)
         semantic_head = heads.semantic_head(models.primary.model_id, models.primary.head)
         spectral = models.frequency_detector
         freq_head = heads.frequency_head(spectral.model_id, spectral.head) if spectral else None
@@ -97,19 +99,20 @@ async def run_detection(
         # resident (startup warm-up, app/m2_analysis/warmup.py) and these return
         # immediately; if the warm-up was off or failed, the load still happens
         # - it is just not counted as this request's inference time.
-        cold_start = not detectors.primary.is_loaded or (
+        cold_start = not content_detector.is_loaded or (
             models.frequency_detector is not None and not frequency_detector.frequency.is_loaded
         )
-        detectors.primary.load()
+        content_detector.load()
         if models.frequency_detector is not None:
             frequency_detector.frequency.load()
 
         started = time.perf_counter()
 
-        # Semantic branch: the SigLIP 2 fine-tune. With xai on, passive hooks
-        # also record each attention layer's input (the score is unchanged).
-        semantic = detectors.primary.score(prepared.source_reference, capture=xai_requested,
-                                           head=semantic_head)
+        # Content (semantic) branch: the detector the active row names. With
+        # xai on, passive hooks also record each attention layer's input (the
+        # score is unchanged).
+        semantic = content_detector.score(prepared.source_reference, capture=xai_requested,
+                                          head=semantic_head)
         semantic_score = semantic.score
 
         # Frequency branch: SPAI, a different kind of evidence entirely.
@@ -208,7 +211,7 @@ def _activation_bundle(prepared: PreprocessedImage, semantic, models) -> Activat
 
     started = time.perf_counter()
     try:
-        maps = detectors.primary.attention_maps(semantic.activations)
+        maps = detectors.semantic(models.primary.checkpoint).attention_maps(semantic.activations)
         attention_ms = (time.perf_counter() - started) * 1000
 
         spectrum, meta = None, None
@@ -227,6 +230,7 @@ def _activation_bundle(prepared: PreprocessedImage, semantic, models) -> Activat
             patch_grid=maps["patch_grid"],
             attention=maps["attention"],
             pooling=maps["pooling"],
+            attention_region=maps.get("region"),
             spectrum=spectrum,
             spectrum_meta=meta,
             timings_ms={"attention": round(attention_ms, 1), "spectrum": round(spectrum_ms, 1)},

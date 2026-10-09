@@ -22,6 +22,10 @@ transformers==4.57.1
 # Tensors-only weight files for the SPAI frequency detector (already a
 # transformers dependency; pinned here because the loader imports it directly).
 safetensors==0.6.2
+# Backbone of the Community Forensics content detector (OwensLab/commfor-model-384,
+# a timm ViT-S/16 at 384 px). Built with pretrained=False and fully overwritten
+# by the pinned, digest-checked safetensors - timm never downloads weights here.
+timm==1.0.15
 
 # Image and signal processing
 pillow==12.1.1

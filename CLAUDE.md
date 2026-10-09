@@ -49,7 +49,29 @@ otherwise. Identifiers, digests and flags live **only** in
 [config.py](backend/app/shared/config.py) — no checkpoint name appears
 anywhere else in the codebase.
 
-### Semantic branch — `prithivMLmods/AIorNot-SigLIP2`
+### Content (semantic) branch — one of a pinned set, chosen by the active D3 row
+
+Since 2026-10-09 the content branch is **Community Forensics**; SigLIP 2 stays
+pinned and installed as the rollback target. `config.SEMANTIC_BACKBONES` is the
+whole set: a D3 semantic row is valid only if it names one of them at exactly
+its revision, and `detectors.semantic(checkpoint)` returns the cached detector
+the active row names. Why the switch: on 2025 generators SigLIP 2 scored AUC
+0.53 and lowered every fusion it was part of (bake-off, RESULTS.md 2026-10-09).
+
+#### In use — Community Forensics, `OwensLab/commfor-model-384`
+
+| | |
+|---|---|
+| Paper | Park & Owens, *Community Forensics: Using Thousands of Generators to Train Fake Image Detectors*, **CVPR 2025** ([arXiv 2411.04125](https://arxiv.org/abs/2411.04125)) · [repo](https://github.com/JeongsooP/Community-Forensics) @ `ee5b71d` |
+| Model | timm ViT-S/16 at 384 px, head `Linear(384, 1)`; 21.8M params · **MIT**, code and weights |
+| Training data | ~2.7M images from ~4,800 generators (the authors') |
+| Output | one logit; `sigmoid = P(fake)` — a **convention** (`SEMANTIC_COMMFOR_AI_IS_POSITIVE = True`), verified by reproducing the authors' notebook scores on their five DALL·E 2 samples to 4 decimals ([test_commfor.py](backend/tests/test_commfor.py)) |
+| Preprocessing | the authors' test transform: shortest side → 440, **centre crop 384**, ImageNet normalisation. It sees the centre square only; the attention panel is drawn inside that outlined square |
+| Weights | `model.safetensors` at revision `6076002b`, SHA-256 `b89f3627…fb387` checked before a **strict** load (152/152). Model class vendored under [vendor/commfor/](backend/app/m2_analysis/vendor/commfor/) with LICENSE + NOTICE |
+| Numerics | on CUDA, PyTorch's default **TF32 convolutions** moved a reference score 0.7860 → 0.7655; the patch projection is computed as unfold + matmul (`detectors._ExactPatchProjection`), so CPU and GPU agree to 1e-5. Do not "simplify" it back to the Conv2d |
+| Uploaded heads | none — Community Forensics rows carry `head: null`; head uploads target SigLIP 2's classifier |
+
+#### Pinned alternative — SigLIP 2, `prithivMLmods/AIorNot-SigLIP2` (the content branch until 2026-10-09)
 
 | | |
 |---|---|
@@ -96,7 +118,7 @@ Hugging Face checkpoints **disagree on which index means "AI"**:
 
 | Checkpoint | index 0 | index 1 | AI index |
 |---|---|---|---|
-| `AIorNot-SigLIP2` (in use) | Real | AI | **1** |
+| `AIorNot-SigLIP2` (pinned alternative) | Real | AI | **1** |
 | `Organika/sdxl-detector` (used 2026-09-07 → 09-12) | artificial | human | **0** |
 | `Ateeqq/ai-vs-human` (not used) | ai | hum | **0** |
 
@@ -107,7 +129,9 @@ from the checkpoint's own `id2label`** by
 guess. Asserted against all three real label maps in
 [test_detectors.py](backend/tests/test_detectors.py).
 
-**SPAI has no labels at all** — it is one BCE logit. Its sign is therefore a
+**SPAI and Community Forensics have no labels at all** — each is one logit
+(Community Forensics' convention and its check are in its table above).
+**SPAI** is one BCE logit. Its sign is therefore a
 documented convention, `DETECTOR_FREQUENCY_AI_IS_POSITIVE = True`, justified
 two ways: the authors' own evaluation CSVs label every generated image `1`
 and every real image `0` (checked in `data/*.csv` of the repo), and the
@@ -266,7 +290,7 @@ is loaded, the AI index the semantic branch resolved, and the sign convention
 the frequency branch is running under.
 
 Both models load at **startup** (`WARMUP_ON_STARTUP`, default on; ~9 s per
-branch, plus the SigLIP 2 download, ~370 MB, the very first time), so no
+branch, plus the Community Forensics download, 87 MB, the very first time), so no
 request pays for it and `latency_ms` measures inference only. With the
 warm-up off they load on the first prediction instead, still outside the
 timed region.
@@ -304,7 +328,7 @@ is therefore a **measured** 16 (3.4 GB peak; 24 gave 5% for +600 MB), and
 | 1 | pre-M2.0 | End-to-end path, HTTP upload → verdict | ✅ done (2026-09-07) |
 | 2 | ~~M2.1~~ | ~~Train the CLIP head~~ → **superseded**: integrate a pretrained SigLIP 2 detector | ✅ done (2026-09-07) |
 | 3 | ~~M2.2~~ | ~~Train the frequency classifier~~ → **superseded**: integrate a pretrained frequency-domain detector. Interim (2026-09-07): a second semantic detector, SwinV2. Final (2026-09-12): **SPAI**, SwinV2 removed | ✅ done (2026-09-12) |
-| 4 | M2.3 | Select the fusion weight and τ on a validation split | ✅ **done (2026-10-01)** — reopened. It had been closed as "fitting is training", a ruling made when no labelled data existed. w and τ are configuration constants, not model weights; §0 forbids updating weights, and PRD2 FR-03 explicitly calls for both to be tuned on validation. Chosen on scenes 99–296, disjoint from the test set: **w = 0.25, τ = 0.7558**. **Changed 2026-10-09 to equal weights, w = 0.5, τ = 0.6665** (τ re-selected for w = 0.5 by the same rule on the same split). Not done: the calibration temperature (MM2.5) |
+| 4 | M2.3 | Select the fusion weight and τ on a validation split | ✅ **done (2026-10-01)** — reopened. It had been closed as "fitting is training", a ruling made when no labelled data existed. w and τ are configuration constants, not model weights; §0 forbids updating weights, and PRD2 FR-03 explicitly calls for both to be tuned on validation. Chosen on scenes 99–296, disjoint from the test set: **w = 0.25, τ = 0.7558**. Changed 2026-10-09 to w = 0.5, τ = 0.6665, then — with the new content detector — **w = 0.55, τ = 0.4524**, selected by the same rule on a pool including 2025 generators (RESULTS.md 2026-10-09). Not done: the calibration temperature (MM2.5) |
 | 5 | M2.4 | Postgres + Alembic, D3/D4 tables, registry endpoints, atomic activation | ✅ **done (2026-10-03, Phases 2 + 4)** — PostgreSQL + Alembic; D3 is the authority on what runs; upload (safetensors heads / fusion JSON), canary, quality gate on a validation-split reference, atomic activation, one-call rollback, immutable D3 rows |
 | 6 | M2.5 | ActivationBundle capture hooks (joint delivery with M3) | ✅ **done (2026-10-03, Phase 3)** — SigLIP attention rollout (mean-pooled, faithfulness-tested) + spectrum of SPAI's own patches; panels in D5, results and PDF |
 | 7 | M2.6 | Benchmark the **pretrained** branches on a public labelled set — evaluation only, no weight updates. Should include the SigLIP 2 / SPAI / fused ablation | ✅ **done (2026-09-30)** — Synthbuster vs RAISE-1k, 99/class, with the SigLIP 2 / SPAI / fused ablation, a confound control and a degradation sweep (§6). Optional next: scale to 1000/class (one flag), and a set from post-2023 generators |
@@ -329,9 +353,11 @@ backend/app/
   m3_results/                M3 (teammate): results, history, PDF reports, admin, D5/D6, C5 logs
   stubs/                     M3's fake M1/M2 — TEST-ONLY, imported by backend/tests/m3 alone
   m2_analysis/
-    detectors.py             ★ semantic branch (SigLIP 2) + resolve_ai_index
+    detectors.py             ★ content branch: semantic(checkpoint) over the pinned set -
+                             CommForDetector (in use) and SigLIP 2 - + resolve_ai_index
     frequency_detector.py    ★ frequency branch (SPAI): digest check, strict load, scoring
     vendor/spai/             SPAI model code as published (Apache-2.0) + LICENSE + NOTICE
+    vendor/commfor/          Community Forensics model class (MIT) + LICENSE + NOTICE
     pipeline.py              run_detection() — the C2 producer
     frequency.py             hand-written spectral FEATURES — explainability only, no score
     fusion.py                fusion + the confidence inversion
@@ -362,24 +388,24 @@ module.
 
 | Component | Status |
 |---|---|
-| Semantic branch (SigLIP 2 fine-tune) | ✅ **pretrained, real** |
+| Content branch (Community Forensics; SigLIP 2 pinned as rollback) | ✅ **pretrained, real** — digest-checked, strictly loaded, authors' reference scores reproduced on CPU and GPU |
 | Frequency branch (SPAI, spectral) | ✅ **pretrained, real** — 324/324 weights strictly loaded, digest-verified |
 | AI-index resolution from `id2label` | ✅ real, tested against three checkpoints |
 | SPAI sign convention | ✅ **verified** two ways — authors' CSVs (generated = 1) and the smoke canary below |
-| Fusion, thresholding, inversion | ✅ real — FR-03 strategy A, `0.5·semantic + 0.5·frequency` |
+| Fusion, thresholding, inversion | ✅ real — FR-03 strategy A, `0.55·content + 0.45·frequency` |
 | Determinism (AC-04) | ✅ **verified** — bit-identical scores across repeated runs, both branches |
 | Spectral feature pipeline (`frequency.py`) | ✅ real, but **explainability only — produces no score** |
 | Randomly initialised weights | ✅ **none anywhere** — a partial load is refused, not tolerated |
 | **Latency budget MM2.7** | ⚠ met on the GPU for ordinary photographs (≤ ~2000² px: 1–3 s); missed for very large originals (6144²: 34 s). Not met on CPU. See §4 |
-| τ and fusion weight | ✅ **selected on a validation split**, disjoint from the test set, by PRD2 FR-03's own rule. Since 2026-10-09: **w = 0.5 (equal weights, owner's decision), τ = 0.6665** (was w = 0.25, τ = 0.7558). Active as D3 fusion row #6. No model weight was touched |
+| τ and fusion weight | ✅ **selected on a validation split**, disjoint from the test set, by PRD2 FR-03's own rule. Since 2026-10-09: **w = 0.55 (on Community Forensics), τ = 0.4524**, chosen on a selection pool that includes 2025 generators. Active as D3 fusion row #8 (semantic row #7); the SigLIP 2 pair (#4, #6) is one rollback each. No model weight was touched |
 | Calibration (temperature) | ❌ no-op at T=1.0, and **MM2.5 is now measured as missed** — ECE 0.113 on validation, and the best temperature available (T = 0.97) only reaches 0.110 against a ≤ 0.05 target. Temperature scaling alone will not close it |
 | D3/D4 persistence | ✅ every prediction writes D4 and commits before responding; M3 reads it back (asserted end-to-end). SQLite by default |
 | Registry / model management (F.19) | ✅ D3 decides what runs; every D4 row links the semantic, frequency and fusion rows that actually ran (real FKs, RESTRICT). Activation = canary + quality gate (validation-split reference, 100 images; refuse if accuracy −0.05, FPR > 0.20 or AUC −0.02) + locked atomic switch; forced overrides need a reason and are audit-logged; rollback is one call (gate advisory there). Head uploads validated **only with perturbed copies of the published heads** (no training); fusion-config swap is the demonstrated feature. `metrics` stays null |
 | Sign-in / OTP (F.2) | ✅ realised, with **optional OTP 2FA, off by default** (`REQUIRE_2FA=False`). Until 2026-10-05 the OTP feature was an email-only sign-in for any role. Now a code exists only in a challenge created by a correct password (`login`) or registration (`register`, User only); 2FA off refuses the OTP endpoints; production never issues codes without real e-mail. Sign-in and OTP throttled (in memory, resets on restart). **Since 2026-10-08:** forgot password (e-mailed code in its own `password_resets` table, never a session), change password (ends every other session via `users.token_version`), and login activity (`login_events`: time, outcome, portal, IP, browser; own rows at `/account`, all rows at `/admin/login-activity`; 90-day purge). See [docs/auth-hardening.md](docs/auth-hardening.md) |
 | Authentication / ownership | ✅ M1's JWT sessions on every M2/M3 endpoint; predictions owner-only, `IMG_NOT_FOUND` for not-yours (no id oracle) |
 | Explainability (F.10/F.11/F.14/NF.13) | ✅ **real** — attention recomputed from passively captured inputs (matches eager attention < 1e-4; scores bit-identical, `regression_check --xai` 24/24). Rollout is an **attention-based proxy**. Deletion test (40 validation images, semantic branch only, per-image unit): masking the top-attended 20% beats random by mean +0.071 [0.041, 0.103], **median +0.019**; paired t one-sided p = 4.0e-5 (Wilcoxon 5.8e-8). Better than chance; typical advantage small. Frequency panel is descriptive, **not validated**. Frequency panel = mean spectrum of SPAI's 224 px patches + its r = 16 split; descriptive, not evidence. Cost: +1.2–3.7 s, +7 MB VRAM. See RESULTS.md |
-| **Detection of whole-image synthesis** | ✅ **measured** — Synthbuster vs RAISE-1k, 99 per class, at an operating point chosen on a disjoint validation split: fused (w = 0.5, τ = 0.6665) accuracy 0.783 [0.72, 0.83], recall 0.657, AUC 0.928 [0.89, 0.96]; SPAI alone AUC 0.967. (At w = 0.25, τ = 0.7558: 0.864, 0.838, 0.941.) Confound-controlled. Read the narrow claim, not "accuracy" |
-| **False-positive rate MM2.6 (≤ 0.10)** | ✅ **met since 2026-10-09** — 0.091 [0.05, 0.16] held out at w = 0.5, τ = 0.6665 (9 of 99 genuine photographs called AI Generated), at the cost of recall 0.657. At w = 0.25, τ = 0.7558 it was 0.111, missed narrowly, with recall 0.838 |
+| **Detection of whole-image synthesis** | ✅ **measured, two held-out sets** — **2025 generators** (AIGenImages2026 val, 559 + 559 content-matched): accuracy 0.798 [0.77, 0.82], recall 0.626, FPR 0.030, AUC 0.895 [0.88, 0.91]. **2022–23 generators** (Synthbuster vs RAISE-1k, 99 + 99): 0.939 [0.90, 0.96], 0.949, 0.071, AUC 0.986. SigLIP 2 + SPAI on the same sets: 0.666 / AUC 0.714 and 0.783 / 0.928. Read the narrow claims, not "accuracy" |
+| **False-positive rate MM2.6 (≤ 0.10)** | ✅ **met on both held-out sets** — 0.030 [0.02, 0.05] on AIGenImages2026's web photographs, 0.071 [0.03, 0.14] on RAISE camera originals |
 | Robustness to resizing | ❌ **measured and poor** — halving both classes takes SPAI recall 0.939 → 0.616. JPEG q75 costs almost nothing. See below |
 | Images smaller than 224 px | ✅ **fixed 2026-09-30** — below one 224 px patch SPAI has no evidence at all, so the branch reports itself unavailable and fusion uses the documented passthrough: a semantic-only verdict with `frequency_score` **null**. M1 admits images from 64 px (PRD C.9), so this is a normal upload, not an edge case ([changes.md](changes.md) §3.0) |
 
@@ -387,10 +413,11 @@ module.
 
 Full results, every arm, every per-generator figure and every superseded
 measurement live in **[ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md)**.
-The headline: Synthbuster vs RAISE-1k, 99 images per class, at **w = 0.5 and
-tau = 0.6665** (tau chosen on a disjoint validation split; the table's 2026-10-01
-row is w = 0.25, tau = 0.7558 - see the note under it) (198/class, scenes
-99-296), 95% intervals:
+The table below is the 2026-10-01 measurement on Synthbuster vs RAISE-1k
+(SigLIP 2 era), kept as the record it is. **What runs now** (Community
+Forensics + SPAI, w 0.55, τ 0.4524) is in §6's table above and in RESULTS.md
+2026-10-09: AIGenImages2026 0.798 / AUC 0.895, Synthbuster 0.939 / AUC 0.986.
+95% intervals:
 
 | branch | accuracy | recall | FPR on real | AUC |
 |---|---|---|---|---|
@@ -430,10 +457,9 @@ Four things it established:
    exactly one thing: whole-image synthesis from 2022–23 generators versus
    pristine RAW-derived TIFFs. Quote that claim, with its intervals, and never
    the word "accuracy" unqualified.
-2. Both checkpoints were trained on generators available at *their* training
-   time, and the benchmark set is from the same era. Behaviour on newer
-   generators is still unknown, and the one modern-generator image we have
-   tried was missed outright — the exact gap PRD2's MM2.2 exists to measure.
+2. **2025 generators are now measured (MM2.2), and some still get through.**
+   AIGenImages2026: FLUX.2 pro 23 % caught, FLUX.2 max 17 %, FLUX 1.1 pro
+   26 %, GPT-image-1 29 %. Generators released after that set are untested.
 3. Output is uncalibrated. A 0.85 is not an 85% chance of being right.
 4. τ and w **are** now an operating point, chosen on a validation split to
    hold the false-positive rate at MM2.6's ≤ 0.10. They were selected on 198
@@ -443,11 +469,11 @@ Four things it established:
    Measured 2026-09-30: halving both classes takes SPAI's recall from 0.939 to
    0.616, while JPEG q75 costs 0.019 AUC. Any pipeline that downscales before
    analysis throws away most of the frequency branch's value.
-6. The independence argument is PRD2's original one again — semantic
-   evidence vs. physical spectral evidence — but SPAI was trained on Latent
-   Diffusion images and SigLIP 2 on the `aiornot` mix, so the two still
-   share exposure to broadly similar generators. Independence of *kind*, not
-   of training data.
+6. The independence argument is PRD2's original one — content evidence vs.
+   physical spectral evidence — but SPAI was trained on Latent Diffusion
+   images and Community Forensics on ~4,800 generators that overlap with
+   them. Independence of *kind*, not of training data. And AIGenImages2026 is
+   from SPAI's authors' group.
 7. **Learned enhancement looks synthetic.** Real photographs processed by a
    trained super-resolution / enhancement network score as AI on the
    frequency branch (CelebA-HQ "reals": 95 % called AI). Phone camera
@@ -456,10 +482,10 @@ Four things it established:
    perturbations) are the authors'. The one confident false positive in our
    smoke set (the sunflower photograph, 1.000) shows the branch can be wrong
    with full conviction, exactly as the previous second branch could.
-9. **Synthbuster is one of SPAI's own published test sets.** Its 0.967 there
-   confirms our integration reproduces the authors' result; it is not
-   independent evidence that SPAI generalises. For SigLIP 2 the set is
-   genuinely unseen — and SigLIP 2 scores 0.728.
+9. **Synthbuster is one of SPAI's own published test sets**, and Community
+   Forensics' training generators may include Synthbuster's: its 0.986 there
+   may be optimistic. AIGenImages2026's 2025 generators post-date Community
+   Forensics' training data and carry the weight of the claim.
 10. **Images under 224 px get a semantic-only verdict.** The frequency branch
     reports itself unavailable and `frequency_score` is null — so the
     two-kinds-of-evidence argument in §1 does not apply to them at all. Say so
@@ -496,10 +522,11 @@ confidence_score = fusion.confidence_in_prediction(fusion_score, tau, predicted_
 in whichever class was *actually predicted*.
 
 Confidence is 0.5 exactly at the threshold and rises with the distance from
-it, so a verdict never shows less than 50 %. At the operating point
-tau = 0.6665, PRD2 FR-04's `fusion` / `1 - fusion` would show a fused score
-of 0.52 as "Real, 48 %", so it was replaced on 2026-10-05; 0.52 now reads
-"Real, 59 %" and 0.08 reads "Real, 88 %". It is a margin from the threshold,
+it, so a verdict never shows less than 50 %. PRD2 FR-04's `fusion` /
+`1 - fusion` assumes tau = 0.5 and would show, for example, a fused score of
+0.52 as "Real, 48 %" at tau 0.7558, so it was replaced on 2026-10-05. At the
+operating point tau = 0.4524, 0.30 reads "Real, 64 %" and 0.08 reads
+"Real, 85 %". It is a margin from the threshold,
 **not** a calibrated probability (MM2.5 is missed). Stored predictions were
 recomputed by migrations 0004 and 0006c.
 
@@ -520,10 +547,10 @@ independently from its own side.
 
 | Field | History |
 |---|---|
-| `semantic_score` | kept throughout; P(AI) from the semantic branch (SigLIP 2 fine-tune) |
+| `semantic_score` | kept throughout; P(AI) from the content branch — Community Forensics since 2026-10-09 (SigLIP 2 before) |
 | `frequency_score` | 2026-09-07: `float \| None`, always null (no classifier). **2026-09-12: populated by SPAI** — P(AI) from frequency-domain evidence, as PRD2 meant. Still typed `float \| None` solely because the branch can be disabled, in which case fusion is a documented passthrough |
 | `secondary_score` | added 2026-09-07 for the SwinV2 detector; **removed 2026-09-12**. Nothing should read it |
-| `fusion_score` | unchanged; now literally FR-03 strategy A, `0.5·semantic + 0.5·frequency` |
+| `fusion_score` | unchanged; FR-03 strategy A, `w·semantic + (1 - w)·frequency`, w = 0.55 |
 | `confidence_score` | unchanged — confidence in the predicted class |
 
 The public field set is now exactly PRD2 §7.3's again.
@@ -567,7 +594,26 @@ The public field set is now exactly PRD2 §7.3's again.
 
 ## 9. Session log
 
-### 2026-10-09 (latest) — confidence rule updated; non-admins lose the admin tab
+### 2026-10-09 / 10 (latest) — Community Forensics replaces SigLIP 2 as the content detector
+- **Measured first:** AIGenImages2026 (19 generators from 2025, content-matched
+  reals) put SigLIP 2 at AUC 0.53 and the live fusion at 0.714. Bake-off on a
+  selection pool (AIGenImages2026 train + sbr_val), reported on two held-out
+  sets: Community Forensics + SPAI (w 0.55, τ 0.4524) 0.798 / AUC 0.895 and
+  0.939 / AUC 0.986. RESULTS.md 2026-10-09.
+- **Pinned set** `config.SEMANTIC_BACKBONES` (SigLIP 2 + Community Forensics);
+  the active D3 semantic row picks one (`detectors.semantic`). Registry,
+  canary, warm-up, `/health`, gate and reference builder generalised; uploaded
+  heads stay SigLIP-only. Gate reference rebuilt with both detectors.
+- **Found and fixed:** cuDNN TF32 convolutions shifted Community Forensics
+  (0.7860 → 0.7655 on a reference image). Patch projection as unfold + matmul;
+  bake-off re-scored and re-selected (same w, τ).
+- Explanation: CLS rollout (`commfor-attention-rollout`, own caption), drawn
+  inside the outlined centre crop the model sees (`attention_region`).
+- Live D3: semantic #7 + fusion #8 activated through the gate (both passed).
+- Tests: `test_commfor.py` (19); model-management tests re-based on the new
+  operating point; SigLIP-only paths run on a SigLIP-seeded test D3.
+
+### 2026-10-09 — confidence rule updated; non-admins lose the admin tab
 - `fusion.confidence_in_prediction` updated; migration **0006c** recomputes
   stored rows (reversible).
 - **Branch history:** `main` was rebuilt on `dd2ac49`. The P(AI) /

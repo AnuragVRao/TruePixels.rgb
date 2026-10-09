@@ -124,7 +124,17 @@ SEED = 20260907
 #   - the frequency detector asks a physical question - does the pixel grid
 #     carry the spectral signature of a synthesis pipeline.
 #
-# PRIMARY - prithivMLmods/AIorNot-SigLIP2
+# The content ("semantic") branch can be any ONE of a fixed, pinned set of
+# published checkpoints, SEMANTIC_BACKBONES below. Which one runs is decided by
+# the active D3 semantic row (registry.active), so switching back and forth is
+# an audited activation / rollback, never a code edit. DETECTOR_PRIMARY names
+# the published BASELINE that a fresh database is seeded with.
+#
+# 2026-10-09: the baseline moved from SigLIP 2 to Community Forensics after a
+# bake-off (ml/evaluation/RESULTS.md): on 2025 generators SigLIP 2 scored AUC
+# 0.53 and lowered every fusion it was part of.
+#
+# SIGLIP 2 - prithivMLmods/AIorNot-SigLIP2  (the content detector until 2026-10-09)
 #   Fine-tuned from google/siglip2-base-patch16-224 (declared in the model's
 #   own HF metadata as base_model:finetune, so the SigLIP 2 lineage is
 #   verifiable rather than merely asserted in prose).
@@ -135,14 +145,53 @@ SEED = 20260907
 #   Size     : 92,885,762 params
 #   Licence  : Apache-2.0
 #   Upstream self-reported accuracy 0.9149 over 18,618 samples. That figure is
-#   THEIRS, measured on their split. We have run no benchmark of our own.
-DETECTOR_PRIMARY = "prithivMLmods/AIorNot-SigLIP2"
+#   THEIRS, measured on their split.
+SEMANTIC_SIGLIP = "prithivMLmods/AIorNot-SigLIP2"
 # Pinned hub revision (commit). Without it from_pretrained() follows the
 # floating "main" branch, so new weights pushed upstream would change what
 # runs without anything here - or in D3 - changing (Phase 0 finding, fixed in
 # Phase 4). Loaded from the local cache first (no network at startup); the
 # hub is contacted only if this revision is not cached yet.
-DETECTOR_PRIMARY_REVISION = "f4e6a281725e8dfb11a1d8c959b69737bba1e91d"
+SEMANTIC_SIGLIP_REVISION = "f4e6a281725e8dfb11a1d8c959b69737bba1e91d"
+
+# COMMUNITY FORENSICS - OwensLab/commfor-model-384  (the content detector since 2026-10-09)
+#   Park & Owens, "Community Forensics: Using Thousands of Generators to Train
+#   Fake Image Detectors", CVPR 2025 (arXiv 2411.04125).
+#   Code     : github.com/JeongsooP/Community-Forensics @ ee5b71d (MIT);
+#              its 50-line model class is vendored in vendor/commfor/.
+#   Model    : timm ViT-S/16 at 384 px, head Linear(384, 1); 21.8M params
+#   Data     : ~2.7M images from ~4,800 generators (the authors' dataset)
+#   Input    : the authors' test transform - shortest side to 440, centre crop
+#              384, ImageNet normalisation. It sees a CENTRE CROP, not the whole
+#              image; SPAI still reads the native file.
+#   Output   : one logit; sigmoid = P(fake). No id2label exists, so the sign is
+#              a documented convention (below) verified two ways: the authors'
+#              label map is real:0 / fake:1, and their notebook's five DALL-E 2
+#              sample scores are reproduced to 4 decimals on CPU and CUDA
+#              (tests/test_commfor.py; on CUDA via an exact patch projection
+#              that avoids cuDNN TF32 - detectors._ExactPatchProjection).
+#   Licence  : MIT (code and weights)
+#   Weights  : model.safetensors at the pinned revision, SHA-256 checked before
+#              a strict load (152/152 tensors). No pickle, no remote code.
+SEMANTIC_COMMFOR = "OwensLab/commfor-model-384"
+SEMANTIC_COMMFOR_REVISION = "6076002bf0d9dd37537f965ee2f06f826c333b61"
+SEMANTIC_COMMFOR_WEIGHTS_DIGEST = "b89f36275f3bf5e2b040eee36597a8f19db051bff9a473a9cf7b2466284fb387"
+SEMANTIC_COMMFOR_AI_IS_POSITIVE = True  # sigmoid(logit) = P(fake); flip only for a checkpoint that inverts it
+
+# The pinned set. A D3 semantic row is valid only if it names one of these at
+# exactly its revision. "kind" selects the loader in detectors.py.
+SEMANTIC_BACKBONES: dict[str, dict] = {
+    SEMANTIC_SIGLIP: {"revision": SEMANTIC_SIGLIP_REVISION, "kind": "hf-classifier",
+                      "label": "SigLIP 2 (AIorNot fine-tune)"},
+    SEMANTIC_COMMFOR: {"revision": SEMANTIC_COMMFOR_REVISION, "kind": "commfor-vit",
+                       "label": "Community Forensics ViT-S/16",
+                       "weights_digest": SEMANTIC_COMMFOR_WEIGHTS_DIGEST,
+                       "ai_is_positive": SEMANTIC_COMMFOR_AI_IS_POSITIVE},
+}
+
+# The published baseline content detector (seeds a fresh D3).
+DETECTOR_PRIMARY = SEMANTIC_COMMFOR
+DETECTOR_PRIMARY_REVISION = SEMANTIC_COMMFOR_REVISION
 
 
 # --------------------------------------------------------------------------
@@ -316,7 +365,16 @@ FUSION_STRATEGY = "weighted_average"
 # rule. Held-out test at w = 0.5, tau = 0.6665: accuracy 0.783, recall 0.657,
 # FPR 0.091 (meets MM2.6), AUC 0.928 - against 0.864 / 0.838 / 0.111 / 0.941
 # at w = 0.25. Fewer false alarms, fewer AI images caught.
-FUSION_WEIGHT = 0.5
+#
+# 2026-10-09 (later): the content detector became Community Forensics, and w
+# and tau were re-selected for it by the same rule on a selection pool that
+# now includes 2025 generators: 499 AI + 500 real from the AIGenImages2026
+# TRAIN split plus sbr_val (198 + 198). Best recall at FPR <= 0.10 was at
+# w = 0.55 (the weight on Community Forensics), tau = 0.4524. Held out
+# (AIGenImages2026 val split, 559 + 559): accuracy 0.797, recall 0.623, FPR
+# 0.029, AUC 0.894 - against 0.666 / 0.476 / 0.143 / 0.714 for SigLIP 2 at
+# w 0.5. Synthbuster test: 0.939 / 0.949 / 0.071 / 0.986. ml/evaluation/RESULTS.md.
+FUSION_WEIGHT = 0.55
 
 # Decision threshold.
 #
@@ -345,7 +403,11 @@ FUSION_WEIGHT = 0.5
 # split (ml/evaluation/select_threshold.py on sbr_val_20261001T071305Z.csv,
 # whose fusion column is the w = 0.5 average): 0.666505, validation FPR 0.096,
 # recall 0.596. 0.7558 was the value for w = 0.25.
-FUSION_TAU = 0.6665
+#
+# 2026-10-09 (later): 0.4524 for Community Forensics at w = 0.55 - the
+# smallest qualifying tau on the selection pool (0.452349) rounded UP, so the
+# selection FPR stays 0.0989. See FUSION_WEIGHT.
+FUSION_TAU = 0.4524
 
 # Temperature scaling (PRD2 FR-04). A no-op at 1.0: nothing is fitted here.
 # MEASURED 2026-09-30: expected calibration error is 0.097 (SPAI) and 0.089
