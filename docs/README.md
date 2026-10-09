@@ -2,6 +2,7 @@
 
 | File | Contents |
 |---|---|
+| [how-a-score-is-computed.md](how-a-score-is-computed.md) | From upload to verdict and confidence, in plain words, with a worked example |
 | [contracts/](contracts/README.md) | The C1-C5 module seams and the documented deviations from PRD4 |
 | [https.md](https.md) | HTTPS with Caddy: profiles, proxy trust, CSP, local CA, ACME |
 | [auth-hardening.md](auth-hardening.md) | Sign-in, OTP challenges, throttling, account states |

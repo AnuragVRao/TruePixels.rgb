@@ -89,6 +89,14 @@ themselves from Hugging Face at their pinned revisions the first time they are
 needed; Community Forensics is loaded only if its SHA-256 matches the pinned
 value.
 
+Model management's quality gate compares candidates on a cached reference
+sample. Build it once (and again after changing any pinned detector); it needs
+the validation images in `ml/datasets/sbr_val` (see `ml/datasets/README.md`):
+
+```powershell
+python backend/scripts/build_reference_set.py
+```
+
 **4. Configuration.**
 
 ```powershell
@@ -258,8 +266,9 @@ $env:TEST_DATABASE_URL = "$u/truepixels_test"; python -m pytest backend/tests -q
 - **Isolation:** tests never touch the real database or `storage/`. Scratch
   databases (`*_test`, `*_regression`) are created when missing; any other
   name is refused.
-- **Last run (2026-10-05):** SQLite 416 passed and 7 skipped (the skips are
-  PostgreSQL-only tests); PostgreSQL 423 passed.
+- **Last run (2026-10-10):** SQLite 463 passed and 7 skipped (the skips are
+  PostgreSQL-only tests). The PostgreSQL run has not been repeated since
+  2026-10-05 (423 passed then).
 
 **Front end:**
 
@@ -428,8 +437,8 @@ PRD*.md, SRS.pdf     requirements
 
 | File | What it is for |
 |---|---|
-| **[CLAUDE.md](CLAUDE.md)** | Working notes: the models, the rules that are easy to break, what is real and what is not. Read this before changing anything. |
-| [changes.md](changes.md) | Every edit made to M1's and M3's code during integration, and why |
+| **[CLAUDE.md](CLAUDE.md)** | Working notes: the models, the rules that are easy to break, the current state and its limits. Read this before changing anything. |
+| [docs/session-log.md](docs/session-log.md) | What was done when, and why (the integration notes formerly in `changes.md` are in git history, commit `4bf5c15^`) |
 | [ml/evaluation/RESULTS.md](ml/evaluation/RESULTS.md) | Every measurement, with its intervals and limits |
 | [docs/contracts/](docs/contracts/) | The C1–C5 module seams and the documented deviations from PRD4 |
 | [docs/https.md](docs/https.md) | The HTTPS setup, proxy trust, CSP, local CA, ACME |
