@@ -172,7 +172,7 @@ with sync_playwright() as p:
         page.get_by_role("button", name="Clear filters").click()
     step("A3", "logs: >=2 pages, Next/Previous, severity filter, HTML payload shown as text", a3)
 
-    # ---- A4: users - pagination, self row, disable/enable/remove ----------
+    # ---- A4: users - pagination, self row, disable/enable ------------------
     def a4():
         page.goto(f"{BASE}/admin/users")
         pager = page.get_by_label("Pagination")
@@ -201,19 +201,13 @@ with sync_playwright() as p:
         target.get_by_role("button", name="Enable").click()
         page.get_by_role("dialog").get_by_role("button", name="Enable account").click()
         expect(page.get_by_text(f"{SEED['admin2']['email']} is now active.")).to_be_visible()
-        # remove wording + restore
-        target.get_by_role("button", name="Remove").click()
-        expect(page.get_by_role("dialog")).to_contain_text("not a deletion")
-        page.get_by_role("dialog").get_by_role("button", name="Mark as removed").click()
-        expect(page.get_by_text(f"{SEED['admin2']['email']} is now removed.")).to_be_visible()
-        target.get_by_role("button", name="Enable").click()
-        page.get_by_role("dialog").get_by_role("button", name="Enable account").click()
-        expect(page.get_by_text(f"{SEED['admin2']['email']} is now active.")).to_be_visible()
+        # there is no Remove button (it did exactly what Disable does)
+        expect(target.get_by_role("button", name="Remove")).to_have_count(0)
         # the API refuses self-change even without the UI
         r = api(page, "PATCH", f"/admin/users/{SEED['admin']['id']}/status",
                 data=json.dumps({"action": "disable"}), headers={"Content-Type": "application/json"})
         assert r.status == 409 and r.json()["error"]["code"] == "ADM_ACTION_NOT_PERMITTED", r.status
-    step("A4", "users: 2 pages, no self actions, cancel/disable/enable/remove with confirmation; API 409 on self", a4)
+    step("A4", "users: 2 pages, no self actions, cancel/disable/enable with confirmation, no Remove; API 409 on self", a4)
 
     # ---- A5: models - upload, preview, refuse, force, rollback ------------
     def a5():

@@ -67,7 +67,7 @@ class OTPVerifyResponse(BaseModel):
 
 
 class UserStatusUpdateRequest(BaseModel):
-    action: Literal["enable", "disable", "remove"]
+    action: Literal["enable", "disable"]
 
 
 class UserStatusUpdateResponse(BaseModel):

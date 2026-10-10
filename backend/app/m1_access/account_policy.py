@@ -5,24 +5,27 @@ One rule set, shared by M1's ``PATCH /users/{id}/status`` and M3's
 
 What the statuses mean - this is a SOFT state change, nothing is deleted:
 
-* ``disabled`` / ``removed``: sign-in is refused and every existing session
+* ``disable``: sign-in is refused and every existing session
   token is rejected on its next use (``security.current_session`` re-reads
   the status on each request). The user's D2 images, D4 predictions, D5
   panels, D6 log rows and stored files are all KEPT, untouched, and stay
   reachable to nobody but their owner - who can no longer sign in.
-* ``enable`` returns either state to ``active``; all data reappears as it was.
+* ``enable`` returns the account to ``active``; all data reappears as it was.
 
-"removed" differs from "disabled" only in its label today. There is no hard
-delete and no file cleanup; orphaned files cannot arise from this action.
+There is no hard delete and no file cleanup; orphaned files cannot arise
+from this action. A ``remove`` action used to exist; it set the status
+``removed``, which behaved exactly like ``disabled``, so it was dropped
+(2026-10-10). The ``removed`` status stays valid in D1 so that any row
+already holding it is still blocked and can still be enabled.
 
 Re-registration: the D1 row is kept, and the unique index on lower(email)
 still holds its address, so the same e-mail cannot register a new account
-while a removed (or disabled) row exists. The attempt gets exactly the
+while a disabled (or legacy removed) row exists. The attempt gets exactly the
 answer any taken address gets - 409 AUTH_EMAIL_TAKEN, same message - so it
 does not reveal that the account is removed (test_account_status_enforcement).
 To let the person back in, an admin re-enables the account; there is no
 erase-and-reuse path (a hard delete would need a retention decision first).
-Sign-in reports "disabled"/"removed" only AFTER a correct password, i.e. only
+Sign-in reports the account as disabled only AFTER a correct password, i.e. only
 to the account's owner.
 
 Refused (409 ``ADM_ACTION_NOT_PERMITTED``), whatever the UI shows:
@@ -38,7 +41,7 @@ from sqlalchemy.orm import Session
 from app.m1_access.models import User
 from app.shared.errors import AdmActionNotPermittedException, AppException
 
-STATUS_FOR_ACTION = {"enable": "active", "disable": "disabled", "remove": "removed"}
+STATUS_FOR_ACTION = {"enable": "active", "disable": "disabled"}
 
 
 def apply_status_change(db: Session, actor_id: int, target_id: int, action: str) -> tuple[User, str]:

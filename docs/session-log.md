@@ -8,6 +8,15 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-10 — admin "Remove" action dropped
+- "Remove" set the status `removed`, which behaved exactly like `disabled`
+  (no deletion, same blocking, email still reserved) — two buttons for one
+  action. The `remove` action is gone from the shared policy, both status
+  endpoints (M1 `/users/{id}/status`, M3 `/admin/users/{id}/status`; now 422)
+  and the Users page. The `removed` status stays valid in D1, so any legacy
+  row is still blocked and can be enabled; no migration. Recorded in
+  `docs/auth-hardening.md` (M1 edit).
+
 ### 2026-10-10 — evaluation images lost in the clean-up
 - After the clean-up, `ml/datasets/synthbuster_raise/` (2.3 GB) and
   `ml/datasets/sbr_val/` (4.6 GB) were found empty. Neither was named in any

@@ -269,6 +269,8 @@ and over HTTP in `test_api_predict.py`.
 
 ## 8. Recent work (full entries: [docs/session-log.md](docs/session-log.md))
 
+- **2026-10-10** — admin "Remove" action dropped (it was Disable under another
+  name).
 - **2026-10-10** — confidence rule restored to the 2026-10-05 form (migration
   0007); legacy M3 dashboard removed; unused local data cleaned up.
 - **2026-10-09/10** — Community Forensics replaced SigLIP 2 after AIGenImages2026

@@ -50,8 +50,8 @@ def status_of(user_id: int) -> str:
 
 
 @pytest.mark.parametrize("endpoint", ENDPOINTS)
-@pytest.mark.parametrize("action", ["disable", "remove"])
-def test_admin_cannot_disable_or_remove_themselves(endpoint, action):
+@pytest.mark.parametrize("action", ["disable"])
+def test_admin_cannot_disable_themselves(endpoint, action):
     admin_id, headers = make_user("Admin")
     make_user("Admin")  # another admin exists, so only the self rule can refuse
     r = client.patch(endpoint.format(id=admin_id), headers=headers, json={"action": action})
@@ -77,7 +77,7 @@ def test_admin_can_disable_another_admin_while_one_remains(endpoint):
     assert status_of(other_id) == "disabled"
 
 
-def test_last_active_admin_cannot_be_disabled_or_removed():
+def test_last_active_admin_cannot_be_disabled():
     """Not reachable over HTTP (the actor is itself an active admin and cannot
     target itself), so the invariant is asserted on the shared policy, which
     both endpoints call."""
@@ -88,7 +88,7 @@ def test_last_active_admin_cannot_be_disabled_or_removed():
     try:
         # Only active admins count: here `last_id` is the only one.
         assert db.query(User).filter(User.role == "Admin", User.account_status == "active").count() == 1
-        for action in ("disable", "remove"):
+        for action in ("disable",):
             with pytest.raises(AppException) as exc:
                 apply_status_change(db, actor_id, last_id, action)
             assert exc.value.code == "ADM_ACTION_NOT_PERMITTED"
@@ -102,8 +102,28 @@ def test_last_active_admin_cannot_be_disabled_or_removed():
         db.close()
 
 
-def test_removed_user_keeps_data_but_loses_access():
-    """'Remove' is a soft state change: sessions stop working, data stays."""
+@pytest.mark.parametrize("endpoint", ENDPOINTS)
+def test_remove_action_no_longer_exists(endpoint):
+    """'remove' did exactly what 'disable' does, so it was dropped (2026-10-10)."""
+    _, admin = make_user("Admin")
+    user_id, _ = make_user("User")
+    r = client.patch(endpoint.format(id=user_id), headers=admin, json={"action": "remove"})
+    assert r.status_code == 422, r.text
+    assert status_of(user_id) == "active"
+
+
+def test_legacy_removed_account_stays_blocked_and_can_be_enabled():
+    """Rows marked 'removed' before the action was dropped keep working as before."""
+    _, admin = make_user("Admin")
+    user_id, user_headers = make_user("User", status="removed")
+    assert client.get("/api/v1/auth/me", headers=user_headers).status_code == 403
+    r = client.patch(f"/api/v1/admin/users/{user_id}/status", headers=admin, json={"action": "enable"})
+    assert r.status_code == 200 and r.json()["account_status"] == "active"
+    assert client.get("/api/v1/auth/me", headers=user_headers).status_code == 200
+
+
+def test_disabled_user_keeps_data_but_loses_access():
+    """'Disable' is a soft state change: sessions stop working, data stays."""
     _, admin = make_user("Admin")
     user_id, user_headers = make_user("User")
     db = SessionLocal()
@@ -114,8 +134,8 @@ def test_removed_user_keeps_data_but_loses_access():
     finally:
         db.close()
     assert client.get("/api/v1/auth/me", headers=user_headers).status_code == 200
-    r = client.patch(f"/api/v1/admin/users/{user_id}/status", headers=admin, json={"action": "remove"})
-    assert r.status_code == 200 and r.json()["account_status"] == "removed"
+    r = client.patch(f"/api/v1/admin/users/{user_id}/status", headers=admin, json={"action": "disable"})
+    assert r.status_code == 200 and r.json()["account_status"] == "disabled"
     assert client.get("/api/v1/auth/me", headers=user_headers).status_code == 403
     db = SessionLocal()
     try:

@@ -147,7 +147,7 @@ class SystemAnalytics(BaseModel):
 
 
 class UserStatusActionRequest(BaseModel):
-    action: Literal["enable", "disable", "remove"]
+    action: Literal["enable", "disable"]
 
 
 class UserStatusResponse(BaseModel):

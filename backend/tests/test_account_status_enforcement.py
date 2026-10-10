@@ -1,13 +1,13 @@
-"""Disabling or removing an account takes effect on the very next request.
+"""Disabling an account takes effect on the very next request.
 
 Tokens come from the real login endpoint (not minted in the test). The
 session dependency re-reads account_status from D1 on every request
 (m1_access.security.verify_session_token), so an already-issued token stops
 working as soon as an admin changes the status - not at its 8 h expiry.
 
-Also: re-registering the email of a removed (or disabled) account answers
+Also: re-registering the email of a disabled account answers
 exactly like any other taken email, so registration does not reveal that a
-removed account exists.
+disabled account exists.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def requests_with(headers):
     ]
 
 
-@pytest.mark.parametrize("action,status", [("disable", "disabled"), ("remove", "removed")])
+@pytest.mark.parametrize("action,status", [("disable", "disabled")])
 @pytest.mark.parametrize("endpoint", ["/api/v1/admin/users/{id}/status", "/api/v1/users/{id}/status"])
 def test_status_change_invalidates_an_existing_token_immediately(action, status, endpoint):
     _, admin = make_user("Admin")
@@ -64,7 +64,7 @@ def test_status_change_invalidates_an_existing_token_immediately(action, status,
     assert client.get("/api/v1/auth/me", headers=headers).status_code == 200  # restored, nothing lost
 
 
-@pytest.mark.parametrize("action", [None, "disable", "remove"])
+@pytest.mark.parametrize("action", [None, "disable"])
 def test_reregistering_a_taken_email_does_not_reveal_the_account_status(action):
     _, admin = make_user("Admin")
     user_id, email, _ = register_and_login()
@@ -74,7 +74,7 @@ def test_reregistering_a_taken_email_does_not_reveal_the_account_status(action):
                     json={"full_name": "Someone Else", "email": email.upper(), "password": "Another12345"})
     assert r.status_code == 409, r.text
     error = r.json()["error"]
-    # Identical for active, disabled and removed accounts.
+    # Identical for active and disabled accounts.
     assert error["code"] == "AUTH_EMAIL_TAKEN"
     assert error["message"] == "An account with this email address already exists."
     assert "removed" not in r.text.lower() and "disabled" not in r.text.lower()

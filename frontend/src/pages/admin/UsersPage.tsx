@@ -7,7 +7,7 @@ import { ErrorNotice, Notice } from '../../components/Feedback';
 import { ConfirmDialog, Pager, when } from './AdminLayout';
 
 const PAGE_SIZE = 20;
-type Action = 'enable' | 'disable' | 'remove';
+type Action = 'enable' | 'disable';
 
 const STATUS_TONE: Record<string, string> = {
   active: 'text-emerald-700 dark:text-emerald-300', disabled: 'text-amber-700 dark:text-amber-300', removed: 'text-rose-700 dark:text-rose-300',
@@ -26,19 +26,8 @@ const EXPLAIN: Record<Action, { title: string; button: string; body: React.React
         <p>They are refused at sign-in, and any session they have open stops working on its next request.</p>
         <p>Their images, results, explainability panels and stored files are <strong>kept unchanged</strong>.
           Enabling the account later restores everything.</p>
-      </>
-    ),
-  },
-  remove: {
-    title: 'Mark this account as removed?',
-    button: 'Mark as removed',
-    body: (
-      <>
-        <p>This is <strong>not a deletion</strong>. It blocks sign-in and open sessions exactly like disabling;
-          only the recorded status differs.</p>
-        <p>Their images, results, explainability panels and stored files are <strong>kept unchanged</strong> -
-          nothing is erased and no files are orphaned. Enabling the account restores everything.</p>
-        <p>The email address stays reserved: it cannot be used to register a new account while this one exists.</p>
+        <p>This is <strong>not a deletion</strong>. The email address stays reserved: it cannot be used to register
+          a new account while this one exists.</p>
       </>
     ),
   },
@@ -145,10 +134,6 @@ export const UsersPage: React.FC = () => {
                           {u.account_status === 'active' && (
                             <button type="button" className="text-xs px-2 py-1 rounded border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300"
                                     onClick={() => { setActionError(null); setDone(null); setPending({ target: u, action: 'disable' }); }}>Disable</button>
-                          )}
-                          {u.account_status !== 'removed' && (
-                            <button type="button" className="text-xs px-2 py-1 rounded border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300"
-                                    onClick={() => { setActionError(null); setDone(null); setPending({ target: u, action: 'remove' }); }}>Remove</button>
                           )}
                         </div>
                       )}

@@ -191,3 +191,11 @@ own source) and user-agent.
   - The React client could not read that format, and showed "Request failed with status 422".
   - Registration's weak-password refusal now uses `AUTH_WEAK_PASSWORD`. This is a one-line
     change in M1's `register_user`.
+
+## Account status: "remove" dropped (2026-10-10)
+
+- M1 edits: `account_policy.STATUS_FOR_ACTION` and `UserStatusUpdateRequest.action` no longer
+  accept `remove`; `PATCH /api/v1/users/{id}/status` answers 422 `VALIDATION_ERROR` for it.
+- Why: `removed` behaved exactly like `disabled` (soft, reversible, email still reserved).
+- The `removed` status is still allowed in D1 and still refused at sign-in, so existing rows keep
+  working and `enable` restores them.
