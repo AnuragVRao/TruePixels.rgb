@@ -197,13 +197,14 @@ cd frontend; npm run dev        # http://localhost:3000
 The interface works like this:
 - **Signed out:** a landing page with **Create Account**, **Sign In** and
   **Admin Login** (the Administrator Portal).
-- **Signed in:** four tabs:
+- **Signed in:** four tabs for an administrator, two for a normal user:
   1. Forensic Detection;
   2. User Scan History;
-  3. Admin Dashboard & Analytics - **administrators only**; a normal user
-     does not see this tab, so their tabs run 1, 2, 3 (Forensic Detection,
-     User Scan History, 1-Click Verification);
-  4. 1-Click Verification.
+  3. Admin Dashboard & Analytics - **administrators only**;
+  4. 1-Click Verification - **administrators only**.
+
+  A normal user sees only tabs 1 and 2; typing `/admin` or `/verification`
+  answers "Administrators only."
 
 With `ENVIRONMENT=development`, the API reference is also served at
 <http://127.0.0.1:8000/docs>.
@@ -340,8 +341,8 @@ The whole system on one machine. Set up as above, then:
    limits).
 6. **2. User Scan History:** past results, then **Test Security Barrier**,
    which proves another user's result cannot be opened.
-7. **1-Click Verification → Run Verification** (tab 3 for a normal user): live checks against every
-   seam.
+7. **1-Click Verification → Run Verification** (administrators only; run it
+   after step 8's Admin Login): live checks against every seam.
 8. **Sign Out** (it asks first). Then **Admin Login** → **3. Admin Dashboard
    & Analytics**:
    - an overview of figures that all come from the API;

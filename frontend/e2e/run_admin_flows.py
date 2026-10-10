@@ -102,11 +102,13 @@ with sync_playwright() as p:
 
     def a1():
         sign_in(upage, SEED["user"]["email"], admin=False)
-        # The admin tab is shown to everyone (as in M3's dashboard) but locked for users.
-        upage.get_by_role("navigation", name="Main").get_by_role("link", name="3. Admin Dashboard & Analytics").click()
-        expect(upage.get_by_text("Administrators only.")).to_be_visible()
-        upage.goto(f"{BASE}/admin/users")
-        expect(upage.get_by_text("Administrators only.")).to_be_visible()
+        # Admin-only tabs are hidden from users; typing their addresses is refused.
+        nav = upage.get_by_role("navigation", name="Main")
+        for label in ("3. Admin Dashboard & Analytics", "4. 1-Click Verification"):
+            expect(nav.get_by_role("link", name=label)).to_have_count(0)
+        for path in ("/admin/users", "/verification"):
+            upage.goto(f"{BASE}{path}")
+            expect(upage.get_by_text("Administrators only.")).to_be_visible()
         for method, path in [("GET", "/admin/summary"), ("GET", "/admin/logs"), ("GET", "/admin/users"),
                              ("GET", "/models"), ("POST", "/models/1/gate-preview"),
                              ("PATCH", f"/admin/users/{SEED['admin2']['id']}/status")]:
@@ -116,7 +118,7 @@ with sync_playwright() as p:
                                     data=kw.get("data"))
             assert r.status == 403, (path, r.status)
             assert r.json()["error"]["code"] == "AUTH_FORBIDDEN", r.json()
-    step("A1", "normal user: no Admin link, UI guard, API 403 on 6 admin endpoints", a1)
+    step("A1", "normal user: no Admin or Verification tab, UI guards, API 403 on 6 admin endpoints", a1)
     user_ctx.close()
 
     # ---- A2: admin sign-in + overview numbers come from the API -----------
@@ -146,6 +148,15 @@ with sync_playwright() as p:
         print("overview:", summary["total_predictions"], "predictions;", summary["error_count_last_24h"],
               "errors 24h; latency", lat)
     step("A2", "admin login (checkbox + OTP); tiles equal /admin/summary + /admin/analytics", a2)
+
+    # ---- A2b: 1-Click Verification (admins only) --------------------------
+    def a2b():
+        page.get_by_role("navigation", name="Main").get_by_role("link", name="4. 1-Click Verification").click()
+        page.get_by_role("button", name="Run Verification").click()
+        summary = page.get_by_test_id("verification-summary")
+        expect(summary).to_contain_text(re.compile(r"\d+ passed, 0 failed"), timeout=60000)
+        assert page.locator('[data-outcome="fail"]').count() == 0
+    step("A2b", "admin: 1-Click Verification tab, every live check passes on its exact status", a2b)
 
     # ---- A3: logs - paging, filter, plain text ----------------------------
     def a3():

@@ -290,7 +290,7 @@ with sync_playwright() as p:
     step(19, "landing page (M1), separate Create Account / Sign In / Admin Login; user refused by admin portal", s19)
 
     def s20():
-        # Signed in: the four numbered tabs of M3's original dashboard.
+        # Signed in as a normal user: the two user tabs of M3's original dashboard.
         page.goto(f"{BASE}/login")
         page.get_by_label("Email").fill(email)
         page.get_by_label("Password", exact=True).fill(password)
@@ -301,22 +301,20 @@ with sync_playwright() as p:
         page.get_by_role("button", name="Verify").click()
         page.wait_for_url(f"{BASE}/")
         tabs = page.get_by_role("navigation", name="Main")
-        for label in ("1. Forensic Detection", "2. User Scan History", "3. Admin Dashboard & Analytics",
-                      "4. 1-Click Verification"):
+        for label in ("1. Forensic Detection", "2. User Scan History"):
             expect(tabs.get_by_role("link", name=label)).to_be_visible()
+        # A normal user sees no admin tabs (Admin Dashboard, 1-Click Verification).
+        for label in ("3. Admin Dashboard & Analytics", "4. 1-Click Verification"):
+            expect(tabs.get_by_role("link", name=label)).to_have_count(0)
         # Tab 2: the isolation notice and its Test Security Barrier button.
         tabs.get_by_role("link", name="2. User Scan History").click()
         page.get_by_role("button", name="Test Security Barrier").click()
         expect(page.get_by_role("status").filter(has_text="Barrier active")).to_be_visible()
-        # Tab 3 for a normal user: visible but locked.
-        tabs.get_by_role("link", name="3. Admin Dashboard & Analytics").click()
-        expect(page.get_by_text("Administrators only.")).to_be_visible()
-        # Tab 4: every live check passes on its exact expected status.
-        tabs.get_by_role("link", name="4. 1-Click Verification").click()
-        page.get_by_role("button", name="Run Verification").click()
-        summary = page.get_by_test_id("verification-summary")
-        expect(summary).to_contain_text(re.compile(r"\d+ passed, 0 failed"), timeout=60000)
-        assert page.locator('[data-outcome="fail"]').count() == 0
+        # Typing the admin addresses directly: refused for a normal user.
+        for path in ("/admin", "/verification"):
+            page.goto(f"{BASE}{path}")
+            expect(page.get_by_text("Administrators only.")).to_be_visible()
+            expect(page.get_by_role("button", name="Run Verification")).to_have_count(0)
         # Sign Out asks first; Cancel keeps the session.
         page.get_by_role("button", name="Sign Out").click()
         page.get_by_role("dialog").get_by_role("button", name="Cancel").click()
@@ -324,7 +322,7 @@ with sync_playwright() as p:
         page.get_by_role("button", name="Sign Out").click()
         page.get_by_role("dialog").get_by_role("button", name="Yes, sign out").click()
         page.wait_for_url(f"{BASE}/")
-    step(20, "signed in: 4 dashboard tabs; security barrier; admin tab locked for users; 1-click verification all PASS; sign-out confirmation", s20)
+    step(20, "signed in: 2 tabs for a user; security barrier; admin dashboard and 1-click verification refused for users; sign-out confirmation", s20)
 
     def s18():
         # After signing in, ?next= must never leave this origin.

@@ -64,7 +64,7 @@ screens comes from the API; none is hard-coded.
 
 | # | Flow | Steps | Expected |
 |---|---|---|---|
-| A1 | Non-admin | Sign in as a normal user, open `/admin/users` | No "Admin Dashboard & Analytics" tab (tabs read 1. Forensic Detection, 2. User Scan History, 3. 1-Click Verification); "Administrators only."; the API answers 403 `AUTH_FORBIDDEN` to `/admin/*` and `/models*` with that token |
+| A1 | Non-admin | Sign in as a normal user, open `/admin/users` | No "Admin Dashboard & Analytics" or "1-Click Verification" tab (tabs read 1. Forensic Detection, 2. User Scan History); `/admin/users` and `/verification` show "Administrators only."; the API answers 403 `AUTH_FORBIDDEN` to `/admin/*` and `/models*` with that token |
 | A2 | Overview | `/admin` | Tiles show `/admin/summary` and `/admin/analytics`: errors in the last 24 h, active models, warm-only p50/p95 latency with the count of excluded cold starts; empty states when there is no data |
 | A3 | Logs | `/admin/logs`; Next/Previous; Severity = error | 25 per page; filters narrow the list; log text that contains HTML is shown literally and never runs |
 | A4 | Users | `/admin/users`; Disable / Enable another account (there is no Remove) | A confirmation explains that nothing is deleted (images, results and files are kept); your own row has no actions; the API refuses self-changes and leaving no active admin (409 `ADM_ACTION_NOT_PERMITTED`) |

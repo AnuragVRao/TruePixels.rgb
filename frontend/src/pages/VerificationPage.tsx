@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 import { CheckCircle2, Loader2, MinusCircle, Play, XCircle } from 'lucide-react';
 import { getToken } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { Notice } from '../components/Feedback';
 
 /**
  * Tab 4 - "1-Click Verification", after M3's original Live Verification Suite.
+ * Administrators only (the tab is hidden from users and this page refuses
+ * them; every endpoint it calls enforces its own access rules regardless).
  * Live requests against the API's seams. A check passes only on its EXACT
  * expected status (no "PASS whatever happened", the old tester's bug); checks
  * that need one of your own predictions are SKIPPED, not failed, without one.
@@ -84,8 +87,7 @@ export const VerificationPage: React.FC = () => {
       const body = await r.json().catch(() => null);
       return body?.error?.code === 'INF_PREDICTION_NOT_FOUND' ? null : 'wrong error code';
     });
-    await exact(isAdmin ? 'Admin summary (you are an admin)' : 'Admin summary is refused for users',
-                '/api/v1/admin/summary', isAdmin ? 200 : 403);
+    await exact('Admin summary (you are an admin)', '/api/v1/admin/summary', 200);
     setRunning(false);
   };
 
@@ -93,6 +95,14 @@ export const VerificationPage: React.FC = () => {
   const failed = results.filter((r) => r.outcome === 'fail').length;
   const skipped = results.filter((r) => r.outcome === 'skip').length;
   const done = !running && results.length > 0;
+
+  if (!isAdmin) {
+    return (
+      <Notice tone="error" title="Administrators only.">
+        1-Click Verification needs an administrator account. Your own results are under History.
+      </Notice>
+    );
+  }
 
   return (
     <div className="space-y-5">

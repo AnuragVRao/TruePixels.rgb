@@ -8,6 +8,15 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-10 — 1-Click Verification is admin-only
+- The tab is hidden from normal users (their tabs: 1. Forensic Detection,
+  2. User Scan History) and `/verification` answers "Administrators only."
+  The page called only endpoints a user may already reach, so no backend
+  change; its admin-summary check now always expects 200. E2E: the user flow
+  (step 20, A1) asserts both admin tabs are absent and both routes refused;
+  the live run moved to the admin flow (A2b). Both e2e scripts had still
+  expected the pre-2026-10-09 "admin tab visible but locked" layout.
+
 ### 2026-10-10 — admin "Remove" action dropped
 - "Remove" set the status `removed`, which behaved exactly like `disabled`
   (no deletion, same blocking, email still reserved) — two buttons for one

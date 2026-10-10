@@ -7,7 +7,7 @@ import { ThemeToggle } from './ThemeToggle';
 
 /**
  * Signed in: the numbered tabs of M3's original dashboard (Forensic
- * Detection, User Scan History, Admin Dashboard & Analytics - admins only,
+ * Detection, User Scan History; admins only: Admin Dashboard & Analytics,
  * 1-Click Verification) and its header (email, role badge, Sign Out with a
  * confirmation). Signed out: M1's three entry points.
  */
@@ -27,15 +27,17 @@ const Tabs: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
       <NavLink to="/history" className={({ isActive }) => tabClass(isActive)}>
         <Clock className="w-4 h-4" /> 2. User Scan History
       </NavLink>
-      {/* Admins only: a User never sees the tab (AdminLayout and the API still enforce the role). */}
+      {/* Admins only: a User never sees these tabs (the pages and the API still enforce the role). */}
       {isAdmin && (
-        <NavLink to="/admin" className={({ isActive }) => tabClass(isActive && pathname !== '/admin/login')}>
-          <BarChart3 className="w-4 h-4" /> 3. Admin Dashboard &amp; Analytics
-        </NavLink>
+        <>
+          <NavLink to="/admin" className={({ isActive }) => tabClass(isActive && pathname !== '/admin/login')}>
+            <BarChart3 className="w-4 h-4" /> 3. Admin Dashboard &amp; Analytics
+          </NavLink>
+          <NavLink to="/verification" className={({ isActive }) => tabClass(isActive)}>
+            <CheckCircle className="w-4 h-4" /> 4. 1-Click Verification
+          </NavLink>
+        </>
       )}
-      <NavLink to="/verification" className={({ isActive }) => tabClass(isActive)}>
-        <CheckCircle className="w-4 h-4" /> {isAdmin ? 4 : 3}. 1-Click Verification
-      </NavLink>
     </nav>
   );
 };
