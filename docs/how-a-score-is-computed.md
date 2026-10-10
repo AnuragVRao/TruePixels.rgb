@@ -212,8 +212,13 @@ the score is final. They never change it.
   went, drawn inside the outlined centre square it actually analysed. It is an
   approximation of where the model looked, not a measurement of what caused
   the verdict.
-- **SPAI patch spectrum:** the average frequency content of the patches SPAI
-  analysed, with its low/high split marked. It is descriptive only.
+- **SPAI patch spectrum:** which kinds of detail are present in the patches
+  SPAI analysed, averaged over all of them: coarse detail at the centre, fine
+  detail towards the edges, with SPAI's low/high split drawn as a dashed
+  circle. The panel carries a short key: the bright cross is mostly the patch
+  edges (in every image, not a sign either way); a regular grid of isolated
+  dots is a pattern repeating every few pixels (JPEG blocks, or upsampling).
+  It is descriptive only.
 
 ---
 

@@ -40,6 +40,20 @@ SPECTRUM_MAX_SIDE = 768
 TECHNIQUE_SEMANTIC = "attention-rollout"
 TECHNIQUE_FREQUENCY = "spai-patch-spectrum"
 
+# Spectrum panel colours (the panel is always dark, like the original design).
+_BG, _FG, _MUTED, _ACCENT = "#111827", "#f3f4f6", "#9ca3af", "#38bdf8"
+
+# Both features are recorded in ml/evaluation/RESULTS.md ("What the panels
+# look like"): SPAI applies no window before its FFT, so every spectrum has
+# the cross; isolated peaks come from patterns repeating every few pixels.
+_SPECTRUM_KEY = (
+    "- A bright cross through the centre is mostly the edges of the squares themselves.\n"
+    "  It appears in every image and is not a sign either way.\n"
+    "- Isolated bright dots in a regular grid mean a pattern repeating every few pixels,\n"
+    "  e.g. JPEG's 8-pixel blocks or the upsampling some generators use.\n"
+    "- This shows what SPAI looked at, not which of it drove its score."
+)
+
 
 def _save_clean_png(pixels: np.ndarray | Image.Image, output_path: str, max_side: int) -> None:
     """Write an RGB PNG with no metadata chunks, longer side <= max_side."""
@@ -156,42 +170,74 @@ def generate_frequency_spectrum_panel(
             status_code=501,
         )
     spec_arr = np.asarray(spectrum, dtype=np.float32)
+    spai = bool(meta and meta.get("mask_radius"))
 
-    fig, ax = plt.subplots(figsize=(5.4, 5), dpi=100)
+    # Drawn for a reader with no signal-processing background: plain-language
+    # axes, the two regions SPAI compares named in words, and a short key for
+    # the two features people ask about. The data is drawn unchanged.
+    fig = plt.figure(figsize=(6.4, 7.6 if spai else 6.2), dpi=100)
     try:
-        fig.patch.set_facecolor("#111827")
-        ax.set_facecolor("#111827")
+        fig.patch.set_facecolor(_BG)
+        ax = fig.add_axes((0.11, 0.30, 0.80, 0.58) if spai else (0.11, 0.17, 0.80, 0.70))
+        ax.set_facecolor(_BG)
         size_y, size_x = spec_arr.shape
-        # Frequencies in cycles per patch, centred on DC.
-        extent = (-size_x / 2, size_x / 2, -size_y / 2, size_y / 2)
-        # The DC peak is several times larger than everything else, so a
-        # full-range colour scale renders the panel almost black. Clip the
-        # COLOUR RANGE (not the data) to the 1st-99.5th percentile, and say so.
+        # Frequencies in cycles per patch, centred on the zero frequency.
+        half_x, half_y = size_x / 2, size_y / 2
+        extent = (-half_x, half_x, -half_y, half_y)
+        # The zero-frequency peak is several times larger than everything else,
+        # so a full-range colour scale renders the panel almost black. Clip the
+        # COLOUR RANGE (not the data) to the 1st-99.5th percentile.
         low, high = np.percentile(spec_arr, [1.0, 99.5])
         im = ax.imshow(spec_arr, cmap="inferno", origin="lower", extent=extent,
                        vmin=float(low), vmax=float(high))
-        bar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, extend="both")
-        bar.set_label("log(1 + |FFT|)  (colour range: 1st-99.5th percentile)",
-                      color="#f3f4f6", fontsize=8)
-        bar.ax.tick_params(colors="#9ca3af", labelsize=7)
 
-        if meta and meta.get("mask_radius"):
-            radius = float(meta["mask_radius"])
-            ax.add_patch(plt.Circle((0, 0), radius, color="#38bdf8", fill=False,
-                                    linestyle="--", linewidth=1.4))
-            ax.annotate(f"SPAI low/high split (r = {int(radius)})", xy=(radius * 0.71, radius * 0.71),
-                        xytext=(size_x * 0.12, size_y * 0.38), color="#38bdf8", fontsize=8,
-                        arrowprops={"arrowstyle": "-", "color": "#38bdf8", "lw": 0.8})
-            title = (f"Mean spectrum of the {meta.get('patches', '?')} "
-                     f"{meta.get('patch_size', '?')}x{meta.get('patch_size', '?')} patches SPAI analysed")
+        if spai:
+            patches = meta.get("patches", "?")
+            side = meta.get("patch_size", "?")
+            fig.text(0.5, 0.965, "Which kinds of detail SPAI saw", ha="center", va="top",
+                     color=_FG, fontsize=13, fontweight="bold")
+            fig.text(0.5, 0.925, f"Average over the {patches} squares of {side}x{side} pixels it analysed",
+                     ha="center", va="top", color=_MUTED, fontsize=9)
         else:
-            title = "Log-magnitude spectrum (FFT)"
-        ax.set_title(title, color="#f3f4f6", fontsize=9.5, pad=8)
-        ax.set_xlabel("horizontal frequency (cycles / patch)", color="#9ca3af", fontsize=8)
-        ax.set_ylabel("vertical frequency (cycles / patch)", color="#9ca3af", fontsize=8)
-        ax.tick_params(colors="#9ca3af", labelsize=7)
+            fig.text(0.5, 0.965, "Frequency content of the image", ha="center", va="top",
+                     color=_FG, fontsize=13, fontweight="bold")
+
+        # Axes in words: the centre is coarse detail, the edges are fine detail.
+        # (Labels sit in from the corners so the two axes' labels do not collide.)
+        ax.set_xticks((-half_x * 0.85, 0, half_x * 0.85), ("finer", "coarse", "finer"))
+        ax.set_yticks((-half_y * 0.85, 0, half_y * 0.85), ("finer", "coarse", "finer"), rotation=90, va="center")
+        ax.set_xlabel("horizontal detail", color=_MUTED, fontsize=9)
+        ax.set_ylabel("vertical detail", color=_MUTED, fontsize=9)
+        ax.tick_params(colors=_MUTED, labelsize=8, length=0)
+        for spine in ax.spines.values():
+            spine.set_color("#374151")
+
+        if spai:
+            radius = float(meta["mask_radius"])
+            ax.add_patch(plt.Circle((0, 0), radius, color=_ACCENT, fill=False,
+                                    linestyle="--", linewidth=1.6))
+            boxed = {"boxstyle": "round,pad=0.35", "facecolor": _BG, "edgecolor": _ACCENT, "alpha": 0.88}
+            ax.annotate("Inside the circle: low frequencies\nbroad shapes, colour, lighting",
+                        xy=(-radius * 0.71, -radius * 0.71), xytext=(-half_x * 0.93, -half_y * 0.80),
+                        color=_FG, fontsize=8.5, ha="left", va="center", bbox=boxed,
+                        arrowprops={"arrowstyle": "-", "color": _ACCENT, "lw": 1.0})
+            ax.text(half_x * 0.93, half_y * 0.80, "Outside: high frequencies\nfine texture, sharp edges, noise",
+                    color=_FG, fontsize=8.5, ha="right", va="center", bbox=boxed)
+
+        # Colour scale in words; the ends are clipped (see above), hence the arrows.
+        cax = fig.add_axes((0.25, 0.235 if spai else 0.07, 0.50, 0.018))
+        bar = fig.colorbar(im, cax=cax, orientation="horizontal", extend="both")
+        bar.set_ticks((float(low), float(high)), labels=("weaker", "stronger"))
+        bar.ax.tick_params(colors=_MUTED, labelsize=8, length=0)
+        bar.set_label("how much of the image's content sits at that kind of detail",
+                      color=_MUTED, fontsize=8, labelpad=4)
+        bar.outline.set_edgecolor("#374151")
+
+        if spai:
+            fig.text(0.07, 0.165, "What to look for", color=_FG, fontsize=9.5, fontweight="bold", va="top")
+            fig.text(0.07, 0.135, _SPECTRUM_KEY, color=_MUTED, fontsize=8.5, va="top", linespacing=1.55)
         buffer = io.BytesIO()
-        fig.savefig(buffer, format="png", bbox_inches="tight", facecolor=fig.get_facecolor(),
+        fig.savefig(buffer, format="png", facecolor=fig.get_facecolor(),
                     edgecolor="none", metadata={"Software": None})
     finally:
         plt.close(fig)

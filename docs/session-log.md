@@ -8,6 +8,17 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-10 — SPAI spectrum panel redrawn for readers
+- Same data (the mean log-magnitude spectrum of SPAI's patches, colour range
+  still clipped to the 1st-99.5th percentile); only the drawing changed:
+  plain-language title and axes (coarse at the centre, finer outwards, no
+  cycles/patch numbers), the r = 16 circle labelled as low vs high
+  frequencies, a "weaker / stronger" colour bar, and a three-line "What to
+  look for" key (the cross is the patch edges; a dot grid is a repeating
+  pattern; descriptive only). The two features are the ones recorded in
+  RESULTS.md. Caption reworded to match. Stored PNGs are not redrawn: the
+  spectrum itself is not kept, so results analysed earlier keep the old panel.
+
 ### 2026-10-10 — 1-Click Verification is admin-only
 - The tab is hidden from normal users (their tabs: 1. Forensic Detection,
   2. User Scan History) and `/verification` answers "Administrators only."

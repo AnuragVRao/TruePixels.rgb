@@ -142,9 +142,11 @@ CAPTIONS: dict[str, str] = {
         "a region pushed the verdict towards Real or towards AI Generated."
     ),
     "spai-patch-spectrum": (
-        "Average frequency content of the 224x224 patches the frequency detector (SPAI) "
-        "analysed, with SPAI's low/high split marked (r = 16). Descriptive only: it shows "
-        "which frequencies are present in what SPAI saw - not which of them drove its score."
+        "Which kinds of detail are present in the 224x224-pixel squares the frequency "
+        "detector (SPAI) analysed, averaged over all of them: coarse detail (shapes, colour) "
+        "at the centre, fine detail (texture, edges, noise) towards the edges. The dashed "
+        "circle is where SPAI splits low from high frequencies before comparing them. "
+        "Descriptive only: it shows what SPAI saw - not which of it drove its score."
     ),
 }
 
