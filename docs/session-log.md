@@ -8,6 +8,15 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-11 — "Resend OTP?" confirmation
+- "Send a new code" (on `/verify` and on Forgot password's code step) now
+  asks "Resend OTP?" with No / Yes. On Yes the dialog stays open showing
+  "Sending…" and a spinner until the server answers (SMTP can take a few
+  seconds), then closes and the existing "new code sent" notice shows. The
+  silent pause had left people unsure whether the click registered.
+- `ConfirmDialog` gained an optional `cancelLabel` and shows a spinner on its
+  confirm button while `busy` (the sign-out dialog gets the spinner too).
+
 ### 2026-10-10 — whole-image content map; tiled scoring measured, not adopted
 - Asked for: the Community Forensics attention panel over the whole image, not
   just the centre square. Filling the rest with invented values was declined

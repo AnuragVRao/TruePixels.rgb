@@ -4,6 +4,7 @@ import { Loader2, ShieldAlert } from 'lucide-react';
 import { ApiError, postJson } from '../api/client';
 import type { LoginResponse, MessageResponse, OtpVerifyResponse, RegisterResponse } from '../api/types';
 import { useAuth } from '../context/AuthContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorNotice, Notice } from '../components/Feedback';
 import { PasswordInput } from '../components/PasswordInput';
 import { PasswordRules, passwordOk } from '../components/PasswordRules';
@@ -252,6 +253,8 @@ export const VerifyOtpPage: React.FC = () => {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [resent, setResent] = useState(false);
+  const [askResend, setAskResend] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
   if (!email) return <Navigate to="/login" replace />;
@@ -275,14 +278,21 @@ export const VerifyOtpPage: React.FC = () => {
     }
   };
 
+  // Asked first, then the dialog stays open with a spinner until the server
+  // answers - the send can take a few seconds (SMTP), and a silent pause
+  // left people unsure whether the click had registered.
   const resend = async () => {
     setError(null);
     setResent(false);
+    setResending(true);
     try {
       await postJson('/auth/otp/send', { email });
       setResent(true);
     } catch (err) {
       setError(err);
+    } finally {
+      setResending(false);
+      setAskResend(false);
     }
   };
 
@@ -312,9 +322,15 @@ export const VerifyOtpPage: React.FC = () => {
           {busy && <Loader2 className="w-4 h-4 animate-spin" />} Verify
         </button>
       </form>
-      <button type="button" onClick={resend} className="text-sm text-primary hover:underline">
+      <button type="button" onClick={() => setAskResend(true)} className="text-sm text-primary hover:underline">
         Send a new code
       </button>
+      {askResend && (
+        <ConfirmDialog title="Resend OTP?" confirmLabel={resending ? 'Sending…' : 'Yes'} cancelLabel="No"
+                       busy={resending} onConfirm={() => void resend()} onCancel={() => setAskResend(false)}>
+          <p>A new code will be sent to <strong>{email}</strong>. You can request at most one code a minute.</p>
+        </ConfirmDialog>
+      )}
     </Card>
   );
 };
@@ -336,6 +352,7 @@ export const ForgotPasswordPage: React.FC = () => {
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [resent, setResent] = useState(false);
+  const [askResend, setAskResend] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const cleanEmail = email.trim().toLowerCase();
   const mismatch = confirm.length > 0 && confirm !== password;
@@ -353,6 +370,7 @@ export const ForgotPasswordPage: React.FC = () => {
       setError(err);
     } finally {
       setBusy(false);
+      setAskResend(false);
     }
   };
 
@@ -429,10 +447,17 @@ export const ForgotPasswordPage: React.FC = () => {
               {busy && <Loader2 className="w-4 h-4 animate-spin" />} Set new password
             </button>
           </form>
-          <button type="button" onClick={() => void requestCode()} disabled={busy}
+          <button type="button" onClick={() => setAskResend(true)} disabled={busy}
                   className="text-sm text-primary hover:underline disabled:opacity-50">
             Send a new code
           </button>
+          {askResend && (
+            <ConfirmDialog title="Resend OTP?" confirmLabel={busy ? 'Sending…' : 'Yes'} cancelLabel="No"
+                           busy={busy} onConfirm={() => void requestCode()} onCancel={() => setAskResend(false)}>
+              <p>A new code will be sent to <strong>{cleanEmail}</strong> if an account exists for it. You can
+                request at most one code a minute.</p>
+            </ConfirmDialog>
+          )}
         </>
       )}
       <p className="text-sm text-muted-foreground">

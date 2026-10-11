@@ -266,6 +266,8 @@ and over HTTP in `test_api_predict.py`.
 
 ## 8. Recent work (full entries: [docs/session-log.md](docs/session-log.md))
 
+- **2026-10-11** — "Send a new code" asks "Resend OTP?" (No / Yes) and shows
+  "Sending…" until the server answers.
 - **2026-10-10** — whole-image tiled scoring for Community Forensics measured
   and not adopted (FPR on camera photos 0.071 → 0.152); the attention panel
   now covers the whole image from a panel-only tiled pass. Evaluation images

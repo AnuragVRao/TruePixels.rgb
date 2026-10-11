@@ -19,6 +19,7 @@ backend terminal (with no SMTP configured, OTP codes are printed there).
 | 3 | OTP (2FA on) | Submit registration | Lands on `/verify`; the page explains the console fallback; the code appears in the console |
 | 4 | OTP wrong code | Enter `000000` | Error notice "Email or password is incorrect" (`AUTH_INVALID_CREDENTIALS`) with code shown; no crash |
 | 5 | OTP right code | Enter the console code | Signed in, back on `/` (or the `next` page) |
+| 5b | OTP resend | On `/verify` (or the reset-code step of Forgot password) click **Send a new code** | A "Resend OTP?" dialog with **No** / **Yes**; No closes it and sends nothing; Yes shows "Sending…" with a spinner until the server answers, then the dialog closes and the "new code has been sent" notice appears |
 | 6 | Upload validation | Choose a `.gif`, a >10 MB file, a 32x32 PNG | Each is refused before upload with a specific message |
 | 7 | Analyse (xai on) | Choose a normal JPG/PNG, keep "Include explainability" ticked, Analyse | "Uploading…", then "Analysing… Ns" with a live timer; then the results page |
 | 8 | Results | On the results page | Verdict, confidence %, band; three branch scores; original image; "Community Forensics attention rollout" (covering the whole image, no outline) and "SPAI patch spectrum" panels, each with an ⓘ icon that shows the backend's caption as text; model rows listed |
