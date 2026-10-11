@@ -69,7 +69,7 @@ screens comes from the API; none is hard-coded.
 | A2 | Overview | `/admin` | Tiles show `/admin/summary` and `/admin/analytics`: errors in the last 24 h, active models, warm-only p50/p95 latency with the count of excluded cold starts; empty states when there is no data |
 | A3 | Logs | `/admin/logs`; Next/Previous; Severity = error | 25 per page; filters narrow the list; log text that contains HTML is shown literally and never runs |
 | A4 | Users | `/admin/users`; Disable / Enable another account (there is no Remove) | A confirmation explains that nothing is deleted (images, results and files are kept); your own row has no actions; the API refuses self-changes and leaving no active admin (409 `ADM_ACTION_NOT_PERMITTED`) |
-| A5 | Models | Register a fusion JSON with tau 0.05; Check quality gate; Activate; Override the gate…; Roll back | Gate metrics framed as "a coarse safety net, not a verification"; plain activation refused, nothing changes; override needs a reason of 10+ characters plus a tick box, and is recorded as forced; rollback is offered only where an earlier activation exists; a passing candidate shows "Running canary and quality gate… Ns", then activates |
+| A5 | Models | Open `/admin/models`; where a card offers **Roll back to #N**, use it | Only "Running now": three cards (content detector, SPAI, fusion), each with its evaluation reference; no registration, gate preview, activation or history on the page (those are API-only: `POST /api/v1/models`, `/models/{id}/gate-preview`, `/models/{id}/activate`, `GET /models/activations`); rollback is offered only where an earlier activation exists, shows "Rolling back… Ns", then "Rolled back to model #N" with the advisory gate report |
 | A6 | Narrow screen | 375 px | No page-level horizontal scroll on the four admin screens (wide tables scroll inside their own box) |
 | A7 | Expired admin session | Corrupt `tp_token`, open Logs | `/login?expired=1&next=/admin/logs` |
 | A8 | Metadata only | Throughout | Admin screens never request a user's image, thumbnail or panel |
@@ -82,13 +82,13 @@ database (`truepixels_regression`), with all 8 checks passing:
 - `frontend/e2e/seed_admin_scratch.py`, then
   `frontend/e2e/run_admin_flows.py`, automate A1 to A8 as written above.
   - A2 also compares each tile with the JSON the API returns.
-  - A5 restores the original fusion configuration by rollback before it
-    ends.
+  - A5 activates a candidate fusion configuration through the API, then
+    restores the original by rollback from the page.
   - A4 re-enables every account it changed.
 
 **Not exercised in a browser:**
-- uploading semantic or SPAI head files through the form (the backend
-  tests cover those uploads);
+- registering, gate-previewing and activating models: API-only since
+  2026-10-11 (the backend tests cover them);
 - refusal of the last active administrator (it cannot be reached over HTTP;
   it is covered by `test_admin_policy.py`);
 - a naturally expired 8-hour token;

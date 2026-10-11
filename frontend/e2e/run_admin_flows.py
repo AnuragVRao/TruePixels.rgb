@@ -77,12 +77,8 @@ def api(page, method: str, path: str, **kw):
     return page.request.fetch(f"{API}{path}", method=method, headers=headers, **kw)
 
 
-fusion_bad = files / "fusion_tau005.json"
-fusion_bad.write_text(json.dumps({"strategy": "weighted_average", "weight_semantic": 0.25, "tau": 0.05, "temperature": 1.0}))
 fusion_ok = files / "fusion_tau074.json"
 fusion_ok.write_text(json.dumps({"strategy": "weighted_average", "weight_semantic": 0.25, "tau": 0.74, "temperature": 1.0}))
-wrong_ext = files / "fusion.txt"
-wrong_ext.write_text("{}")
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
@@ -220,77 +216,34 @@ with sync_playwright() as p:
         assert r.status == 409 and r.json()["error"]["code"] == "ADM_ACTION_NOT_PERMITTED", r.status
     step("A4", "users: 2 pages, no self actions, cancel/disable/enable with confirmation, no Remove; API 409 on self", a4)
 
-    # ---- A5: models - upload, preview, refuse, force, rollback ------------
+    # ---- A5: models - "Running now" only; rollback from the page ----------
     def a5():
         page.goto(f"{BASE}/admin/models")
         expect(page.get_by_role("heading", name="Running now")).to_be_visible()
+        for kind in ("semantic-classifier", "frequency-artifact-classifier", "fusion-configuration"):
+            expect(page.get_by_test_id(f"active-{kind}")).to_contain_text("Evaluation reference:")
+        # Registration, gate preview and activation are API-only (2026-10-11).
+        for gone in ("Registered models", "Register a model", "Activation history"):
+            expect(page.get_by_role("heading", name=gone)).to_have_count(0)
+        expect(page.get_by_role("button", name=re.compile("Activate|Check quality gate"))).to_have_count(0)
         before = api(page, "GET", "/models").json()["active"]["fusion-configuration"]["model_id"]
-        expect(page.get_by_test_id("active-fusion-configuration")).to_contain_text("Evaluation reference:")
-        form = page.get_by_role("form", name="Register a model")
-        # client-side convenience check
-        form.locator("input[type=file]").set_input_files(str(wrong_ext))
-        form.get_by_label("Name").fill("e2e fusion")
-        form.get_by_label("Version").fill(f"bad{SEED['stamp']}")
-        form.get_by_label(re.compile("Evaluation / training reference")).fill("e2e: deliberately extreme tau")
-        form.get_by_role("button", name="Register (inactive)").click()
-        expect(page.get_by_text("This model type expects a .json file.")).to_be_visible()
-        # real upload
-        form.locator("input[type=file]").set_input_files(str(fusion_bad))
-        form.get_by_role("button", name="Register (inactive)").click()
-        expect(page.get_by_text(re.compile(r"Registered model #\d+, inactive"))).to_be_visible(timeout=30000)
-        bad_id = int(re.search(r"#(\d+)", page.get_by_text(re.compile(r"Registered model #\d+")).inner_text()).group(1))
-        card = page.get_by_test_id(f"model-{bad_id}")
-        card.get_by_role("button", name="Check quality gate").click()
-        report = card.get_by_test_id("gate-report")
-        expect(report).to_be_visible(timeout=120000)
-        expect(report).to_contain_text("a coarse safety net, not a verification")
-        expect(report).to_contain_text("Outside the gate thresholds")
-        expect(report).to_contain_text("false-positive rate")
-        # plain activation is refused
-        card.get_by_role("button", name="Activate…").click()
-        page.get_by_role("dialog").get_by_role("button", name="Activate").click()
-        expect(page.get_by_text(f"The quality gate refused model #{bad_id}. Nothing changed.")).to_be_visible(timeout=120000)
-        assert api(page, "GET", "/models").json()["active"]["fusion-configuration"]["model_id"] == before
-        # force: needs reason (>=10 chars) AND acknowledgement
-        card.get_by_role("button", name="Override the gate…").click()
-        dialog = page.get_by_role("dialog")
-        confirm = dialog.get_by_role("button", name="Override and activate")
-        expect(confirm).to_be_disabled()
-        dialog.get_by_label(re.compile("Reason")).fill("short")
-        dialog.get_by_label(re.compile("I understand")).check()
-        expect(confirm).to_be_disabled()
-        dialog.get_by_label(re.compile("Reason")).fill("e2e: exercising the audited override path")
-        expect(confirm).to_be_enabled()
-        confirm.click()
-        expect(page.get_by_text(f"Activated (gate overridden): model #{bad_id}")).to_be_visible(timeout=120000)
-        assert api(page, "GET", "/models").json()["active"]["fusion-configuration"]["model_id"] == bad_id
-        acts = api(page, "GET", "/models/activations").json()
-        assert acts[0]["forced"] and acts[0]["reason"] == "e2e: exercising the audited override path"
-        # rollback offered and works
-        roll = page.get_by_test_id("active-fusion-configuration").get_by_role("button", name=f"Roll back to #{before}")
-        roll.click()
+        # Put a passing candidate live through the API, then roll back from the page.
+        r = api(page, "POST", "/models", multipart={
+            "model_type": "fusion-configuration", "name": "e2e fusion", "version": f"ok{SEED['stamp']}",
+            "training_reference": "e2e: moderate tau",
+            "file": {"name": fusion_ok.name, "mimeType": "application/json", "buffer": fusion_ok.read_bytes()}})
+        assert r.ok, r.text()
+        ok_id = r.json()["model_id"]
+        r = api(page, "POST", f"/models/{ok_id}/activate", data="{}", headers={"Content-Type": "application/json"})
+        assert r.ok, r.text()
+        page.reload()
+        card = page.get_by_test_id("active-fusion-configuration")
+        expect(card).to_contain_text(f"#{ok_id}")
+        card.get_by_role("button", name=f"Roll back to #{before}").click()
         page.get_by_role("dialog").get_by_role("button", name=f"Roll back to #{before}").click()
         expect(page.get_by_text(f"Rolled back to model #{before}")).to_be_visible(timeout=120000)
         assert api(page, "GET", "/models").json()["active"]["fusion-configuration"]["model_id"] == before
-        # a passing candidate activates normally, then roll back to leave the baseline active
-        form.locator("input[type=file]").set_input_files(str(fusion_ok))
-        form.get_by_label("Name").fill("e2e fusion")  # the form clears after a successful upload
-        form.get_by_label("Version").fill(f"ok{SEED['stamp']}")
-        form.get_by_label(re.compile("Evaluation / training reference")).fill("e2e: moderate tau")
-        form.get_by_role("button", name="Register (inactive)").click()
-        expect(page.get_by_text(re.compile(rf"Registered model #(?!{bad_id}\b)\d+, inactive"))).to_be_visible(timeout=30000)
-        ok_id = int(re.search(r"#(\d+)", page.get_by_text(re.compile(r"Registered model #\d+")).inner_text()).group(1))
-        page.get_by_test_id(f"model-{ok_id}").get_by_role("button", name="Activate…").click()
-        page.get_by_role("dialog").get_by_role("button", name="Activate").click()
-        expect(page.get_by_text(re.compile(r"Running canary and quality gate… \d+s"))).to_be_visible(timeout=10000)
-        expect(page.get_by_text(f"Activated model #{ok_id}")).to_be_visible(timeout=120000)
-        expect(page.get_by_text("Within the gate thresholds.")).to_be_visible()
-        page.get_by_test_id("active-fusion-configuration").get_by_role("button", name=f"Roll back to #{before}").click()
-        page.get_by_role("dialog").get_by_role("button", name=f"Roll back to #{before}").click()
-        expect(page.get_by_text(f"Rolled back to model #{before}")).to_be_visible(timeout=120000)
-        assert api(page, "GET", "/models").json()["active"]["fusion-configuration"]["model_id"] == before
-        assert page.get_by_text(re.compile(r"\bverified\b", re.I)).count() == 0
-    step("A5", "models: client check, upload, gate preview, refusal, forced override w/ reason, rollback, pass+activate", a5)
+    step("A5", "models: only Running now; API-activated candidate rolled back from the page", a5)
 
     # ---- A6: 375 px emulation of the admin screens ------------------------
     def a6():

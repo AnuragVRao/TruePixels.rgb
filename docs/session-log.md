@@ -8,6 +8,19 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-11 — Admin → Models shows only "Running now"
+- Asked for a simpler page: the three running-model cards (with their
+  Roll back buttons) stay; Registered models, the registration form, gate
+  preview / activate / override, the activation history table and the note
+  under the cards were removed from the page. The endpoints are unchanged,
+  so registering and activating are API-only (`POST /api/v1/models`,
+  `/models/{id}/gate-preview`, `/models/{id}/activate`); rollback still
+  shows the advisory gate report.
+- E2E A5 now asserts the removed sections are absent, activates a passing
+  candidate through the API and rolls it back from the page.
+- Noticed, not changed: the SPAI row's (#5) evaluation reference still
+  quotes the superseded 2026-10-01 operating point (w 0.25, tau 0.7558).
+
 ### 2026-10-11 — confidence histogram starts at 50 %
 - Admin overview's "Confidence in the predicted class" used ten 0.1 bins
   from 0; the five under 0.5 were always empty (confidence in the predicted

@@ -119,7 +119,9 @@ published reference scores.
   error, and record every edit in its NOTICE.
 - **D3 decides what runs, not config.** Changing the model or operating point
   means registering a row and activating it (canary → quality gate → atomic
-  switch; `registry.activate`, Admin → Models). Config only seeds an empty D3.
+  switch; `registry.activate`, via the API: `POST /api/v1/models`, then
+  `/models/{id}/activate`). Admin → Models shows only what runs, with
+  rollback. Config only seeds an empty D3.
   D3 rows keep `metrics` null — upstream figures are not ours.
 - The quality gate's reference cache must match the pinned models: after
   changing any pinned detector, run `python backend/scripts/build_reference_set.py`.
@@ -266,6 +268,8 @@ and over HTTP in `test_api_predict.py`.
 
 ## 8. Recent work (full entries: [docs/session-log.md](docs/session-log.md))
 
+- **2026-10-11** — Admin → Models trimmed to "Running now" (+ rollback);
+  registering and activating models is API-only.
 - **2026-10-11** — admin confidence histogram: ten 5-point bins from 50 %.
 - **2026-10-11** — "Send a new code" asks "Resend OTP?" (No / Yes) and shows
   "Sending…" until the server answers.
