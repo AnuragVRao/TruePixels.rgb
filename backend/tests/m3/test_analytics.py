@@ -28,12 +28,14 @@ def test_admin_logs_filtering_and_pagination(client: TestClient, seeded_db):
 
 
 def test_admin_analytics_confidence_histogram(client: TestClient, seeded_db):
-    """Validates 10-bin confidence score distribution in analytics."""
+    """Ten 5-point bins from 50% (confidence in the predicted class is never
+    below one half); every prediction is counted exactly once."""
     resp = client.get("/api/v1/admin/analytics?days=30", headers=AUTH_ADMIN)
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data["confidence_distribution"]) == 10  # Exactly 10 bins
-    assert data["total_predictions"] == 5
+    bins = [b for b in data["confidence_distribution"] if b["bin_range"] != "under 50%"]
+    assert [b["bin_range"] for b in bins] == [f"{lo}-{lo + 5}%" for lo in range(50, 100, 5)]
+    assert sum(b["count"] for b in data["confidence_distribution"]) == data["total_predictions"] == 5
 
 
 def test_admin_user_account_status_change(client: TestClient, seeded_db):

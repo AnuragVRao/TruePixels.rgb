@@ -134,7 +134,7 @@ export const OverviewPage: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={analytics.confidence_distribution}>
                     <CartesianGrid stroke="var(--muted)" />
-                    <XAxis dataKey="bin_range" {...axis} interval={1} />
+                    <XAxis dataKey="bin_range" {...axis} interval="preserveStartEnd" />
                     <YAxis allowDecimals={false} {...axis} />
                     <Tooltip {...tooltip} />
                     <Bar dataKey="count" name="predictions" fill="var(--chart-1)" />

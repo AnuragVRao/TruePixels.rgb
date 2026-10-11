@@ -155,28 +155,22 @@ def get_system_analytics(db: Session, days: int = 30) -> SystemAnalytics:
         for row in daily_stats
     ]
 
-    # 4. Confidence Distribution in 10 uniform bins [0.0-0.1, ..., 0.9-1.0]
-    bins_data = [
-        (0.0, 0.1, "0.0 - 0.1"),
-        (0.1, 0.2, "0.1 - 0.2"),
-        (0.2, 0.3, "0.2 - 0.3"),
-        (0.3, 0.4, "0.3 - 0.4"),
-        (0.4, 0.5, "0.4 - 0.5"),
-        (0.5, 0.6, "0.5 - 0.6"),
-        (0.6, 0.7, "0.6 - 0.7"),
-        (0.7, 0.8, "0.7 - 0.8"),
-        (0.8, 0.9, "0.8 - 0.9"),
-        (0.9, 1.0, "0.9 - 1.0"),
-    ]
+    # 4. Confidence distribution: ten 5-point bins from 50% to 100%.
+    # Confidence is in the PREDICTED class, so it never falls below 0.5
+    # (fusion.confidence_in_prediction; stored rows recomputed by 0007) and
+    # bins under 50% would always be empty. Should a row below 0.5 ever exist,
+    # it is shown in its own leading bin rather than silently dropped.
     confidence_bins = []
-    for low, high, label in bins_data:
-        # Include high boundary for 1.0
-        if high == 1.0:
-            cond = and_(Prediction.confidence_score >= low, Prediction.confidence_score <= high)
-        else:
-            cond = and_(Prediction.confidence_score >= low, Prediction.confidence_score < high)
-        cnt = db.query(func.count(Prediction.prediction_id)).filter(cond).scalar() or 0
-        confidence_bins.append(ConfidenceHistogramBin(bin_range=label, count=cnt))
+    below = (db.query(func.count(Prediction.prediction_id))
+             .filter(Prediction.confidence_score < 0.5).scalar() or 0)
+    if below:
+        confidence_bins.append(ConfidenceHistogramBin(bin_range="under 50%", count=below))
+    for step in range(10):
+        low, high = (50 + 5 * step) / 100, (55 + 5 * step) / 100
+        upper = Prediction.confidence_score <= high if step == 9 else Prediction.confidence_score < high
+        cnt = (db.query(func.count(Prediction.prediction_id))
+               .filter(and_(Prediction.confidence_score >= low, upper)).scalar() or 0)
+        confidence_bins.append(ConfidenceHistogramBin(bin_range=f"{50 + 5 * step}-{55 + 5 * step}%", count=cnt))
 
     # 5. Error Rate
     total_logs = db.query(func.count(LogEntry.log_id)).scalar() or 0

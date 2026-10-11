@@ -108,7 +108,7 @@ class TimeSeriesPoint(BaseModel):
 
 
 class ConfidenceHistogramBin(BaseModel):
-    bin_range: str  # e.g. "0.0 - 0.1", "0.1 - 0.2"
+    bin_range: str  # "50-55%" ... "95-100%" (plus "under 50%" only if such rows exist)
     count: int
 
 

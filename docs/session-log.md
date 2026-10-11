@@ -8,6 +8,15 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-11 — confidence histogram starts at 50 %
+- Admin overview's "Confidence in the predicted class" used ten 0.1 bins
+  from 0; the five under 0.5 were always empty (confidence in the predicted
+  class is never below one half). Now ten 5-point bins, `50-55%` …
+  `95-100%` (last inclusive), from `analytics.py`. A row below 0.5, which
+  should not exist after migration 0007, would get its own leading
+  `under 50%` bin rather than being dropped; the test checks every
+  prediction is counted once.
+
 ### 2026-10-11 — "Resend OTP?" confirmation
 - "Send a new code" (on `/verify` and on Forgot password's code step) now
   asks "Resend OTP?" with No / Yes. On Yes the dialog stays open showing
