@@ -15,13 +15,9 @@ each machine.
 | `aigen2026_select/` | part of the 2026-10-09 selection pool (500 real + 499 AI, seeded draw from the `train` split) | the same archive |
 | `synthbuster_raise__*` | degradation / control arms of the 2026-09-30 study | `make_variants.py` |
 
-**On this machine (2026-10-10):** `synthbuster_raise/` and `sbr_val/` are
-empty and must be re-fetched — their contents were deleted by mistake during a
-clean-up. Until then the regression check, the explainability-cost scripts,
-rebuilding the gate reference, and two slow tests in `test_model_management.py`
-cannot run. The gate's existing reference cache and every recorded result are
-unaffected; the cache's manifest records the SHA-256 of each reference image,
-so a re-fetch can be verified byte for byte.
+`synthbuster_raise/` and `sbr_val/` were deleted by mistake on 2026-10-10 and
+re-fetched the same day with the commands above; every image reproduced its
+recorded content-detector score, so they are the same files.
 
 If an evaluation set is added, two constraints from the original design still
 apply and still matter:

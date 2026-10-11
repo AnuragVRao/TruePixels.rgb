@@ -40,6 +40,7 @@ from sqlalchemy.orm import Session
 
 from app.m2_analysis import detectors, frequency_detector, fusion, heads, registry
 from app.m2_analysis.models import Prediction
+from app.shared import config
 from app.shared.contracts.c1 import PreprocessedImage
 from app.shared.contracts.c2 import ActivationBundle, InferenceOutput
 from app.shared.contracts.errors import InferenceError
@@ -112,7 +113,7 @@ async def run_detection(
         # xai on, passive hooks also record each attention layer's input (the
         # score is unchanged).
         semantic = content_detector.score(prepared.source_reference, capture=xai_requested,
-                                          head=semantic_head)
+                                          head=semantic_head, **models.primary.score_kwargs())
         semantic_score = semantic.score
 
         # Frequency branch: SPAI, a different kind of evidence entirely.
@@ -211,7 +212,19 @@ def _activation_bundle(prepared: PreprocessedImage, semantic, models) -> Activat
 
     started = time.perf_counter()
     try:
-        maps = detectors.semantic(models.primary.checkpoint).attention_maps(semantic.activations)
+        content_detector = detectors.semantic(models.primary.checkpoint)
+        spec = config.SEMANTIC_BACKBONES[models.primary.checkpoint]
+        tiles_scored = models.primary.input_mode == "tiled"
+        if not tiles_scored and "tiled" in spec.get("input_modes", ()):
+            # Whole-image map, panel only (owner's decision, 2026-10-10): the
+            # verdict keeps the centre crop it was validated with; a separate
+            # tiled pass - real attention of the same model on every tile -
+            # is run here, after the timed region, and its score is discarded.
+            panel = content_detector.score(prepared.source_reference, capture=True, input_mode="tiled",
+                                           tile_aggregation="mean")
+            maps = content_detector.attention_maps(panel.activations)
+        else:
+            maps = content_detector.attention_maps(semantic.activations)
         attention_ms = (time.perf_counter() - started) * 1000
 
         spectrum, meta = None, None
@@ -231,6 +244,8 @@ def _activation_bundle(prepared: PreprocessedImage, semantic, models) -> Activat
             attention=maps["attention"],
             pooling=maps["pooling"],
             attention_region=maps.get("region"),
+            attention_tiles=maps.get("tiles"),
+            attention_tiles_scored=tiles_scored,
             spectrum=spectrum,
             spectrum_meta=meta,
             timings_ms={"attention": round(attention_ms, 1), "spectrum": round(spectrum_ms, 1)},

@@ -205,7 +205,11 @@ photographs*, never as "the accuracy of the system".
 4. Resizing badly hurts the frequency branch (halving: recall 0.939 → 0.616);
    JPEG recompression barely does. Learned enhancement (phone pipelines,
    upscalers) makes real photos look synthetic.
-5. Community Forensics sees only the central square of the image.
+5. Community Forensics scores only the central square of the image. Scoring
+   the whole image in tiles was measured and rejected: better on 2025
+   generators, but false alarms on camera photos doubled to 0.152
+   (RESULTS.md 2026-10-10). The explanation panel does cover the whole image
+   (a separate tiled pass, panel only).
 6. Images under 224 px get a content-only verdict — the two-kinds-of-evidence
    argument does not apply to them.
 7. The quality gate is a coarse safety net: 100 reference images, SE ≈ 0.04 on
@@ -213,17 +217,10 @@ photographs*, never as "the accuracy of the system".
 8. Latency budget MM2.7 (p95 ≤ 2.5 s) is met on the GPU for ordinary photos,
    missed for very large originals and on CPU.
 
-**Known issue (2026-10-10):** the evaluation images in
-`ml/datasets/synthbuster_raise/` and `ml/datasets/sbr_val/` were deleted by
-mistake during a clean-up and must be re-fetched (`ml/datasets/README.md`).
-Until then two slow tests in `test_model_management.py`, the regression check
-and rebuilding the gate reference cannot run. The gate's existing cache, the
-live system and all recorded results are unaffected.
-
 **Built and working:** sign-in with optional e-mail 2FA, password reset and
 change, login activity; upload validation; both branches; fusion and verdict;
-explanation panels (content-detector attention rollout drawn inside the
-crop it saw, SPAI patch spectrum); history; PDF reports; admin dashboard,
+explanation panels (content-detector attention rollout over the whole image
+from a panel-only tiled pass, SPAI patch spectrum); history; PDF reports; admin dashboard,
 users, logs and model management (register, gate preview, activate,
 rollback); PostgreSQL + Alembic; HTTPS via Caddy.
 
@@ -269,9 +266,13 @@ and over HTTP in `test_api_predict.py`.
 
 ## 8. Recent work (full entries: [docs/session-log.md](docs/session-log.md))
 
+- **2026-10-10** — whole-image tiled scoring for Community Forensics measured
+  and not adopted (FPR on camera photos 0.071 → 0.152); the attention panel
+  now covers the whole image from a panel-only tiled pass. Evaluation images
+  re-fetched and verified; gate reference rebuilt.
 - **2026-10-10** — admin "Remove" action dropped (it was Disable under another
-  name); 1-Click Verification made admin-only; SPAI spectrum panel redrawn
-  in plain language with a reading key.
+  name); 1-Click Verification made admin-only; SPAI spectrum panel made a
+  clean image with a plain-language key under it.
 - **2026-10-10** — confidence rule restored to the 2026-10-05 form (migration
   0007); legacy M3 dashboard removed; unused local data cleaned up.
 - **2026-10-09/10** — Community Forensics replaced SigLIP 2 after AIGenImages2026

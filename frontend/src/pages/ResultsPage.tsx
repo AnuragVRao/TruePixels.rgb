@@ -86,6 +86,28 @@ const ScoreCard: React.FC<{ icon: React.ReactNode; title: string; value: string 
   </div>
 );
 
+/**
+ * How to read the SPAI spectrum, as page text so the image itself stays
+ * clean. Both features are the ones recorded in ml/evaluation/RESULTS.md
+ * ("What the panels look like"); SPAI applies no window, hence the cross.
+ */
+const SpectrumKey: React.FC = () => (
+  <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+    <p>
+      The centre is coarse detail (shapes, colour), the edges fine detail (texture, noise); brighter means more of
+      it. The dashed circle is where SPAI splits the two before comparing them.
+    </p>
+    <details>
+      <summary className="cursor-pointer select-none text-foreground/80 hover:text-foreground">What to look for</summary>
+      <ul className="mt-1 list-disc space-y-1 pl-4">
+        <li>A bright cross through the centre is mostly the edges of the squares SPAI cut the image into. Every image has it.</li>
+        <li>Isolated dots in a regular grid mean a pattern repeating every few pixels, such as JPEG&apos;s 8-pixel blocks or the upsampling some generators use.</li>
+        <li>It shows what SPAI looked at, not which part of it drove its score.</li>
+      </ul>
+    </details>
+  </div>
+);
+
 const Panel: React.FC<{ v: Visualization; label?: string }> = ({ v, label = PANEL_LABEL[v.branch] }) => {
   const tipId = `panel-tip-${v.branch}`;
   return (
@@ -106,6 +128,7 @@ const Panel: React.FC<{ v: Visualization; label?: string }> = ({ v, label = PANE
       </figcaption>
       <AuthImage src={v.visualization_url} alt={label}
                  className="w-full rounded-xl border border-border object-contain bg-card min-h-40" />
+      {v.branch === 'frequency' && <SpectrumKey />}
     </figure>
   );
 };

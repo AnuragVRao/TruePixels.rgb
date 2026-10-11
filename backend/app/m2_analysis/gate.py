@@ -11,6 +11,11 @@ may therefore name either content detector (2026-10-09). A candidate
 head or fusion configuration is then evaluated on those cached inputs in
 milliseconds - no image is decoded or re-run through a backbone.
 
+Tiled input mode (2026-10-10): for a detector that offers it, the cache also
+holds the head input of EVERY tile, concatenated, with each image's tile count
+and live tile scores; a tiled candidate's score per image is the mean or max of
+its tiles' probabilities, exactly as detectors.CommForDetector combines them.
+
 Thresholds, fixed on 2026-10-03 BEFORE any candidate was scored (recorded in
 the phase plan). A candidate is REFUSED if, versus the current configuration:
 
@@ -126,11 +131,35 @@ def stale_reason(reference: dict) -> str | None:
     return None
 
 
+def _tile_probs(reference: dict, checkpoint: str) -> np.ndarray:
+    """Every cached tile's P(AI) from the published head (tiles of all images, concatenated)."""
+    from app.m2_analysis import detectors
+
+    detector = detectors.semantic(checkpoint)
+    module = detector.head_module()
+    features = reference[f"semantic_tile_features__{slug(checkpoint)}"]
+    with torch.inference_mode():
+        x = torch.from_numpy(features).to(config.DEVICE, dtype=next(module.parameters()).dtype)
+        return detector.head_probabilities(module(x), None).double().cpu().numpy()
+
+
+def _aggregate_tiles(tile_probs: np.ndarray, counts: np.ndarray, aggregation: str) -> np.ndarray:
+    bounds = np.concatenate([[0], np.cumsum(counts)])
+    pick = np.max if aggregation == "max" else np.mean
+    return np.array([pick(tile_probs[a:b]) for a, b in zip(bounds[:-1], bounds[1:])])
+
+
 def _semantic_probs(reference: dict, checkpoint: str, head_spec: dict | None,
-                    model_id: int | None) -> np.ndarray:
+                    model_id: int | None, input_mode: str = "center-crop",
+                    tile_aggregation: str | None = None) -> np.ndarray:
     """P(AI) from one content detector's head applied to its cached head inputs."""
     from app.m2_analysis import detectors, heads
 
+    if input_mode == "tiled":
+        if head_spec:
+            raise ValueError("tiled input mode has no uploaded heads")
+        return _aggregate_tiles(_tile_probs(reference, checkpoint),
+                                reference[f"semantic_tile_counts__{slug(checkpoint)}"], tile_aggregation)
     detector = detectors.semantic(checkpoint)
     features = reference[f"semantic_features__{slug(checkpoint)}"]
     ai_index = None
@@ -179,7 +208,8 @@ def _metrics(semantic: np.ndarray, frequency: np.ndarray, fusion_cfg, labels: np
 
 def _branch_probs(model_set, reference) -> tuple[np.ndarray, np.ndarray]:
     sem = _semantic_probs(reference, model_set.primary.checkpoint, model_set.primary.head,
-                          model_set.primary.model_id)
+                          model_set.primary.model_id, model_set.primary.input_mode,
+                          model_set.primary.tile_aggregation)
     fr = model_set.frequency_detector
     freq = _frequency_probs(reference["frequency_features"], fr.head, fr.model_id, fr.ai_is_positive)
     return sem, freq
@@ -210,9 +240,15 @@ def evaluate(current_set, candidate_row) -> dict:
     published = registry.baseline()
     sem_pub, freq_pub = _branch_probs(published, reference)
     drift = float(np.max(np.abs(freq_pub - reference["frequency_scores"])))
-    for checkpoint in config.SEMANTIC_BACKBONES:
+    for checkpoint, spec in config.SEMANTIC_BACKBONES.items():
         cached = reference[f"semantic_scores__{slug(checkpoint)}"]
         drift = max(drift, float(np.max(np.abs(_semantic_probs(reference, checkpoint, None, None) - cached))))
+        if "tiled" in spec.get("input_modes", ()):
+            key = f"semantic_tile_scores__{slug(checkpoint)}"
+            if key not in reference:
+                return {"passed": False, "available": False,
+                        "reasons": [f"reference cache has no tile scores for {checkpoint}; rebuild it"]}
+            drift = max(drift, float(np.max(np.abs(_tile_probs(reference, checkpoint) - reference[key]))))
     if drift > REPRODUCTION_TOLERANCE:
         return {"passed": False, "available": False,
                 "reasons": [f"reference cache does not reproduce the live scores (max diff {drift:.2e}); rebuild it"]}
@@ -222,7 +258,8 @@ def evaluate(current_set, candidate_row) -> dict:
     if candidate_row.model_type == registry.TYPE_SEMANTIC:
         candidate_set = replace(current_set, primary=replace(
             current_set.primary, model_id=candidate_row.model_id, checkpoint=h["checkpoint"],
-            revision=h["revision"], head=h.get("head")))
+            revision=h["revision"], head=h.get("head"), input_mode=h.get("input_mode", "center-crop"),
+            tile_aggregation=h.get("tile_aggregation")))
     elif candidate_row.model_type == registry.TYPE_FREQUENCY:
         candidate_set = replace(current_set, frequency_detector=replace(
             current_set.frequency_detector, model_id=candidate_row.model_id, head=h.get("head"),

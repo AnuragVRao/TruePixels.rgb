@@ -209,13 +209,14 @@ If *Include explainability panels* is ticked, two pictures are drawn **after**
 the score is final. They never change it.
 
 - **Content detector attention rollout:** where the content model's attention
-  went, drawn inside the outlined centre square it actually analysed. It is an
-  approximation of where the model looked, not a measurement of what caused
-  the verdict.
+  went, over the whole image. The content score comes from the centre square
+  only, so for this picture the model is also run on overlapping squares
+  that cover the rest, and their maps are joined. It is an approximation of
+  where the model looked, not a measurement of what caused the verdict.
 - **SPAI patch spectrum:** which kinds of detail are present in the patches
   SPAI analysed, averaged over all of them: coarse detail at the centre, fine
   detail towards the edges, with SPAI's low/high split drawn as a dashed
-  circle. The panel carries a short key: the bright cross is mostly the patch
+  circle. A short key under it on the results page explains: the bright cross is mostly the patch
   edges (in every image, not a sign either way); a regular grid of isolated
   dots is a pattern repeating every few pixels (JPEG blocks, or upsampling).
   It is descriptive only.

@@ -18,6 +18,60 @@ and summary JSON land in `ml/outputs/`.
 
 ---
 
+### Whole-image (tiled) content scoring, 2026-10-10 - not adopted for the score
+
+**Question.** Community Forensics scores one 384 px centre crop (the authors'
+test transform: shortest side 440, then crop), so the rest of the image is
+never seen. Does scoring the whole image do better? **Tiled mode**: same
+resize, then ceil(side / 384) evenly spaced 384 px tiles per axis covering the
+whole image (4 tiles for most images here, up to 8), every tile through the
+same pinned model, tile P(AI)s combined by mean or max. No weight changed.
+
+**Protocol** (as on 2026-10-09). Per-image tile scores for all 2,711 bake-off
+images (`ml/outputs/bakeoff_scores_tiled.csv`). For each content input, w and
+τ chosen on the SELECTION pool only (AIGen `train` draw 999 + `sbr_val` 396):
+smallest τ with FPR on reals <= 0.10, then the w keeping the most recall.
+Reported on the held-out sets with 95 % intervals. Every image's centre-crop
+score was recomputed and matched the stored one (max diff 5e-7) - which also
+verifies the re-fetched `sbr_val` / `synthbuster_raise` images (below).
+
+| held out | configuration | accuracy | recall | FPR on real | AUC |
+|---|---|---|---|---|---|
+| AIGen val (559 + 559) | **live**: centre crop, w 0.55, τ 0.4524 | 0.798 [0.77, 0.82] | 0.626 | 0.030 | 0.895 [0.88, 0.91] |
+| | tiled mean, w 0.75, τ 0.2828 | 0.817 [0.79, 0.84] | 0.658 | 0.025 | 0.920 [0.90, 0.93] |
+| | tiled max, w 0.60, τ 0.4820 | 0.803 [0.78, 0.83] | 0.633 | 0.027 | 0.918 [0.90, 0.93] |
+| Synthbuster vs RAISE (99 + 99) | **live** | 0.939 [0.90, 0.96] | 0.949 | **0.071** [0.03, 0.14] | 0.986 |
+| | tiled mean | 0.899 [0.85, 0.93] | 0.949 | **0.152** [0.09, 0.24] | 0.985 |
+| | tiled max | 0.899 [0.85, 0.93] | 0.929 | 0.131 [0.08, 0.21] | 0.982 |
+
+(Re-choosing w and τ for the centre crop on the same pool returns the live
+operating point, w 0.55, τ 0.4523.)
+
+**Reading.** Tiling separates 2025 generators better (AUC +0.025; GPT-image-1
+caught 29 % -> 58 %, HiDream 52 % -> 68 %, Reve 71 % -> 84 %; FLUX.2 pro / max
+barely move once `sbr_val` is in the selection pool), but on the camera
+photographs of RAISE its false-positive rate doubles, to 0.152 - above the
+0.10 target (MM2.6). RAISE photos are large DSLR originals (mostly
+4928 x 3264); the tiles reach regions the centre crop never showed the model,
+and some of them look synthetic to it. A preliminary AIGen-only selection had
+looked better still (w 0.95); that did not survive the full pool.
+
+**Decision (owner, 2026-10-10).** The score keeps the centre crop. Tiling is
+used **for the explanation panel only**: with panels on, M2 runs a separate
+tiled pass after the timed region and draws real per-tile attention over the
+whole image; the score is untouched (asserted bit-for-bit in
+`test_xai_api.py`). Tiled scoring remains available as a D3 input mode
+(`input_mode: "tiled"`, `tile_aggregation`) and the gate's reference cache
+covers it, should a later evaluation favour it. Cost of the panel pass: ~0.1 s
+on the GPU for a typical image.
+
+**Data restored.** `sbr_val` and `synthbuster_raise`, lost on 2026-10-10,
+were re-fetched (all 594 images, CRC / size checked by the fetch scripts) and
+are the same files: every centre-crop score reproduces. The gate reference was
+rebuilt from them (now with per-tile features).
+
+---
+
 ### 2025 generators, and a new content detector, 2026-10-09
 
 **Set.** [AIGenImages2026](https://huggingface.co/datasets/pthan12/AIGenImages2026)

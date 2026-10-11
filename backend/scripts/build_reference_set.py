@@ -8,7 +8,8 @@ Takes the first ``--per-class`` images of each class from
 held-out test set ``synthbuster_raise``), runs EVERY pinned content detector
 (config.SEMANTIC_BACKBONES) and SPAI once, and stores per image: label, each
 detector's live score, and the exact inputs of each final head (captured with
-forward pre-hooks).
+forward pre-hooks). For a detector with a tiled input mode it also stores
+every tile's head input, the tile count per image and the live tile scores.
 Writes storage/models/reference/<file named by backbone revision + weights
 digest>.npz (gitignored), plus a .json manifest listing the images.
 
@@ -73,6 +74,10 @@ def main() -> int:
     names, labels, freq_f, freq_s, hashes = [], [], [], [], []
     sem_f = {c: [] for c in content}
     sem_s = {c: [] for c in content}
+    tiled = [c for c in content if "tiled" in config.SEMANTIC_BACKBONES[c].get("input_modes", ())]
+    tile_f = {c: [] for c in tiled}
+    tile_n = {c: [] for c in tiled}
+    tile_s = {c: [] for c in tiled}
     try:
         for n, (path, label) in enumerate(items, 1):
             grabbed.clear()
@@ -84,6 +89,12 @@ def main() -> int:
             for c in content:
                 sem_f[c].append(grabbed[c][0].numpy())
                 sem_s[c].append(scores[c])
+            for c in tiled:  # every tile in one batch: the hook sees (tiles, dim)
+                grabbed.pop(c, None)
+                result = content[c].score(str(path), input_mode="tiled", tile_aggregation="mean")
+                tile_f[c].append(grabbed[c].numpy())
+                tile_n[c].append(len(result.tile_scores))
+                tile_s[c].extend(result.tile_scores)
             freq_f.append(grabbed["frequency"][0].numpy())
             freq_s.append(f)
             shown = " ".join(f"{c.split('/')[-1]}={v:.4f}" for c, v in scores.items())
@@ -100,6 +111,10 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     arrays = {f"semantic_features__{gate.slug(c)}": np.stack(sem_f[c]) for c in content}
     arrays.update({f"semantic_scores__{gate.slug(c)}": np.array(sem_s[c], dtype=np.float64) for c in content})
+    for c in tiled:
+        arrays[f"semantic_tile_features__{gate.slug(c)}"] = np.concatenate(tile_f[c])
+        arrays[f"semantic_tile_counts__{gate.slug(c)}"] = np.array(tile_n[c], dtype=np.int64)
+        arrays[f"semantic_tile_scores__{gate.slug(c)}"] = np.array(tile_s[c], dtype=np.float64)
     np.savez(out, cache_key=np.array(key), labels=np.array(labels, dtype=np.int64),
              frequency_features=np.stack(freq_f), frequency_scores=np.array(freq_s, dtype=np.float64),
              **arrays)

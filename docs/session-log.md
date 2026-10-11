@@ -8,6 +8,34 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-10 — whole-image content map; tiled scoring measured, not adopted
+- Asked for: the Community Forensics attention panel over the whole image, not
+  just the centre square. Filling the rest with invented values was declined
+  (no panel without real model state); tiled scoring was built and measured.
+- Built: a D3 input mode for the content detector (`input_mode` "center-crop" |
+  "tiled", `tile_aggregation` "mean" | "max"; rows without it are centre-crop),
+  validated by the registry, used by the pipeline and canary; the gate cache
+  now holds per-tile head inputs; C2 `ActivationBundle.attention_tiles`
+  (+ `attention_tiles_scored`); M3 assembles one whole-image map from the
+  tiles' rollouts, refusing (never filling) any uncovered cell.
+  `tests/test_commfor_tiled.py`.
+- Measured (RESULTS.md 2026-10-10): better on 2025 generators (AUC 0.895 →
+  0.920), but FPR on RAISE camera photos 0.071 → 0.152. Owner chose **map
+  only**: the score keeps the centre crop; with panels on, a separate tiled
+  pass (after the timed region, ~0.1 s) feeds the map. Technique
+  `commfor-whole-image-attention-rollout`, with a caption saying the score
+  comes from the centre crop. No D3 row changed.
+- `sbr_val` and `synthbuster_raise` re-fetched (594 images) and verified:
+  every centre-crop score reproduces to 5e-7. Gate reference rebuilt.
+
+### 2026-10-10 — SPAI spectrum panel: clean image, key as page text
+- Second pass, same day: the first redraw (below) baked a title, boxed
+  labels, a colour bar and the key into the PNG, which read as cluttered.
+  The image is now just the spectrum edge to edge with a quiet dashed
+  circle; the explanation is page text under the panel (`SpectrumKey` in
+  `ResultsPage.tsx`: one sentence, plus a collapsible "What to look for"),
+  so it follows the theme. The PDF uses the caption.
+
 ### 2026-10-10 — SPAI spectrum panel redrawn for readers
 - Same data (the mean log-magnitude spectrum of SPAI's patches, colour range
   still clipped to the 1st-99.5th percentile); only the drawing changed:
@@ -46,9 +74,9 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
   after the fact.
 - Unaffected: storage (uploads, panels, weights, gate cache), the database,
   the AIGenImages2026 images, every recorded result.
-- To do: re-fetch both sets (`ml/datasets/README.md`) and verify the reference
-  images against the SHA-256s in the gate cache's manifest. Lesson: inspect a
-  folder for junctions (`dir /AL`) before deleting it on Windows.
+- Resolved the same day: both sets re-fetched and verified (see the
+  whole-image entry above). Lesson: inspect a folder for junctions
+  (`dir /AL`) before deleting it on Windows.
 
 ### 2026-10-10 — confidence rule restored
 - The scale applied to the displayed confidence on 2026-10-09 was removed:

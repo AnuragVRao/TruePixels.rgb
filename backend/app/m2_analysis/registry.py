@@ -58,6 +58,13 @@ class DetectorConfig:
     role: str  # "primary"
     revision: str | None = None
     head: dict | None = None  # uploaded head spec; None = the checkpoint's own
+    # How the image reaches the detector (config.py, "Content-detector INPUT
+    # MODES"): "center-crop" (absent on older rows) or "tiled" + aggregation.
+    input_mode: str = "center-crop"
+    tile_aggregation: str | None = None
+
+    def score_kwargs(self) -> dict:
+        return {"input_mode": self.input_mode, "tile_aggregation": self.tile_aggregation}
 
 
 @dataclass(frozen=True)
@@ -194,15 +201,21 @@ BASELINE_REFERENCE = (
 )
 
 
-def semantic_row_spec(checkpoint: str, head: dict | None = None) -> dict:
-    """The D3 row fields for one pinned content detector (published head unless ``head``)."""
+def semantic_row_spec(checkpoint: str, head: dict | None = None, *, input_mode: str = "center-crop",
+                      tile_aggregation: str | None = None) -> dict:
+    """The D3 row fields for one pinned content detector (published head unless
+    ``head``). A non-default input mode is part of the row and its version."""
     spec = config.SEMANTIC_BACKBONES[checkpoint]
     rev = spec["revision"]
+    hyper = {"checkpoint": checkpoint, "revision": rev, "head": head}
+    version = f"rev-{rev[:12]}"
+    if input_mode != "center-crop":
+        hyper.update(input_mode=input_mode, tile_aggregation=tile_aggregation)
+        version += f"-{input_mode}-{tile_aggregation}"
     return dict(
-        model_name=checkpoint, model_version=f"rev-{rev[:12]}",
+        model_name=checkpoint, model_version=version,
         artifact_ref=f"hf://{checkpoint}@{rev}", artifact_sha256=semantic_weights_digest(checkpoint),
-        hyperparameters={"checkpoint": checkpoint, "revision": rev, "head": head},
-        training_reference=BASELINE_REFERENCE)
+        hyperparameters=hyper, training_reference=BASELINE_REFERENCE)
 
 
 def baseline_rows() -> dict[str, dict]:
@@ -249,6 +262,10 @@ def _valid_semantic(h: dict | None) -> bool:
     spec = config.SEMANTIC_BACKBONES.get(h.get("checkpoint"))
     if spec is None or h.get("revision") != spec["revision"]:
         return False
+    mode = h.get("input_mode", "center-crop")
+    if mode != "center-crop":
+        if mode not in spec.get("input_modes", ()) or h.get("tile_aggregation") not in spec.get("tile_aggregations", ()):
+            return False
     return h["head"] is None or spec["kind"] == "hf-classifier"
 
 
@@ -284,7 +301,9 @@ def _set_from_rows(rows: dict) -> ActiveModelSet:
     return ActiveModelSet(
         primary=DetectorConfig(model_id=sem.model_id, checkpoint=sem.hyperparameters["checkpoint"],
                                role="primary", revision=sem.hyperparameters["revision"],
-                               head=sem.hyperparameters.get("head")),
+                               head=sem.hyperparameters.get("head"),
+                               input_mode=sem.hyperparameters.get("input_mode", "center-crop"),
+                               tile_aggregation=sem.hyperparameters.get("tile_aggregation")),
         frequency_detector=frequency,
         spectral_features=_spectral_features(),
         fusion=FusionModelConfig(model_id=fus.model_id, strategy=h["strategy"],
@@ -385,7 +404,9 @@ def canary(row) -> dict:
             h = row.hyperparameters
             if row.model_type == TYPE_SEMANTIC:
                 head = heads.semantic_head(row.model_id, h.get("head"))
-                score = detectors.semantic(h["checkpoint"]).score(str(path), head=head).score
+                score = detectors.semantic(h["checkpoint"]).score(
+                    str(path), head=head, input_mode=h.get("input_mode", "center-crop"),
+                    tile_aggregation=h.get("tile_aggregation")).score
             else:
                 head = heads.frequency_head(row.model_id, h.get("head"))
                 score = frequency_detector.frequency.score(

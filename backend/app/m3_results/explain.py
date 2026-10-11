@@ -61,15 +61,63 @@ def compute_attention_rollout(
     return cls_attention_to_patches
 
 
+def _tiled_relevance(bundle: ActivationBundle) -> np.ndarray:
+    """One whole-image map from per-tile rollouts (tiled content detector).
+
+    Each tile's CLS rollout is a (grid_h x grid_w) map over that tile; it is
+    resampled into the tile's box on a canvas at the tiles' own patch density,
+    and where tiles overlap the values are averaged. Rollout rows sum to one in
+    every tile, so values are comparable across tiles; the canvas is
+    normalised once, as a whole. Every canvas cell is covered by a real tile -
+    the boxes span the image - and a cell no tile covers is refused, never
+    filled.
+    """
+    from PIL import Image as PILImage
+
+    grid_h, grid_w = bundle.patch_grid
+    tiles = bundle.attention_tiles
+    widths = [t["box"][2] - t["box"][0] for t in tiles]
+    heights = [t["box"][3] - t["box"][1] for t in tiles]
+    canvas_w = max(grid_w, round(grid_w / min(widths)))
+    canvas_h = max(grid_h, round(grid_h / min(heights)))
+    total = np.zeros((canvas_h, canvas_w), dtype=np.float64)
+    count = np.zeros((canvas_h, canvas_w), dtype=np.float64)
+    for tile in tiles:
+        rollout = compute_attention_rollout(np.asarray(tile["attention"], dtype=np.float32), pooling="cls")
+        if len(rollout) != grid_h * grid_w:
+            raise AppException(code="XAI_UNAVAILABLE", status_code=501,
+                               message=f"tile relevance has {len(rollout)} entries, grid needs {grid_h * grid_w}")
+        x0, y0, x1, y1 = tile["box"]
+        left, top = round(x0 * canvas_w), round(y0 * canvas_h)
+        right, bottom = max(left + 1, round(x1 * canvas_w)), max(top + 1, round(y1 * canvas_h))
+        patch = PILImage.fromarray(rollout.reshape(grid_h, grid_w).astype(np.float32), mode="F")
+        resized = np.asarray(patch.resize((right - left, bottom - top), PILImage.Resampling.BILINEAR))
+        total[top:bottom, left:right] += resized
+        count[top:bottom, left:right] += 1
+    if (count == 0).any():
+        raise AppException(code="XAI_UNAVAILABLE", status_code=501,
+                           message="the tiles do not cover the whole image")
+    return total / count
+
+
 def build_relevance_map(
     bundle: ActivationBundle,
 ) -> tuple[np.ndarray, str]:
     """
     Constructs normalized 2D patch relevance map from ActivationBundle.
     Returns: (2D array [grid_h, grid_w] normalized to [0, 1], technique_name)
+    For a tiled content detector the array covers the whole image instead.
     """
     grid_h, grid_w = bundle.patch_grid
     expected_patches = grid_h * grid_w
+
+    if bundle.attention_tiles:
+        relevance_2d = _tiled_relevance(bundle)
+        lo, hi = relevance_2d.min(), relevance_2d.max()
+        relevance_2d = (relevance_2d - lo) / (hi - lo) if hi > lo else np.zeros_like(relevance_2d)
+        technique = ("commfor-tiled-attention-rollout" if bundle.attention_tiles_scored
+                     else "commfor-whole-image-attention-rollout")
+        return relevance_2d.astype(np.float32), technique
 
     if bundle.attention is not None:
         attention_arr = np.asarray(bundle.attention, dtype=np.float32)
@@ -140,6 +188,24 @@ CAPTIONS: dict[str, str] = {
         "classifies from attended to. It is not a measurement of what caused the verdict, "
         "not a map of where an image was edited or generated, and it does not say whether "
         "a region pushed the verdict towards Real or towards AI Generated."
+    ),
+    "commfor-tiled-attention-rollout": (
+        "Attention rollout of the content detector (Community Forensics ViT), over the whole "
+        "image: the detector scores it as overlapping 384x384 tiles, and each tile's map shows "
+        "which of its parts the token it classifies from attended to (averaged where tiles "
+        "overlap). An attention-based proxy - not a measurement of what caused the verdict, "
+        "not a map of where an image was edited or generated, and it does not say whether a "
+        "region pushed the verdict towards Real or towards AI Generated."
+    ),
+    "commfor-whole-image-attention-rollout": (
+        "Attention rollout of the content detector (Community Forensics ViT) over the whole "
+        "image, computed on overlapping 384x384 tiles (averaged where they overlap); each "
+        "tile's map shows which of its parts the token the model classifies from attended to. "
+        "The content score itself comes from the 384x384 centre crop, as the model's authors "
+        "specify; the tiles are run for this map only. An attention-based proxy - not a "
+        "measurement of what caused the verdict, not a map of where an image was edited or "
+        "generated, and it does not say whether a region pushed the verdict towards Real or "
+        "towards AI Generated."
     ),
     "spai-patch-spectrum": (
         "Which kinds of detail are present in the 224x224-pixel squares the frequency "

@@ -186,8 +186,25 @@ SEMANTIC_BACKBONES: dict[str, dict] = {
     SEMANTIC_COMMFOR: {"revision": SEMANTIC_COMMFOR_REVISION, "kind": "commfor-vit",
                        "label": "Community Forensics ViT-S/16",
                        "weights_digest": SEMANTIC_COMMFOR_WEIGHTS_DIGEST,
-                       "ai_is_positive": SEMANTIC_COMMFOR_AI_IS_POSITIVE},
+                       "ai_is_positive": SEMANTIC_COMMFOR_AI_IS_POSITIVE,
+                       # How the image reaches the model - part of the D3 row, so
+                       # switching is an audited activation (see below).
+                       "input_modes": ("center-crop", "tiled"),
+                       "tile_aggregations": ("mean", "max")},
 }
+
+# Content-detector INPUT MODES (2026-10-10). The authors' test transform scores
+# one 384 px centre crop of the image resized so its shortest side is 440 px,
+# so anything outside that square is never seen. "tiled" keeps the authors'
+# scale (shortest side 440) and covers the WHOLE resized image with
+# overlapping 384 px tiles - ceil(side / 384) positions per axis, evenly
+# spaced from edge to edge - scores every tile in one batch, and combines the
+# tile probabilities by the row's tile_aggregation ("mean" or "max"). A D3
+# semantic row without "input_mode" is centre-crop (rows registered before
+# tiling existed keep their meaning). The choice between modes and
+# aggregations is made on selection data only (RESULTS.md 2026-10-10).
+SEMANTIC_TILE_SIZE = 384
+SEMANTIC_TILE_RESIZE = 440
 
 # The published baseline content detector (seeds a fresh D3).
 DETECTOR_PRIMARY = SEMANTIC_COMMFOR

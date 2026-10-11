@@ -37,6 +37,7 @@ frequency_detector.py.)
 
 from __future__ import annotations
 
+import math
 import threading
 from dataclasses import dataclass
 
@@ -67,6 +68,8 @@ class BranchResult:
 
     score: float
     activations: dict | None = None
+    # Tiled input mode only: each tile's P(AI), in tile order, before aggregation.
+    tile_scores: list[float] | None = None
 
 
 def _normalise(label: str) -> str:
@@ -180,7 +183,8 @@ class PretrainedDetector:
             return (processor_cls.from_pretrained(self.checkpoint, revision=self.revision),
                     model_cls.from_pretrained(self.checkpoint, **kwargs))
 
-    def score(self, image_path: str, *, capture: bool = False, head=None) -> BranchResult:
+    def score(self, image_path: str, *, capture: bool = False, head=None,
+              input_mode: str = "center-crop", tile_aggregation: str | None = None) -> BranchResult:
         """Return P(AI Generated) for an image on disk.
 
         ``head`` (Phase 4, F.19): an uploaded classification head
@@ -194,6 +198,8 @@ class PretrainedDetector:
         preprocessing. Deterministic: eval mode, inference mode, no sampling,
         no test-time augmentation (PRD2 section 8.4).
         """
+        if input_mode != "center-crop":
+            raise InferenceError(f"{self.checkpoint} has no {input_mode!r} input mode")
         self.load()
         assert self._model is not None and self._processor is not None
         assert self._ai_index is not None
@@ -437,16 +443,39 @@ class CommForDetector:
                 T.ToTensor(),
                 T.Normalize(mean=self.MEAN, std=self.STD),
             ])
+            # Tiled mode: the same resize and normalisation, no crop - tiles are
+            # cut from the normalised tensor (crop and per-pixel ops commute).
+            self._resize = T.Resize(self.RESIZE)
+            self._to_tensor = T.Compose([T.ToTensor(), T.Normalize(mean=self.MEAN, std=self.STD)])
             self._model = model.to(config.DEVICE)
 
     def _probability(self, logits: torch.Tensor) -> torch.Tensor:
         p = torch.sigmoid(logits.reshape(-1))
         return p if self.ai_is_positive else 1.0 - p
 
-    def score(self, image_path: str, *, capture: bool = False, head=None) -> BranchResult:
-        """P(AI Generated) for an image on disk, by the authors' test transform."""
+    @staticmethod
+    def tile_positions(length: int, tile: int) -> list[int]:
+        """Offsets of the tiles along one axis: ceil(length / tile) tiles, evenly
+        spaced from the first pixel to the last, so together they cover it all."""
+        if length <= tile:
+            return [0]
+        n = math.ceil(length / tile)
+        return [round(i * (length - tile) / (n - 1)) for i in range(n)]
+
+    def score(self, image_path: str, *, capture: bool = False, head=None,
+              input_mode: str = "center-crop", tile_aggregation: str | None = None) -> BranchResult:
+        """P(AI Generated) for an image on disk.
+
+        ``center-crop`` (default): the authors' test transform, one 384 px
+        centre crop. ``tiled``: the whole image at the authors' scale, as
+        overlapping 384 px tiles, combined by ``tile_aggregation``.
+        """
         if head is not None:
             raise InferenceError("uploaded heads are not supported for the Community Forensics detector")
+        if input_mode == "tiled":
+            return self._score_tiled(image_path, capture=capture, aggregation=tile_aggregation)
+        if input_mode != "center-crop":
+            raise InferenceError(f"unknown input mode {input_mode!r}")
         self.load()
         try:
             with Image.open(image_path) as handle:
@@ -467,6 +496,41 @@ class CommForDetector:
                             activations={"hidden_states": captured, "image_size": image_size}
                             if capture else None)
 
+    def _score_tiled(self, image_path: str, *, capture: bool, aggregation: str | None) -> BranchResult:
+        if aggregation not in ("mean", "max"):
+            raise InferenceError(f"tiled scoring needs tile_aggregation 'mean' or 'max', not {aggregation!r}")
+        self.load()
+        try:
+            with Image.open(image_path) as handle:
+                image_size = handle.size
+                full = self._to_tensor(self._resize(handle.convert("RGB")))  # (3, H, W), shortest side 440
+        except Exception as exc:  # noqa: BLE001
+            raise InferenceError(f"{self.role} detector could not preprocess {image_path!r}: {exc}") from exc
+        _, height, width = full.shape
+        tile = config.SEMANTIC_TILE_SIZE
+        boxes, crops = [], []
+        for top in self.tile_positions(height, tile):
+            for left in self.tile_positions(width, tile):
+                crops.append(full[:, top:top + tile, left:left + tile])
+                # The tile as fractions of the image (resizing keeps proportions).
+                boxes.append((left / width, top / height, (left + tile) / width, (top + tile) / height))
+        x = torch.stack(crops).to(config.DEVICE)
+        captured: list[torch.Tensor] = []
+        handles = self._attach_attention_capture(captured) if capture else []
+        try:
+            with torch.inference_mode():
+                probabilities = self._probability(self._model(x))
+        finally:
+            for handle in handles:
+                handle.remove()
+        tile_scores = [float(p) for p in probabilities.cpu()]
+        combined = max(tile_scores) if aggregation == "max" else sum(tile_scores) / len(tile_scores)
+        activations = None
+        if capture:
+            activations = {"hidden_states": captured, "image_size": image_size, "tiles": boxes,
+                           "tile_scores": tile_scores}
+        return BranchResult(score=combined, activations=activations, tile_scores=tile_scores)
+
     def crop_region(self, width: int, height: int) -> tuple[float, float, float, float]:
         """The centre crop the model sees, as fractions of the original image:
         shortest side scaled to RESIZE, then a CROP x CROP centre square."""
@@ -484,6 +548,8 @@ class CommForDetector:
 
     def preprocess_signature(self) -> dict:
         return {"transform": "Resize(440) -> CenterCrop(384) -> ToTensor -> Normalize",
+                "tiled": f"Resize({config.SEMANTIC_TILE_RESIZE}) -> {config.SEMANTIC_TILE_SIZE} px tiles "
+                         "covering the image, ceil(side/tile) per axis, evenly spaced",
                 "mean": list(self.MEAN), "std": list(self.STD), "weights_digest": self.weights_digest,
                 "ai_is_positive": self.ai_is_positive}
 
@@ -501,21 +567,26 @@ class CommForDetector:
 
         return [block.attn.register_forward_pre_hook(record) for block in self._blocks()]
 
+    @staticmethod
+    def _layer_weights(block, hidden: torch.Tensor) -> torch.Tensor:
+        """softmax((q * scale) @ k^T) for one block, as timm's non-fused path: (B, heads, T, T)."""
+        attn = block.attn
+        batch, tokens, _ = hidden.shape
+        qkv = attn.qkv(hidden).reshape(batch, tokens, 3, attn.num_heads, attn.head_dim).permute(2, 0, 3, 1, 4)
+        q, k = attn.q_norm(qkv[0]), attn.k_norm(qkv[1])
+        return torch.softmax(torch.matmul(q * attn.scale, k.transpose(-2, -1)), dim=-1, dtype=torch.float32)
+
     def attention_maps(self, activations: dict) -> dict:
         captured: list[torch.Tensor] = activations["hidden_states"]
         blocks = self._blocks()
         if len(captured) != len(blocks):
             raise InferenceError(f"attention capture saw {len(captured)} of {len(blocks)} layers")
+        if activations.get("tiles"):
+            return self._tiled_attention_maps(captured, activations["tiles"])
         maps = []
         with torch.inference_mode():
             for block, hidden in zip(blocks, captured):
-                attn = block.attn
-                batch, tokens, _ = hidden.shape
-                qkv = attn.qkv(hidden).reshape(batch, tokens, 3, attn.num_heads, attn.head_dim).permute(2, 0, 3, 1, 4)
-                q, k = attn.q_norm(qkv[0]), attn.k_norm(qkv[1])
-                weights = torch.softmax(torch.matmul(q * attn.scale, k.transpose(-2, -1)),
-                                        dim=-1, dtype=torch.float32)
-                maps.append(weights[0])
+                maps.append(self._layer_weights(block, hidden)[0])
         stacked = torch.stack(maps).cpu().numpy()  # (layers, heads, 1 + patches, 1 + patches)
         prefix = int(getattr(self._model.vit, "num_prefix_tokens", 1))
         side = int(round((stacked.shape[-1] - prefix) ** 0.5))
@@ -528,6 +599,31 @@ class CommForDetector:
             "pooling": "cls",
             "backbone": "commfor_vits16",
             "region": self.crop_region(*activations["image_size"]) if activations.get("image_size") else None,
+        }
+
+    def _tiled_attention_maps(self, captured: list[torch.Tensor], boxes: list) -> dict:
+        """One head-averaged attention stack per tile (layers, tokens, tokens) plus
+        where that tile sits; M3 rolls each out and assembles the whole image.
+        Head-averaging here is exactly the head fusion M3's rollout applies
+        (mean), and keeps each tile at ~16 MB instead of ~96 MB."""
+        tiles = []
+        with torch.inference_mode():
+            per_layer = [self._layer_weights(block, hidden).mean(dim=1) for block, hidden
+                         in zip(self._blocks(), captured)]  # each (n_tiles, T, T)
+            stacked = torch.stack(per_layer, dim=1).cpu().numpy()  # (n_tiles, layers, T, T)
+        tokens = stacked.shape[-1]
+        side = int(round((tokens - 1) ** 0.5))
+        if side * side != tokens - 1:
+            raise InferenceError(f"{tokens} tokens do not form CLS + a square patch grid")
+        for index, box in enumerate(boxes):
+            tiles.append({"attention": stacked[index], "box": tuple(float(v) for v in box)})
+        return {
+            "attention": None,
+            "tiles": tiles,
+            "patch_grid": (side, side),
+            "pooling": "cls",
+            "backbone": "commfor_vits16",
+            "region": None,  # the tiles cover the whole image
         }
 
     def reset_cache(self) -> None:

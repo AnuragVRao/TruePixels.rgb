@@ -91,6 +91,15 @@ class ActivationBundle(BaseModel):
     # (x0, y0, x1, y1) of width/height. None = the whole image (SigLIP squashes
     # it to 224x224); Community Forensics sees a centre crop.
     attention_region: tuple[float, float, float, float] | None = None
+    # (2026-10-10) Tiled content detector: one entry per tile the model scored,
+    # {"attention": (layers, tokens, tokens) head-averaged, "box": (x0, y0, x1,
+    # y1) fractions of the image}. Set instead of ``attention``; together the
+    # boxes cover the whole image, and M3 assembles one map from them.
+    attention_tiles: list[dict] | None = None
+    # True when those tiles ARE what produced semantic_score (tiled input
+    # mode); False when the score came from the centre crop and the tiles
+    # were run for the explanation panel only (the default since 2026-10-10).
+    attention_tiles_scored: bool = False
 
 
 class InferenceOutput(BaseModel):
