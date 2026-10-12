@@ -58,14 +58,14 @@ export const LoginActivityPage: React.FC = () => {
                  placeholder="press Enter to filter" />
         </label>
         {(outcome || email) && (
-          <button type="button" className="text-sm text-primary hover:underline pb-1.5"
+          <button type="button" className="text-sm text-link hover:underline pb-1.5"
                   onClick={() => { setEmailDraft(''); setParams(new URLSearchParams()); }}>Clear filters</button>
         )}
       </form>
 
       <ErrorNotice error={error} />
       {!data && !error && (
-        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Loading…</p>
       )}
       {data && data.total === 0 && <Notice tone="info" title="No sign-ins match these filters." />}
       {data && data.items.length > 0 && <LoginActivityTable rows={data.items} showEmail />}

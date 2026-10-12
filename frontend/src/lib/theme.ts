@@ -37,3 +37,42 @@ export function useTheme(): [Theme, () => void] {
   }, []);
   return [theme, toggle];
 }
+
+/**
+ * Accessibility control (DBIM §8): text size. The type scale in index.css is
+ * in rem, so a data-text-size attribute on <html> scales every size at once.
+ * Remembered in this browser only, like the theme.
+ */
+export type TextSize = 'small' | 'normal' | 'large' | 'larger';
+
+export const TEXT_SIZES: TextSize[] = ['small', 'normal', 'large', 'larger'];
+
+const TEXT_KEY = 'truepixels.textSize';
+
+export function storedTextSize(): TextSize {
+  try {
+    const value = localStorage.getItem(TEXT_KEY);
+    return TEXT_SIZES.includes(value as TextSize) ? (value as TextSize) : 'normal';
+  } catch {
+    return 'normal';
+  }
+}
+
+export function applyTextSize(size: TextSize): void {
+  if (size === 'normal') document.documentElement.removeAttribute('data-text-size');
+  else document.documentElement.setAttribute('data-text-size', size);
+}
+
+export function useTextSize(): [TextSize, (size: TextSize) => void] {
+  const [size, setSize] = useState<TextSize>(storedTextSize);
+  const choose = useCallback((next: TextSize) => {
+    applyTextSize(next);
+    try {
+      localStorage.setItem(TEXT_KEY, next);
+    } catch {
+      // not remembered; the size still applies to this page
+    }
+    setSize(next);
+  }, []);
+  return [size, choose];
+}

@@ -10,7 +10,7 @@ const PAGE_SIZE = 20;
 type Action = 'enable' | 'disable';
 
 const STATUS_TONE: Record<string, string> = {
-  active: 'text-emerald-700 dark:text-emerald-300', disabled: 'text-amber-700 dark:text-amber-300', removed: 'text-rose-700 dark:text-rose-300',
+  active: 'text-success-text', disabled: 'text-warning-text', removed: 'text-destructive-text',
 };
 
 /**
@@ -95,13 +95,13 @@ export const UsersPage: React.FC = () => {
       <ErrorNotice error={error} />
       {done && <Notice tone="success" title={done} />}
       {!users && !error && (
-        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Loading…</p>
       )}
       {users && users.length === 0 && <Notice tone="info" title="No registered users." />}
       {users && users.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
-            <thead className="bg-card text-left text-xs uppercase tracking-wide text-muted-foreground/80">
+            <thead className="bg-muted text-center text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">#</th>
                 <th className="px-3 py-2">Name / email</th>
@@ -116,23 +116,23 @@ export const UsersPage: React.FC = () => {
                 const self = me?.user_id === u.user_id;
                 return (
                   <tr key={u.user_id} data-testid={`user-${u.user_id}`}>
-                    <td className="px-3 py-2 font-mono text-muted-foreground/80">{u.user_id}</td>
+                    <td className="px-3 py-2 font-mono text-muted-foreground">{u.user_id}</td>
                     <td className="px-3 py-2">
-                      <p className="text-foreground">{u.full_name}{self && <span className="text-muted-foreground/80"> (you)</span>}</p>
+                      <p className="text-foreground">{u.full_name}{self && <span className="text-muted-foreground"> (you)</span>}</p>
                       <p className="text-xs text-muted-foreground break-all">{u.email}</p>
                     </td>
                     <td className="px-3 py-2 text-foreground/80">{u.role}</td>
                     <td className={`px-3 py-2 ${STATUS_TONE[u.account_status] ?? ''}`}>{u.account_status}</td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{when(u.registered_at)}</td>
                     <td className="px-3 py-2">
-                      {self ? <span className="text-xs text-muted-foreground/80">—</span> : (
+                      {self ? <span className="text-xs text-muted-foreground">—</span> : (
                         <div className="flex flex-wrap gap-2">
                           {u.account_status !== 'active' && (
-                            <button type="button" className="text-xs px-2 py-1 rounded border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
+                            <button type="button" className="btn-secondary px-2.5 py-1 text-xs"
                                     onClick={() => { setActionError(null); setDone(null); setPending({ target: u, action: 'enable' }); }}>Enable</button>
                           )}
                           {u.account_status === 'active' && (
-                            <button type="button" className="text-xs px-2 py-1 rounded border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300"
+                            <button type="button" className="btn-secondary px-2.5 py-1 text-xs"
                                     onClick={() => { setActionError(null); setDone(null); setPending({ target: u, action: 'disable' }); }}>Disable</button>
                           )}
                         </div>

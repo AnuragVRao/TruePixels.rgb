@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // "Last updated on" in the footer (DBIM §5.6): the day this bundle was built.
+  define: {
+    __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+  },
   build: {
     // Phase 6: never inline assets as data: URIs - the CSP allows fonts and
     // scripts from 'self' only (img-src also allows data:, fonts do not).

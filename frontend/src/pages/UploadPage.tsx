@@ -97,11 +97,11 @@ export const UploadPage: React.FC = () => {
     <div className="max-w-3xl mx-auto space-y-8 pt-4">
       <div className="text-center space-y-4">
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-medium">
-          <ScanLine className="w-3.5 h-3.5" /> AI Image Detection
+          <ScanLine className="w-5 h-5" aria-hidden="true" /> AI Image Detection
         </span>
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground">
+        <h1 className="text-4xl sm:text-5xl font-bold text-foreground">
           Analyse{' '}
-          <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">an Image</span>
+          <span className="text-primary">an Image</span>
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
           Upload a JPG or PNG image (up to 10 MB).
@@ -111,7 +111,7 @@ export const UploadPage: React.FC = () => {
       {/* Drag-and-drop as in M1's original ImageUpload; a dropped file goes
           through exactly the same checks as one picked with the dialog. */}
       <label
-        className={`relative flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed p-10 text-center cursor-pointer bg-card transition-colors ${
+        className={`relative flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-10 text-center cursor-pointer bg-card transition-colors ${
           busy ? 'opacity-50 pointer-events-none'
             : dragOver ? 'border-primary bg-primary/10' : 'border-primary/50 hover:border-primary'
         }`}
@@ -125,21 +125,21 @@ export const UploadPage: React.FC = () => {
       >
         {preview ? (
           <>
-            <img src={preview} alt="Selected image" className="max-h-64 rounded-xl object-contain" />
+            <img src={preview} alt={`Preview of ${file?.name ?? 'the chosen file'}`} className="max-h-64 rounded-lg object-contain" />
             <span className="text-sm text-foreground">{file?.name}</span>
             <span className="text-xs text-primary">Click or drop another image to replace it</span>
           </>
         ) : (
           <>
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/40">
-              <CloudUpload className="w-8 h-8 text-foreground" />
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+              <CloudUpload className="w-8 h-8 text-white" aria-hidden="true" />
             </div>
             <span className="text-lg font-semibold text-foreground">Drag &amp; drop an image here</span>
-            <span className="text-xs text-muted-foreground/80">or</span>
-            <span className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 font-semibold text-sm text-primary-foreground shadow-lg shadow-primary/30">
-              <Upload className="w-4 h-4" /> Choose an image
+            <span className="text-xs text-muted-foreground">or</span>
+            <span className="btn-primary px-6">
+              <Upload className="w-5 h-5" aria-hidden="true" /> Choose an image
             </span>
-            <span className="text-xs text-muted-foreground/80">Supports JPG, PNG (max 10 MB)</span>
+            <span className="text-xs text-muted-foreground">Supports JPG, PNG (max 10 MB)</span>
           </>
         )}
         <input type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" className="sr-only" disabled={busy}
@@ -150,21 +150,21 @@ export const UploadPage: React.FC = () => {
       <ErrorNotice error={error} />
 
       <label className="flex items-start gap-3 text-sm text-foreground max-w-xl mx-auto">
-        <input type="checkbox" className="mt-0.5 w-4 h-4 accent-primary" checked={xai} disabled={busy}
+        <input type="checkbox" className="mt-0.5 w-5 h-5 accent-primary" checked={xai} disabled={busy}
                onChange={(e) => setXai(e.target.checked)} />
         <span className="font-medium">
           Include explainability panels
-          <span className="block text-xs font-normal text-muted-foreground/80">Adds roughly 1-4 seconds. The verdict is identical either way.</span>
+          <span className="block text-xs font-normal text-muted-foreground">Adds roughly 1-4 seconds. The verdict is identical either way.</span>
         </span>
       </label>
 
       <button
         type="button" onClick={run} disabled={!file || busy}
-        className="w-full max-w-xl mx-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary hover:from-primary hover:to-secondary disabled:opacity-50 px-4 py-3.5 font-semibold text-primary-foreground shadow-lg shadow-primary/30"
+        className="btn-primary w-full max-w-xl mx-auto py-3 text-base"
       >
-        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanLine className="w-4 h-4" />}
+        {busy ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> : <ScanLine className="w-5 h-5" aria-hidden="true" />}
         {phase === 'uploading' ? 'Uploading and validating…' : phase === 'analysing' ? `Analysing… ${elapsed}s` : 'Analyse Image'}
-        {!busy && <ArrowRight className="w-4 h-4" />}
+        {!busy && <ArrowRight className="w-5 h-5" aria-hidden="true" />}
       </button>
       {phase === 'analysing' && (
         <Notice tone="info">
@@ -189,7 +189,7 @@ export const UploadPage: React.FC = () => {
 };
 
 const Feature: React.FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({ icon, title, children }) => (
-  <div className="rounded-2xl border border-border bg-card p-5 space-y-2">
+  <div className="rounded-lg border border-border bg-card p-5 space-y-2">
     <div className="text-primary">{icon}</div>
     <h3 className="font-semibold text-foreground">{title}</h3>
     <p className="text-sm text-muted-foreground leading-relaxed">{children}</p>

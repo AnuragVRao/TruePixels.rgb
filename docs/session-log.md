@@ -8,6 +8,42 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-12 — frontend aligned with the Digital Brand Identity Manual
+- Asked for: the React UI to follow MeitY's *Digital Brand Identity Manual*
+  (DBIM v3, Jan 2025), frontend only. Owner's choices: colour group
+  **Purple**, **Lockup 3B**, visual + structural scope, dark mode kept.
+- Tokens (`index.css`, `tailwind.config.js`): key #29136C with its group,
+  plus the functional palette (Inclusive White, Linen, Deep Earthy Brown,
+  Greys 01-03, Coral Red / Liberty Green / Mustard / Blue as new
+  `destructive` / `success` / `warning` / `info` tokens with a `-text`
+  shade for small text). Every hard-coded amber/rose/emerald/sky/violet
+  class and the results gauge's hex gradient now use tokens. All 28
+  text/background token pairs pass WCAG AA in light and dark (checked by
+  script; disabled buttons too).
+- Type: Noto Sans (400-700) and Noto Sans Mono, bundled via @fontsource
+  (CSP unchanged); Tailwind's font sizes are now only the DBIM §4.3 scale
+  (36/24/20/16/14/12, mobile 24/20/16/14/12/10), in rem.
+- Header (§5.4.3 Header 3): skip link, Lockup 3B (own mark, name, tagline),
+  accessibility controls (text size A−/A/A+/A++ and dark contrast, stored
+  per browser), account controls, underlined global navigation. Tab labels
+  unchanged, so e2e selectors still match. Footer (§5.6) in the key colour
+  with useful links, copyright, and "Last updated on" (the build date,
+  `__BUILD_DATE__`).
+- `.btn-primary` / `.btn-secondary` / `.btn-danger` with distinct hover,
+  focus-visible and disabled states; icons 20 px in key colour/currentColor;
+  required fields marked * with an instruction line (Annex B); table
+  headers centred; dates dd/mm/yyyy via `lib/format.ts`.
+- Deviations, recorded rather than hidden: **no State Emblem and no
+  "Government of India" text** (TruePixels is not a government body; Emblem
+  Rules 2007); no search bar, language selector, cookie banner, or Website
+  Policies / Sitemap / Feedback / Contact pages (none exist, and a stand-in
+  would be a fabricated value); dark mode is beyond the manual; radius
+  0.5 rem and verdict-coloured status icons on the verification page are
+  judgement calls.
+- Verified: typecheck, lint, build; signed-out pages viewed in light/dark,
+  larger text, and at 375 px (no horizontal scroll). Signed-in pages and the
+  e2e suites were **not** run (they need a scratch backend).
+
 ### 2026-10-11 — Admin → Models shows only "Running now"
 - Asked for a simpler page: the three running-model cards (with their
   Roll back buttons) stay; Registered models, the registration form, gate

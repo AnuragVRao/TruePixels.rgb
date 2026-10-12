@@ -224,7 +224,9 @@ change, login activity; upload validation; both branches; fusion and verdict;
 explanation panels (content-detector attention rollout over the whole image
 from a panel-only tiled pass, SPAI patch spectrum); history; PDF reports; admin dashboard,
 users, logs and model management (register, gate preview, activate,
-rollback); PostgreSQL + Alembic; HTTPS via Caddy.
+rollback); PostgreSQL + Alembic; HTTPS via Caddy; UI styled to MeitY's
+Digital Brand Identity Manual (Purple group, Noto Sans, Lockup 3B - no
+State Emblem; deviations in the session log, 2026-10-12).
 
 ---
 
@@ -268,6 +270,8 @@ and over HTTP in `test_api_predict.py`.
 
 ## 8. Recent work (full entries: [docs/session-log.md](docs/session-log.md))
 
+- **2026-10-12** — frontend aligned with the DBIM (palette, Noto Sans, type
+  scale, header/footer, accessibility controls, dd/mm/yyyy dates).
 - **2026-10-11** — Admin → Models trimmed to "Running now" (+ rollback);
   registering and activating models is API-only.
 - **2026-10-11** — admin confidence histogram: ten 5-point bins from 50 %.

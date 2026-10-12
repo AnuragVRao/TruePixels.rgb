@@ -56,10 +56,10 @@ const GateReport: React.FC<{ gate: GateResult; title?: string }> = ({ gate, titl
   return (
     <div className="space-y-2 text-sm" data-testid="gate-report">
       {title && <p className="font-semibold text-foreground">{title}</p>}
-      <p className={gate.passed ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>{verdict}</p>
+      <p className={gate.passed ? 'text-success-text' : 'text-warning-text'}>{verdict}</p>
       <div className="overflow-x-auto">
         <table className="text-xs w-full">
-          <thead className="text-muted-foreground/80 text-left">
+          <thead className="text-muted-foreground text-left">
             <tr><th className="pr-3 py-1">Metric</th><th className="pr-3">Published baseline</th><th className="pr-3">Active now</th><th>Candidate</th></tr>
           </thead>
           <tbody className="text-foreground font-mono">
@@ -75,9 +75,9 @@ const GateReport: React.FC<{ gate: GateResult; title?: string }> = ({ gate, titl
         </table>
       </div>
       {gate.reasons.length > 0 && (
-        <ul className="list-disc pl-5 text-amber-900 dark:text-amber-200">{gate.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+        <ul className="list-disc pl-5 text-warning-text">{gate.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
       )}
-      <p className="text-xs text-muted-foreground/80">
+      <p className="text-xs text-muted-foreground">
         Quality gate: a coarse safety net, not a verification. It scores {gate.reference?.images ?? '?'} images
         ({gate.reference?.real ?? '?'} real, {gate.reference?.generated ?? '?'} generated) from {gate.reference?.split ?? 'the validation split'},
         never the held-out test set. Passing means the candidate did not fall below these thresholds on that small
@@ -142,7 +142,7 @@ export const ModelsPage: React.FC = () => {
       <h1 className="text-2xl font-bold text-foreground">Models</h1>
       <ErrorNotice error={error} />
       {!list && !error && (
-        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Loading…</p>
       )}
       {outcome && (
         <Notice tone={outcome.tone} title={outcome.title}>
@@ -159,17 +159,17 @@ export const ModelsPage: React.FC = () => {
               const last = latestByType(type);
               const back = last?.previous_model_id != null ? last.previous_model_id : null;
               return (
-                <div key={type} className="rounded-xl border border-border bg-card p-4 space-y-2 text-sm" data-testid={`active-${type}`}>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground/80">{MODEL_TYPE_LABEL[type]}</p>
+                <div key={type} className="rounded-lg border border-border bg-card p-4 space-y-2 text-sm" data-testid={`active-${type}`}>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{MODEL_TYPE_LABEL[type]}</p>
                   {row ? (
                     <>
                       <p className="text-foreground">#{row.model_id} {row.model_name} <span className="font-mono text-xs text-muted-foreground break-all">{row.model_version}</span></p>
                       <p className="text-foreground/80">{describeConfig(row)}</p>
-                      <p className="text-xs text-muted-foreground"><span className="text-muted-foreground/80">Evaluation reference: </span>{row.training_reference ?? 'none recorded'}</p>
+                      <p className="text-xs text-muted-foreground"><span className="text-muted-foreground">Evaluation reference: </span>{row.training_reference ?? 'none recorded'}</p>
                     </>
                   ) : <p className="text-muted-foreground">Nothing active (type not in use).</p>}
                   {back != null && (
-                    <button type="button" className="text-xs px-2 py-1 rounded border border-border text-foreground"
+                    <button type="button" className="btn-secondary px-2.5 py-1 text-xs"
                             onClick={() => { setOutcome(null); setPending({ type, target: byId.get(back), targetId: back }); }}>
                       Roll back to #{back}
                     </button>
@@ -189,7 +189,7 @@ export const ModelsPage: React.FC = () => {
             {pending.target ? ` (${pending.target.model_name} ${pending.target.model_version})` : ''}, which was active
             before the latest change of this type.</p>
           <p>The canary must pass. The quality gate is run and recorded, but is advisory for a rollback.</p>
-          {busy && <p className="flex items-center gap-2 text-primary"><Loader2 className="w-4 h-4 animate-spin" /> Rolling back… {elapsed}s</p>}
+          {busy && <p className="flex items-center gap-2 text-primary"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Rolling back… {elapsed}s</p>}
           <ErrorNotice error={actionError} />
         </ConfirmDialog>
       )}

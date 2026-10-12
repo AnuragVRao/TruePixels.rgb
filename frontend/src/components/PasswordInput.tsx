@@ -21,7 +21,7 @@ export const PasswordInput: React.FC<Props> = ({ className = '', ...props }) => 
         title={visible ? 'Hide password' : 'Show password'}
         className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:text-primary"
       >
-        {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        {visible ? <EyeOff className="w-5 h-5" aria-hidden="true" /> : <Eye className="w-5 h-5" aria-hidden="true" />}
       </button>
     </div>
   );

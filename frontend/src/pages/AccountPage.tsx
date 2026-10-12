@@ -8,6 +8,7 @@ import { ErrorNotice, Notice } from '../components/Feedback';
 import { LoginActivityTable } from '../components/LoginActivityTable';
 import { PasswordInput } from '../components/PasswordInput';
 import { PasswordRules, passwordOk } from '../components/PasswordRules';
+import { Req, RequiredNote } from '../components/Required';
 import { Pager } from './admin/AdminLayout';
 
 const PAGE_SIZE = 15;
@@ -51,7 +52,7 @@ const ChangePassword: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
   };
 
   return (
-    <section className="max-w-md rounded-2xl border border-border bg-card p-6 space-y-4">
+    <section className="max-w-md rounded-lg border border-border bg-card p-6 space-y-4">
       <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
         <KeyRound className="w-5 h-5 text-primary" /> Change password
       </h2>
@@ -62,26 +63,27 @@ const ChangePassword: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
       )}
       <ErrorNotice error={error} />
       <form onSubmit={submit} className="space-y-4" aria-label="Change password">
+        <RequiredNote />
         <label className="block space-y-1.5 text-sm">
-          <span className="text-foreground/80">Current password</span>
+          <span className="text-foreground font-medium">Current password <Req /></span>
           <PasswordInput className={field} autoComplete="current-password" required value={current}
                  onChange={(e) => setCurrent(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
-          <span className="text-foreground/80">New password</span>
+          <span className="text-foreground font-medium">New password <Req /></span>
           <PasswordInput className={field} autoComplete="new-password" required value={password}
                  onChange={(e) => setPassword(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
-          <span className="text-foreground/80">Confirm new password</span>
+          <span className="text-foreground font-medium">Confirm new password <Req /></span>
           <PasswordInput className={field} autoComplete="new-password" required value={confirm}
                  onChange={(e) => setConfirm(e.target.value)} />
         </label>
         <PasswordRules password={password} />
-        {mismatch && <p className="text-xs text-rose-700 dark:text-rose-300">The two passwords do not match.</p>}
+        {mismatch && <p className="text-xs text-destructive-text">The two passwords do not match.</p>}
         <button type="submit" disabled={busy || !current || !passwordOk(password) || confirm !== password}
-                className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-primary-foreground">
-          {busy && <Loader2 className="w-4 h-4 animate-spin" />} Change password
+                className="btn-primary w-full py-2.5">
+          {busy && <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />} Change password
         </button>
       </form>
     </section>
@@ -121,13 +123,13 @@ export const AccountPage: React.FC = () => {
           <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
             <History className="w-5 h-5 text-primary" /> Login activity
           </h2>
-          <p className="text-xs text-muted-foreground/80">
+          <p className="text-xs text-muted-foreground">
             Every sign-in to this account and every password change, newest first, kept for 90 days. If you see one
             you do not recognise, change your password.
           </p>
           <ErrorNotice error={error} />
           {!data && !error && (
-            <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+            <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Loading…</p>
           )}
           {data && data.total === 0 && <Notice tone="info" title="No sign-ins recorded yet." />}
           {data && data.items.length > 0 && <LoginActivityTable rows={data.items} />}

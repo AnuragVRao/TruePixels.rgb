@@ -23,7 +23,7 @@ const loadingAdmin = <p className="text-muted-foreground text-sm">Loading…</p>
 const NotFound: React.FC = () => (
   <div className="text-center space-y-3 py-16">
     <p className="text-foreground/80">That page does not exist.</p>
-    <Link className="text-primary hover:underline" to="/">Go to the start page</Link>
+    <Link className="text-link hover:underline" to="/">Go to the start page</Link>
   </div>
 );
 

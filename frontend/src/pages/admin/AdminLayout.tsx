@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Notice } from '../../components/Feedback';
+import { formatDateTime } from '../../lib/format';
 
 const tab = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
@@ -49,13 +50,13 @@ export const Pager: React.FC<{ page: number; totalPages: number; total: number; 
   totalPages > 1 ? (
     <nav className="flex items-center justify-between text-sm" aria-label="Pagination">
       <button type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}
-              className="px-3 py-1.5 rounded-lg border border-border disabled:opacity-40">Previous</button>
+              className="btn-secondary px-3 py-1.5">Previous</button>
       <span className="text-muted-foreground">Page {page} of {totalPages} · {total} {noun}</span>
       <button type="button" disabled={page >= totalPages} onClick={() => onPage(page + 1)}
-              className="px-3 py-1.5 rounded-lg border border-border disabled:opacity-40">Next</button>
+              className="btn-secondary px-3 py-1.5">Next</button>
     </nav>
   ) : null;
 
 export function when(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString() : '—';
+  return iso ? formatDateTime(iso) : '—';
 }

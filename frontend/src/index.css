@@ -2,116 +2,123 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Theme tokens. Light is the default (:root); dark applies with class="dark"
-   on <html>, set by lib/theme.ts. Components use the semantic names
-   (bg-card, text-muted-foreground, bg-primary, ...) from tailwind.config.js. */
+/* Theme tokens, following the Digital Brand Identity Manual (DBIM v3):
+   one primary colour group (Purple: key #29136C, #4729A3, #8B70DB, #BDADEB,
+   #EEEBFA) plus the functional palette (Inclusive White, Linen, Deep Earthy
+   Brown, Greys 01-03, and the status colours). Light is the default (:root);
+   dark applies with class="dark" on <html>, set by lib/theme.ts - the manual
+   defines no dark theme, so it is built from the same two palettes.
+   Components use the semantic names (bg-card, text-muted-foreground,
+   bg-primary, text-success, ...) from tailwind.config.js. */
 @layer base {
   :root {
-    --background: rgb(247, 249, 243);
-    --foreground: rgb(0, 0, 0);
-    --card: rgb(255, 255, 255);
-    --card-foreground: rgb(0, 0, 0);
-    --popover: rgb(255, 255, 255);
-    --popover-foreground: rgb(0, 0, 0);
-    --primary: rgb(79, 70, 229);
-    --primary-foreground: rgb(255, 255, 255);
-    --secondary: rgb(20, 184, 166);
-    --secondary-foreground: rgb(255, 255, 255);
-    --muted: rgb(240, 240, 240);
-    --muted-foreground: rgb(51, 51, 51);
-    --accent: rgb(245, 158, 11);
-    --accent-foreground: rgb(0, 0, 0);
-    --destructive: rgb(239, 68, 68);
-    --destructive-foreground: rgb(255, 255, 255);
-    --border: rgb(0, 0, 0);
-    --input: rgb(115, 115, 115);
-    --ring: rgb(165, 180, 252);
-    --chart-1: rgb(79, 70, 229);
-    --chart-2: rgb(20, 184, 166);
-    --chart-3: rgb(245, 158, 11);
-    --chart-4: rgb(236, 72, 153);
-    --chart-5: rgb(34, 197, 94);
-    --sidebar: rgb(247, 249, 243);
-    --sidebar-foreground: rgb(0, 0, 0);
-    --sidebar-primary: rgb(79, 70, 229);
-    --sidebar-primary-foreground: rgb(255, 255, 255);
-    --sidebar-accent: rgb(245, 158, 11);
-    --sidebar-accent-foreground: rgb(0, 0, 0);
-    --sidebar-border: rgb(0, 0, 0);
-    --sidebar-ring: rgb(165, 180, 252);
-    --font-sans: DM Sans, sans-serif;
-    --font-serif: DM Sans, sans-serif;
-    --font-mono: Space Mono, monospace;
-    --radius: 1rem;
-    --shadow-x: 0px;
-    --shadow-y: 0px;
-    --shadow-blur: 0px;
-    --shadow-spread: 0px;
-    --shadow-opacity: 0.05;
-    --shadow-color: #1a1a1a;
-    --shadow-2xs: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.03);
-    --shadow-xs: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.03);
-    --shadow-sm: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow-md: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 2px 4px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow-lg: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 4px 6px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow-xl: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 8px 10px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow-2xl: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.13);
-    --tracking-normal: normal;
-    --spacing: 0.25rem;
+    --background: #ffffff;           /* Inclusive */
+    --foreground: #150202;           /* Deep Earthy Brown */
+    --card: #ffffff;
+    --card-foreground: #150202;
+    --popover: #ffffff;
+    --popover-foreground: #150202;
+    --primary: #29136c;              /* key colour */
+    --primary-hover: #4729a3;
+    --primary-foreground: #ffffff;
+    --secondary: #4729a3;
+    --secondary-foreground: #ffffff;
+    --accent: #eeebfa;
+    --accent-foreground: #29136c;
+    --muted: #ebeaea;                /* Linen */
+    --muted-foreground: #606060;     /* Grey 03 */
+    --destructive: #dc3545;          /* Coral Red - error / AI verdict */
+    --destructive-foreground: #ffffff;
+    --destructive-text: #b02a37;     /* Coral Red, darkened for small text on white */
+    --success: #198754;              /* Liberty Green - success / Real verdict */
+    --success-foreground: #ffffff;
+    --success-text: #146c43;
+    --warning: #ffc107;              /* Mustard Yellow */
+    --warning-foreground: #150202;
+    --warning-text: #7a5a00;
+    --info: #0d6efd;                 /* Blue - information */
+    --info-foreground: #ffffff;
+    --info-text: #0a58ca;
+    --link: #0d6efd;
+    --border: #ebeaea;               /* Linen outlines */
+    --input: #8e8e8e;                /* Grey 02 */
+    --ring: #4729a3;
+    --disabled: #ebeaea;             /* Linen */
+    --disabled-foreground: #606060;  /* Grey 03 */
+    --footer: #29136c;
+    --footer-foreground: #ffffff;
+    --chart-1: #29136c;
+    --chart-2: #8b70db;
+    --chart-3: #dc3545;
+    --chart-4: #198754;
+    --chart-5: #0d6efd;
+    --font-sans: 'Noto Sans', sans-serif;
+    --font-serif: 'Noto Sans', sans-serif;
+    --font-mono: 'Noto Sans Mono', monospace;
+    --radius: 0.5rem;
+
+    /* DBIM §4.3.1 type scale (desktop), in rem so the text-size control scales it. */
+    --fs-h1: 2.25rem;     /* 36 */
+    --fs-h2: 1.5rem;      /* 24 */
+    --fs-h3: 1.25rem;     /* 20 */
+    --fs-p1: 1rem;        /* 16 */
+    --fs-p2: 0.875rem;    /* 14 */
+    --fs-small: 0.75rem;  /* 12 */
   }
 
   .dark {
-    --background: rgb(0, 0, 0);
-    --foreground: rgb(255, 255, 255);
-    --card: rgb(26, 33, 43);
-    --card-foreground: rgb(255, 255, 255);
-    --popover: rgb(26, 33, 43);
-    --popover-foreground: rgb(255, 255, 255);
-    --primary: rgb(129, 140, 248);
-    --primary-foreground: rgb(0, 0, 0);
-    --secondary: rgb(45, 212, 191);
-    --secondary-foreground: rgb(0, 0, 0);
-    --muted: rgb(51, 51, 51);
-    --muted-foreground: rgb(204, 204, 204);
-    --accent: rgb(252, 211, 77);
-    --accent-foreground: rgb(0, 0, 0);
-    --destructive: rgb(248, 113, 113);
-    --destructive-foreground: rgb(0, 0, 0);
-    --border: rgb(84, 84, 84);
-    --input: rgb(255, 255, 255);
-    --ring: rgb(129, 140, 248);
-    --chart-1: rgb(129, 140, 248);
-    --chart-2: rgb(45, 212, 191);
-    --chart-3: rgb(252, 211, 77);
-    --chart-4: rgb(244, 114, 182);
-    --chart-5: rgb(74, 222, 128);
-    --sidebar: rgb(0, 0, 0);
-    --sidebar-foreground: rgb(255, 255, 255);
-    --sidebar-primary: rgb(129, 140, 248);
-    --sidebar-primary-foreground: rgb(0, 0, 0);
-    --sidebar-accent: rgb(252, 211, 77);
-    --sidebar-accent-foreground: rgb(0, 0, 0);
-    --sidebar-border: rgb(255, 255, 255);
-    --sidebar-ring: rgb(129, 140, 248);
-    --font-sans: DM Sans, sans-serif;
-    --font-serif: DM Sans, sans-serif;
-    --font-mono: Space Mono, monospace;
-    --radius: 1rem;
-    --shadow-x: 0px;
-    --shadow-y: 0px;
-    --shadow-blur: 0px;
-    --shadow-spread: 0px;
-    --shadow-opacity: 0.05;
-    --shadow-color: #1a1a1a;
-    --shadow-2xs: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.03);
-    --shadow-xs: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.03);
-    --shadow-sm: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow-md: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 2px 4px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow-lg: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 4px 6px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow-xl: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 8px 10px -1px hsl(0 0% 10.1961% / 0.05);
-    --shadow-2xl: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.13);
+    --background: #000000;
+    --foreground: #ffffff;
+    --card: #1a0c45;                 /* between key #29136C and black, so cards read on black */
+    --card-foreground: #ffffff;
+    --popover: #29136c;
+    --popover-foreground: #ffffff;
+    --primary: #bdadeb;
+    --primary-hover: #eeebfa;
+    --primary-foreground: #150202;
+    --secondary: #8b70db;
+    --secondary-foreground: #150202;
+    --accent: #29136c;
+    --accent-foreground: #eeebfa;
+    --muted: #29136c;
+    --muted-foreground: #c6c6c6;     /* Grey 01 */
+    --destructive: #dc3545;
+    --destructive-foreground: #ffffff;
+    --destructive-text: #faaaaa;
+    --success: #198754;
+    --success-foreground: #ffffff;
+    --success-text: #75d6a6;
+    --warning: #ffc107;
+    --warning-foreground: #150202;
+    --warning-text: #ffc107;
+    --info: #0d6efd;
+    --info-foreground: #ffffff;
+    --info-text: #a3bbf3;
+    --link: #bdadeb;
+    --border: #4729a3;
+    --input: #8e8e8e;
+    --ring: #bdadeb;
+    --disabled: #606060;
+    --disabled-foreground: #ebeaea;
+    --footer: #29136c;
+    --footer-foreground: #ffffff;
+    --chart-1: #bdadeb;
+    --chart-2: #8b70db;
+    --chart-3: #faaaaa;
+    --chart-4: #75d6a6;
+    --chart-5: #a3bbf3;
+  }
+
+  /* DBIM §4.3.2 type scale for mobile. */
+  @media (max-width: 639px) {
+    :root {
+      --fs-h1: 1.5rem;      /* 24 */
+      --fs-h2: 1.25rem;     /* 20 */
+      --fs-h3: 1rem;        /* 16 */
+      --fs-p1: 0.875rem;    /* 14 */
+      --fs-p2: 0.75rem;     /* 12 */
+      --fs-small: 0.625rem; /* 10 */
+    }
   }
 }
 
@@ -125,10 +132,78 @@
   html.dark {
     color-scheme: dark;
   }
+  /* Accessibility control: text size (lib/theme.ts). The whole type scale is in rem. */
+  html[data-text-size='small'] {
+    font-size: 87.5%;
+  }
+  html[data-text-size='large'] {
+    font-size: 112.5%;
+  }
+  html[data-text-size='larger'] {
+    font-size: 125%;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    line-height: 1.5;
+  }
+  h1, h2, h3, h4 {
+    line-height: 1.25;
+  }
+  a {
+    text-underline-offset: 2px;
   }
   ::selection {
     @apply bg-primary text-primary-foreground;
+  }
+  /* DBIM §4.5: every clickable item shows a visible keyboard focus. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* DBIM §4.5: call-to-action buttons - consistent size and padding, with
+   distinct enabled, hover, focus and disabled states. */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-semibold
+           border transition-colors select-none;
+  }
+  .btn:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .btn:disabled,
+  .btn[aria-disabled='true'] {
+    background: var(--disabled);
+    border-color: var(--disabled);
+    color: var(--disabled-foreground);
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  .btn-primary {
+    @apply btn bg-primary text-primary-foreground border-primary;
+  }
+  .btn-primary:not(:disabled):hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+  .btn-secondary {
+    @apply btn bg-card text-primary border-primary;
+  }
+  .btn-secondary:not(:disabled):hover {
+    @apply bg-accent;
+  }
+  .btn-danger {
+    @apply btn bg-destructive text-destructive-foreground border-destructive;
+  }
+  .btn-danger:not(:disabled):hover {
+    filter: brightness(0.9);
+  }
+  .skip-link {
+    @apply sr-only;
+  }
+  .skip-link:focus {
+    @apply not-sr-only fixed left-4 top-2 z-50 btn-primary;
   }
 }

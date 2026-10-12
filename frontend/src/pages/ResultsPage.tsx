@@ -4,6 +4,7 @@ import { Activity, AlertCircle, ArrowLeft, Brain, Download, Info, Layers, Loader
 import { apiBlob, apiRequest } from '../api/client';
 import type { ResultView, Visualization, XaiStatus } from '../api/types';
 import { AuthImage } from '../components/AuthImage';
+import { formatDateTime } from '../lib/format';
 import { ErrorNotice, Notice } from '../components/Feedback';
 
 /** Display name of the content detector that produced THIS result (its D3 row). */
@@ -41,9 +42,9 @@ function xaiMessage(status: XaiStatus | undefined, reasons: string[] | undefined
 }
 
 const BAND_CHIP: Record<ResultView['confidence_band'], string> = {
-  High: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300',
-  Moderate: 'bg-sky-500/10 border-sky-500/40 text-sky-700 dark:text-sky-300',
-  Low: 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300',
+  High: 'bg-success/10 border-success/50 text-success-text',
+  Moderate: 'bg-info/10 border-info/50 text-info-text',
+  Low: 'bg-warning/10 border-warning/50 text-warning-text',
 };
 
 // A 240° arc with the gap at the bottom; pathLength 100 makes the dash a percentage.
@@ -56,12 +57,8 @@ const ConfidenceGauge: React.FC<{ percentage: number; label: string; band: Resul
   <div className="flex flex-col items-center">
     <div className="relative w-48 h-40">
       <svg viewBox="0 0 150 130" className="w-full h-full" aria-hidden="true">
-        <defs>
-          <linearGradient id="gauge-ai" x1="0" x2="1"><stop offset="0" stopColor="#f43f5e" /><stop offset="1" stopColor="#fb7185" /></linearGradient>
-          <linearGradient id="gauge-real" x1="0" x2="1"><stop offset="0" stopColor="#10b981" /><stop offset="1" stopColor="#34d399" /></linearGradient>
-        </defs>
         <path d={GAUGE_ARC} pathLength={100} fill="none" stroke="var(--muted)" strokeWidth="12" strokeLinecap="round" />
-        <path d={GAUGE_ARC} pathLength={100} fill="none" stroke={`url(#${ai ? 'gauge-ai' : 'gauge-real'})`} strokeWidth="12"
+        <path d={GAUGE_ARC} pathLength={100} fill="none" stroke={ai ? 'var(--destructive)' : 'var(--success)'} strokeWidth="12"
               strokeLinecap="round" strokeDasharray={`${Math.min(100, Math.max(0, percentage))} 100`} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center pb-3">
@@ -70,18 +67,18 @@ const ConfidenceGauge: React.FC<{ percentage: number; label: string; band: Resul
       </div>
     </div>
     <span className={`-mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium ${BAND_CHIP[band]}`}>
-      <AlertCircle className="w-3.5 h-3.5" /> {band} confidence
+      <AlertCircle className="w-5 h-5 text-primary" aria-hidden="true" /> {band} confidence
     </span>
   </div>
 );
 
 const ScoreCard: React.FC<{ icon: React.ReactNode; title: string; value: string }> = ({ icon, title, value }) => (
-  <div className="flex gap-4 rounded-2xl border border-border bg-card p-5">
+  <div className="flex gap-4 rounded-lg border border-border bg-card p-5">
     <div className="text-primary shrink-0">{icon}</div>
     <div>
       <p className="text-sm text-foreground/80">{title}</p>
       <p className="mt-1 text-2xl font-mono font-semibold text-foreground">{value}</p>
-      <p className="text-xs text-muted-foreground/80" title="Probability that the image is AI-generated, as this detector scores it">P(AI)</p>
+      <p className="text-xs text-muted-foreground" title="Probability that the image is AI-generated, as this detector scores it">P(AI)</p>
     </div>
   </div>
 );
@@ -118,7 +115,7 @@ const Panel: React.FC<{ v: Visualization; label?: string }> = ({ v, label = PANE
         <span className="group relative inline-flex">
           <button type="button" aria-label={`About the ${label}`} aria-describedby={tipId}
                   className="rounded-full text-muted-foreground hover:text-primary focus:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-            <Info className="w-4 h-4" />
+            <Info className="w-5 h-5" aria-hidden="true" />
           </button>
           <span id={tipId} role="tooltip"
                 className="pointer-events-none invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity absolute left-1/2 -translate-x-1/2 top-6 z-20 w-72 max-w-[80vw] rounded-lg border border-border bg-card px-3 py-2 text-xs font-normal leading-relaxed text-muted-foreground shadow-lg">
@@ -127,7 +124,7 @@ const Panel: React.FC<{ v: Visualization; label?: string }> = ({ v, label = PANE
         </span>
       </figcaption>
       <AuthImage src={v.visualization_url} alt={label}
-                 className="w-full rounded-xl border border-border object-contain bg-card min-h-40" />
+                 className="w-full rounded-lg border border-border object-contain bg-card min-h-40" />
       {v.branch === 'frequency' && <SpectrumKey />}
     </figure>
   );
@@ -173,7 +170,7 @@ export const ResultsPage: React.FC = () => {
   };
 
   if (error) return <div className="max-w-2xl mx-auto"><ErrorNotice error={error} /></div>;
-  if (!result) return <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading result…</p>;
+  if (!result) return <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Loading result…</p>;
 
   const ai = result.predicted_class === 'AI Generated';
   const xai = xaiMessage(navState.xaiStatus, navState.xaiReasons, result.visualizations.length);
@@ -183,35 +180,35 @@ export const ResultsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link to="/" className="flex items-center gap-2 text-sm text-primary hover:text-primary/80">
-          <ArrowLeft className="w-4 h-4" /> New Analysis
+        <Link to="/" className="flex items-center gap-2 text-sm text-link hover:underline">
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" /> New Analysis
         </Link>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={downloadPdf} disabled={pdfBusy}
-                  className="flex items-center gap-2 rounded-xl border border-border hover:border-primary bg-card px-4 py-2 text-sm font-medium text-foreground disabled:opacity-50">
-            {pdfBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download Report (PDF)
+                  className="btn-secondary">
+            {pdfBusy ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> : <Download className="w-5 h-5" aria-hidden="true" />} Download Report (PDF)
           </button>
           <Link to="/"
-                className="flex items-center gap-2 rounded-xl border border-border hover:border-primary bg-card px-4 py-2 text-sm font-medium text-foreground">
-            <RefreshCw className="w-4 h-4" /> Analyse Another
+                className="btn-secondary">
+            <RefreshCw className="w-5 h-5" aria-hidden="true" /> Analyse Another
           </Link>
         </div>
       </div>
       <ErrorNotice error={pdfError} />
 
-      <div className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-lg border border-border bg-card p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6">
         <div className="space-y-2">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted border border-border text-[11px] font-semibold tracking-wider text-foreground/80">
-            <Info className="w-3.5 h-3.5" /> RESULT #{result.prediction_id}
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground">
+            <Info className="w-5 h-5 text-primary" aria-hidden="true" /> Result #{result.prediction_id}
           </span>
-          <h1 className={`text-4xl sm:text-5xl font-extrabold tracking-tight ${ai ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+          <h1 className={`text-4xl sm:text-5xl font-bold tracking-tight ${ai ? 'text-destructive-text' : 'text-success-text'}`}>
             {result.predicted_class}
           </h1>
           <p className="text-lg text-foreground">
             Confidence: <strong>{result.confidence_percentage.toFixed(1)}%</strong>{' '}
-            <span className="text-muted-foreground/80">({result.confidence_band})</span>
+            <span className="text-muted-foreground">({result.confidence_band})</span>
           </p>
-          <p className="text-sm text-muted-foreground/80">{new Date(result.prediction_timestamp).toLocaleString()}</p>
+          <p className="text-sm text-muted-foreground">{formatDateTime(result.prediction_timestamp)}</p>
         </div>
         <ConfidenceGauge percentage={result.confidence_percentage} label={result.predicted_class}
                          band={result.confidence_band} ai={ai} />
@@ -236,7 +233,7 @@ export const ResultsPage: React.FC = () => {
           <figcaption className="text-sm font-semibold text-foreground">Original image</figcaption>
           {result.original_available ? (
             <AuthImage src={result.original_image_url} alt="Original image"
-                       className="w-full rounded-xl border border-border object-contain bg-card min-h-40" />
+                       className="w-full rounded-lg border border-border object-contain bg-card min-h-40" />
           ) : (
             <Notice tone="warning" title="The original image is no longer stored.">
               The verdict and scores are the recorded result of the analysis made while it was.
@@ -250,8 +247,8 @@ export const ResultsPage: React.FC = () => {
       </div>
       {xai && <Notice tone={xai.tone}>{xai.text}</Notice>}
 
-      <div className="flex gap-4 rounded-2xl border border-sky-300 dark:border-sky-800/60 bg-sky-50 dark:bg-sky-950/30 px-5 py-4">
-        <Info className="w-6 h-6 shrink-0 text-sky-700 dark:text-sky-300" />
+      <div className="flex gap-4 rounded-lg border border-info border-l-4 bg-info/10 px-5 py-4">
+        <Info className="w-6 h-6 shrink-0 text-primary" aria-hidden="true" />
         <div className="space-y-1">
           <p className="font-semibold text-foreground">How to read this result</p>
           <p className="text-sm leading-relaxed text-foreground/80">{result.interpretive_caption}</p>
@@ -259,14 +256,14 @@ export const ResultsPage: React.FC = () => {
       </div>
 
       {models.length > 0 && (
-        <div className="text-xs text-muted-foreground/80 space-y-0.5">
+        <div className="text-xs text-muted-foreground space-y-0.5">
           <p className="font-semibold text-muted-foreground">Models that produced this result</p>
           {models.map((m) => (
             <p key={m!.model_id} className="font-mono">#{m!.model_id} {m!.model_name} · {m!.model_version}</p>
           ))}
         </div>
       )}
-      <Link to="/history" className="text-sm text-primary hover:underline">← All results</Link>
+      <Link to="/history" className="text-sm text-link hover:underline">← All results</Link>
     </div>
   );
 };

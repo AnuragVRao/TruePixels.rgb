@@ -13,18 +13,18 @@ const tooltip = { contentStyle: { background: 'var(--popover)', border: '1px sol
 
 /** Every figure on this page is read from /admin/summary or /admin/analytics. Nothing is hard-coded. */
 const Tile: React.FC<{ label: string; value: React.ReactNode; note?: string; tone?: string }> = ({ label, value, note, tone }) => (
-  <div className="rounded-xl border border-border bg-card p-4">
-    <p className="text-xs uppercase tracking-wide text-muted-foreground/80">{label}</p>
+  <div className="rounded-lg border border-border bg-card p-4">
+    <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
     <p className={`mt-1 text-2xl font-bold ${tone ?? 'text-foreground'}`}>{value}</p>
-    {note && <p className="mt-1 text-xs text-muted-foreground/80">{note}</p>}
+    {note && <p className="mt-1 text-xs text-muted-foreground">{note}</p>}
   </div>
 );
 
 const Panel: React.FC<{ title: string; note?: string; children: React.ReactNode }> = ({ title, note, children }) => (
-  <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+  <section className="rounded-lg border border-border bg-card p-4 space-y-3">
     <div>
       <h2 className="font-semibold text-foreground">{title}</h2>
-      {note && <p className="text-xs text-muted-foreground/80">{note}</p>}
+      {note && <p className="text-xs text-muted-foreground">{note}</p>}
     </div>
     {children}
   </section>
@@ -69,7 +69,7 @@ export const OverviewPage: React.FC = () => {
       </div>
       <ErrorNotice error={error} />
       {!summary && !error && (
-        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Loading…</p>
       )}
 
       {summary && (
@@ -79,7 +79,7 @@ export const OverviewPage: React.FC = () => {
           <Tile label="Called Real / AI Generated" value={
             `${summary.class_distribution['Real'] ?? 0} / ${summary.class_distribution['AI Generated'] ?? 0}`} note="all time" />
           <Tile label="Error log entries, last 24 h" value={summary.error_count_last_24h}
-                tone={summary.error_count_last_24h > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-foreground'} />
+                tone={summary.error_count_last_24h > 0 ? 'text-destructive-text' : 'text-foreground'} />
           <Tile label="Inference p50 (warm)" value={ms(latency?.p50_ms)}
                 note={latency ? `${latency.warm_count} warm predictions, last ${analytics?.days} days` : undefined} />
           <Tile label="Inference p95 (warm)" value={ms(latency?.p95_ms)}
@@ -100,7 +100,7 @@ export const OverviewPage: React.FC = () => {
                 <li key={m.model_type} className="py-2 flex flex-wrap gap-x-3">
                   <span className="text-muted-foreground w-56">{m.model_type}</span>
                   <span className="text-foreground">{m.model_name}</span>
-                  <span className="font-mono text-xs text-muted-foreground/80 break-all">{m.version}</span>
+                  <span className="font-mono text-xs text-muted-foreground break-all">{m.version}</span>
                 </li>
               ))}
             </ul>

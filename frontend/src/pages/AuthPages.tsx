@@ -8,23 +8,19 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorNotice, Notice } from '../components/Feedback';
 import { PasswordInput } from '../components/PasswordInput';
 import { PasswordRules, passwordOk } from '../components/PasswordRules';
+import { Req, RequiredNote } from '../components/Required';
 
 const field =
-  'w-full rounded-lg bg-card border border-border px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground/60 ' +
+  'w-full rounded-md bg-card border border-input px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground ' +
   'focus:outline-none focus:ring-2 focus:ring-ring';
-const adminField =
-  'w-full rounded-lg bg-background border border-amber-300 dark:border-amber-900/60 px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground/60 ' +
-  'focus:outline-none focus:ring-2 focus:ring-amber-500';
-const adminButton =
-  'w-full flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 ' +
-  'px-4 py-2.5 text-sm font-semibold text-white';
-const button =
-  'w-full flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 ' +
-  'px-4 py-2.5 text-sm font-semibold text-primary-foreground';
+// The admin portal uses the same Purple group as the rest of the site (DBIM §2.1: one colour group).
+const adminField = field;
+const button = 'btn-primary w-full py-2.5';
+const adminButton = button;
 
 const Card: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="max-w-md mx-auto bg-card border border-border rounded-2xl p-6 sm:p-8 space-y-5">
-    <h1 className="text-xl font-bold text-foreground">{title}</h1>
+  <div className="max-w-md mx-auto bg-card border border-border rounded-lg p-6 sm:p-8 space-y-5">
+    <h1 className="text-2xl font-bold text-foreground">{title}</h1>
     {children}
   </div>
 );
@@ -99,15 +95,15 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
   const fields = (
     <>
       <label className="block space-y-1.5 text-sm">
-        <span className="text-foreground/80">{admin ? 'Admin Email' : 'Email'}</span>
+        <span className="text-foreground font-medium">{admin ? 'Admin Email' : 'Email'} <Req /></span>
         <input className={admin ? adminField : field} type="email" autoComplete="email" required value={email}
                onChange={(e) => setEmail(e.target.value)} />
       </label>
       <label className="block space-y-1.5 text-sm">
         <span className="flex items-baseline justify-between">
-          <span className="text-foreground/80">{admin ? 'Master Password' : 'Password'}</span>
+          <span className="text-foreground font-medium">{admin ? 'Master Password' : 'Password'} <Req /></span>
           <Link to={`/forgot-password${admin ? '?portal=admin' : ''}`}
-                className={`text-xs hover:underline ${admin ? 'text-amber-700 dark:text-amber-400' : 'text-primary'}`}>
+                className={`text-xs hover:underline text-link`}>
             Forgot password?
           </Link>
         </span>
@@ -119,14 +115,14 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
 
   if (admin) {
     return (
-      <div className="max-w-md mx-auto bg-card border border-amber-300 dark:border-amber-900/50 rounded-2xl p-6 sm:p-8 space-y-5">
+      <div className="max-w-md mx-auto bg-card border border-border rounded-lg p-6 sm:p-8 space-y-5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-700 dark:text-amber-400">
-            <ShieldAlert className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-md bg-accent flex items-center justify-center text-primary">
+            <ShieldAlert className="w-6 h-6" aria-hidden="true" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-foreground">Administrator Portal</h1>
-            <p className="text-xs text-amber-700/80 dark:text-amber-300/80">Elevated privilege authentication (F.3)</p>
+            <h1 className="text-2xl font-bold text-foreground">Administrator Portal</h1>
+            <p className="text-xs text-muted-foreground">Elevated privilege authentication (F.3)</p>
           </div>
         </div>
         {expired && <Notice tone="warning" title="Your session ended. Please sign in again." />}
@@ -137,13 +133,14 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
         </Notice>
         <ErrorNotice error={error} />
         <form onSubmit={submit} className="space-y-4" aria-label="Administrator sign-in">
+          <RequiredNote />
           {fields}
           <button className={adminButton} disabled={busy} type="submit">
-            {busy && <Loader2 className="w-4 h-4 animate-spin" />} Sign in as administrator
+            {busy && <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />} Sign in as administrator
           </button>
         </form>
         <p className="text-sm text-muted-foreground">
-          Not an administrator? <Link className="text-primary hover:underline" to="/login">User sign-in</Link>
+          Not an administrator? <Link className="text-link hover:underline" to="/login">User sign-in</Link>
         </p>
       </div>
     );
@@ -155,16 +152,17 @@ const SignInForm: React.FC<SignInProps> = ({ portal }) => {
       {wasReset && <Notice tone="success" title="Password changed. Sign in with your new password." />}
       <ErrorNotice error={error} />
       <form onSubmit={submit} className="space-y-4" aria-label="User sign-in">
+          <RequiredNote />
         {fields}
         <button className={button} disabled={busy} type="submit">
-          {busy && <Loader2 className="w-4 h-4 animate-spin" />} Sign in
+          {busy && <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />} Sign in
         </button>
       </form>
       <p className="text-sm text-muted-foreground">
-        No account? <Link className="text-primary hover:underline" to="/register">Create one</Link>
+        No account? <Link className="text-link hover:underline" to="/register">Create one</Link>
       </p>
-      <p className="text-xs text-muted-foreground/80">
-        Administrator? <Link className="text-amber-700 dark:text-amber-400 hover:underline" to="/admin/login">Use the Administrator Portal</Link>
+      <p className="text-xs text-muted-foreground">
+        Administrator? <Link className="text-link hover:underline" to="/admin/login">Use the Administrator Portal</Link>
       </p>
     </Card>
   );
@@ -215,28 +213,29 @@ export const RegisterPage: React.FC = () => {
     <Card title="Create Account">
       <ErrorNotice error={error} />
       <form onSubmit={submit} className="space-y-4">
+          <RequiredNote />
         <label className="block space-y-1.5 text-sm">
-          <span className="text-foreground/80">Full name</span>
+          <span className="text-foreground font-medium">Full name <Req /></span>
           <input className={field} autoComplete="name" required minLength={2} maxLength={120} value={fullName}
                  onChange={(e) => setFullName(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
-          <span className="text-foreground/80">Email</span>
+          <span className="text-foreground font-medium">Email <Req /></span>
           <input className={field} type="email" autoComplete="email" required value={email}
                  onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label className="block space-y-1.5 text-sm">
-          <span className="text-foreground/80">Password</span>
+          <span className="text-foreground font-medium">Password <Req /></span>
           <PasswordInput className={field} autoComplete="new-password" required value={password}
                  onChange={(e) => setPassword(e.target.value)} />
         </label>
         <PasswordRules password={password} />
         <button className={button} disabled={busy || !passwordOk(password)} type="submit">
-          {busy && <Loader2 className="w-4 h-4 animate-spin" />} Create account
+          {busy && <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />} Create account
         </button>
       </form>
       <p className="text-sm text-muted-foreground">
-        Already registered? <Link className="text-primary hover:underline" to="/login">Sign in</Link>
+        Already registered? <Link className="text-link hover:underline" to="/login">Sign in</Link>
       </p>
     </Card>
   );
@@ -319,10 +318,10 @@ export const VerifyOtpPage: React.FC = () => {
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
         />
         <button className={button} disabled={busy || code.length !== 6} type="submit">
-          {busy && <Loader2 className="w-4 h-4 animate-spin" />} Verify
+          {busy && <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />} Verify
         </button>
       </form>
-      <button type="button" onClick={() => setAskResend(true)} className="text-sm text-primary hover:underline">
+      <button type="button" onClick={() => setAskResend(true)} className="text-sm text-link hover:underline">
         Send a new code
       </button>
       {askResend && (
@@ -396,16 +395,17 @@ export const ForgotPasswordPage: React.FC = () => {
       <ErrorNotice error={error} />
       {step === 'email' ? (
         <form onSubmit={requestCode} className="space-y-4" aria-label="Request a reset code">
+          <RequiredNote />
           <p className="text-sm text-muted-foreground">
             Enter the e-mail address of your account. We will send a 6-digit code to choose a new password.
           </p>
           <label className="block space-y-1.5 text-sm">
-            <span className="text-foreground/80">Email</span>
+            <span className="text-foreground font-medium">Email <Req /></span>
             <input className={field} type="email" autoComplete="email" required value={email}
                    onChange={(e) => setEmail(e.target.value)} />
           </label>
           <button className={button} disabled={busy} type="submit">
-            {busy && <Loader2 className="w-4 h-4 animate-spin" />} Send reset code
+            {busy && <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />} Send reset code
           </button>
         </form>
       ) : (
@@ -424,31 +424,32 @@ export const ForgotPasswordPage: React.FC = () => {
             </Notice>
           )}
           <form onSubmit={reset} className="space-y-4" aria-label="Choose a new password">
+          <RequiredNote />
             <label className="block space-y-1.5 text-sm">
-              <span className="text-foreground/80">Reset code</span>
+              <span className="text-foreground font-medium">Reset code <Req /></span>
               <input className={`${field} text-center tracking-[0.5em] text-lg font-mono`}
                      inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required
                      value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
             </label>
             <label className="block space-y-1.5 text-sm">
-              <span className="text-foreground/80">New password</span>
+              <span className="text-foreground font-medium">New password <Req /></span>
               <PasswordInput className={field} autoComplete="new-password" required value={password}
                      onChange={(e) => setPassword(e.target.value)} />
             </label>
             <label className="block space-y-1.5 text-sm">
-              <span className="text-foreground/80">Confirm new password</span>
+              <span className="text-foreground font-medium">Confirm new password <Req /></span>
               <PasswordInput className={field} autoComplete="new-password" required value={confirm}
                      onChange={(e) => setConfirm(e.target.value)} />
             </label>
             <PasswordRules password={password} />
-            {mismatch && <p className="text-xs text-rose-700 dark:text-rose-300">The two passwords do not match.</p>}
+            {mismatch && <p className="text-xs text-destructive-text">The two passwords do not match.</p>}
             <button className={button} type="submit"
                     disabled={busy || code.length !== 6 || !passwordOk(password) || confirm !== password}>
-              {busy && <Loader2 className="w-4 h-4 animate-spin" />} Set new password
+              {busy && <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />} Set new password
             </button>
           </form>
           <button type="button" onClick={() => setAskResend(true)} disabled={busy}
-                  className="text-sm text-primary hover:underline disabled:opacity-50">
+                  className="text-sm text-link hover:underline disabled:opacity-50">
             Send a new code
           </button>
           {askResend && (
@@ -461,7 +462,7 @@ export const ForgotPasswordPage: React.FC = () => {
         </>
       )}
       <p className="text-sm text-muted-foreground">
-        Remembered it? <Link className="text-primary hover:underline" to={signInPath}>Back to sign in</Link>
+        Remembered it? <Link className="text-link hover:underline" to={signInPath}>Back to sign in</Link>
       </p>
     </Card>
   );

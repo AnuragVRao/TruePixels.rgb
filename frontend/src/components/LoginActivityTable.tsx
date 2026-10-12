@@ -1,16 +1,17 @@
 import React from 'react';
 import type { LoginEvent, LoginOutcome } from '../api/types';
+import { formatDateTime } from '../lib/format';
 
 export const OUTCOME: Record<LoginOutcome, { label: string; tone: string }> = {
-  success: { label: 'Signed in', tone: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300' },
-  otp_sent: { label: 'Password correct, code sent', tone: 'bg-sky-500/10 border-sky-500/40 text-sky-700 dark:text-sky-300' },
-  wrong_password: { label: 'Wrong password', tone: 'bg-rose-500/10 border-rose-500/40 text-rose-700 dark:text-rose-300' },
-  unknown_account: { label: 'No such account', tone: 'bg-rose-500/10 border-rose-500/40 text-rose-700 dark:text-rose-300' },
-  account_disabled: { label: 'Account disabled', tone: 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300' },
-  not_admin: { label: 'Not an administrator', tone: 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300' },
-  otp_failed: { label: 'Wrong verification code', tone: 'bg-rose-500/10 border-rose-500/40 text-rose-700 dark:text-rose-300' },
-  password_reset: { label: 'Password reset by e-mail', tone: 'bg-violet-500/10 border-violet-500/40 text-violet-700 dark:text-violet-300' },
-  password_changed: { label: 'Password changed', tone: 'bg-violet-500/10 border-violet-500/40 text-violet-700 dark:text-violet-300' },
+  success: { label: 'Signed in', tone: 'bg-success/10 border-success/50 text-success-text' },
+  otp_sent: { label: 'Password correct, code sent', tone: 'bg-info/10 border-info/50 text-info-text' },
+  wrong_password: { label: 'Wrong password', tone: 'bg-destructive/10 border-destructive/50 text-destructive-text' },
+  unknown_account: { label: 'No such account', tone: 'bg-destructive/10 border-destructive/50 text-destructive-text' },
+  account_disabled: { label: 'Account disabled', tone: 'bg-warning/10 border-warning/50 text-warning-text' },
+  not_admin: { label: 'Not an administrator', tone: 'bg-warning/10 border-warning/50 text-warning-text' },
+  otp_failed: { label: 'Wrong verification code', tone: 'bg-destructive/10 border-destructive/50 text-destructive-text' },
+  password_reset: { label: 'Password reset by e-mail', tone: 'bg-accent border-primary/40 text-primary' },
+  password_changed: { label: 'Password changed', tone: 'bg-accent border-primary/40 text-primary' },
 };
 
 /** "Chrome 129 on Windows" from a user-agent string; the full string is in the tooltip. */
@@ -34,9 +35,9 @@ export function browserOf(agent: string | null): string {
 
 /** Every field is rendered as text: e-mails and user-agents are attacker-supplied. */
 export const LoginActivityTable: React.FC<{ rows: LoginEvent[]; showEmail?: boolean }> = ({ rows, showEmail }) => (
-  <div className="overflow-x-auto rounded-xl border border-border">
+  <div className="overflow-x-auto rounded-lg border border-border">
     <table className="w-full text-sm">
-      <thead className="bg-card text-left text-xs uppercase tracking-wide text-muted-foreground/80">
+      <thead className="bg-muted text-center text-xs uppercase tracking-wide text-muted-foreground">
         <tr>
           <th className="px-3 py-2">Time</th>
           {showEmail && <th className="px-3 py-2">E-mail</th>}
@@ -51,11 +52,11 @@ export const LoginActivityTable: React.FC<{ rows: LoginEvent[]; showEmail?: bool
           const outcome = OUTCOME[row.outcome] ?? { label: row.outcome, tone: 'border-border text-foreground/80' };
           return (
             <tr key={row.event_id}>
-              <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{new Date(row.created_at).toLocaleString()}</td>
+              <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{formatDateTime(row.created_at)}</td>
               {showEmail && (
                 <td className="px-3 py-2 text-foreground break-all">
                   {row.email}
-                  {row.user_id === null && <span className="ml-1 text-xs text-muted-foreground/80">(no account)</span>}
+                  {row.user_id === null && <span className="ml-1 text-xs text-muted-foreground">(no account)</span>}
                 </td>
               )}
               <td className="px-3 py-2">

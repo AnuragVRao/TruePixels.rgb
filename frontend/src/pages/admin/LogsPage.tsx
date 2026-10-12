@@ -10,7 +10,7 @@ const PAGE_SIZE = 25;
 const EVENT_TYPES = ['authentication', 'prediction-request', 'administrative-action', 'error'];
 const SEVERITIES = ['info', 'warning', 'error'];
 const SEVERITY_TONE: Record<string, string> = {
-  error: 'text-rose-700 dark:text-rose-300', warning: 'text-amber-700 dark:text-amber-300', info: 'text-foreground/80',
+  error: 'text-destructive-text', warning: 'text-warning-text', info: 'text-foreground/80',
 };
 const select = 'rounded-lg bg-card border border-border px-2 py-1.5 text-sm text-foreground';
 
@@ -87,20 +87,20 @@ export const LogsPage: React.FC = () => {
           <input type="datetime-local" className={select} value={to} onChange={(e) => update({ to: e.target.value })} />
         </label>
         {(eventType || severity || from || to) && (
-          <button type="button" className="text-sm text-primary hover:underline pb-1.5"
+          <button type="button" className="text-sm text-link hover:underline pb-1.5"
                   onClick={() => setParams(new URLSearchParams())}>Clear filters</button>
         )}
       </form>
 
       <ErrorNotice error={error} />
       {!data && !error && (
-        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+        <p className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Loading…</p>
       )}
       {data && data.total === 0 && <Notice tone="info" title="No log entries match these filters." />}
       {data && data.items.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
-            <thead className="bg-card text-left text-xs uppercase tracking-wide text-muted-foreground/80">
+            <thead className="bg-muted text-center text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Time</th>
                 <th className="px-3 py-2">Severity</th>
