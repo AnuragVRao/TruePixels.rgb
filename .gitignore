@@ -24,6 +24,7 @@ storage/uploads/*
 storage/tensors/*
 storage/models/*
 storage/explainability/*
+storage/*.log
 
 # Evaluation image sets and their results. Every one of these is FETCHED, by
 # ml/datasets/fetch_*.py, and DERIVED, by make_variants.py - so the scripts and

@@ -8,6 +8,15 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-12 — WebP uploads tried, not adopted
+- Built: RIFF/WEBP sniffing, multi-frame refusal, WebP stored as lossless PNG,
+  and migration 0008 widening `chk_image_format`.
+- Dropped before submission. On SQLite, the 0008 table rebuild changed
+  foreign-key behaviour on the pooled connection
+  (`test_immutability_trigger_exists_and_refuses_update_and_referenced_delete`
+  failed with it and passes without it), and accuracy on WebP was never
+  measured. Uploads stay JPG/PNG, and the schema stays at 0007.
+
 ### 2026-10-12 — FAQ page and contact address
 - New public page `/faq` (`pages/FaqPage.tsx`): twelve questions as an
   accessible `<details>` list. Every figure is the system's own (§5-6 of

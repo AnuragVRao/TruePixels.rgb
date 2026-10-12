@@ -270,6 +270,8 @@ and over HTTP in `test_api_predict.py`.
 
 ## 8. Recent work (full entries: [docs/session-log.md](docs/session-log.md))
 
+- **2026-10-12** — FAQ page and contact address (truepixel.rgb@gmail.com);
+  README rewritten without history; WebP uploads tried and dropped (session log).
 - **2026-10-12** — frontend aligned with the DBIM (palette, Noto Sans, type
   scale, header/footer, accessibility controls, dd/mm/yyyy dates).
 - **2026-10-11** — Admin → Models trimmed to "Running now" (+ rollback);

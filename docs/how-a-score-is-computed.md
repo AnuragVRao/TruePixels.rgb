@@ -30,8 +30,9 @@ The image is accepted only if:
 - **both sides are at least 64 px**;
 - it decodes cleanly, so truncated or corrupted files are refused.
 
-The original file is stored exactly as uploaded. Each detector reads this
-original file and applies its own preprocessing: the content detector resizes
+The image is stored with its metadata (EXIF, GPS) removed and its
+orientation applied: a PNG is re-saved losslessly, a JPEG is re-saved at
+quality 95. Each detector reads this stored file and applies its own preprocessing: the content detector resizes
 and crops it as its authors do, while the frequency detector never resizes it.
 
 ## 2. Two detectors, two kinds of evidence
