@@ -225,7 +225,7 @@ explanation panels (content-detector attention rollout over the whole image
 from a panel-only tiled pass, SPAI patch spectrum); history; PDF reports; admin dashboard,
 users, logs and model management (register, gate preview, activate,
 rollback); PostgreSQL + Alembic; HTTPS via Caddy; UI styled to MeitY's
-Digital Brand Identity Manual (Purple group, Noto Sans, Lockup 3B - no
+Digital Brand Identity Manual (Blue group, Noto Sans, Lockup 3B - no
 State Emblem; deviations in the session log, 2026-10-12).
 
 ---

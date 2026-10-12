@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 /* Theme tokens, following the Digital Brand Identity Manual (DBIM v3):
-   one primary colour group (Purple: key #29136C, #4729A3, #8B70DB, #BDADEB,
-   #EEEBFA) plus the functional palette (Inclusive White, Linen, Deep Earthy
+   one primary colour group (Blue: key #162F6A, #214AAB, #5279D7, #A3BBF3,
+   #D2DFFF) plus the functional palette (Inclusive White, Linen, Deep Earthy
    Brown, Greys 01-03, and the status colours). Light is the default (:root);
    dark applies with class="dark" on <html>, set by lib/theme.ts - the manual
    defines no dark theme, so it is built from the same two palettes.
@@ -18,13 +18,13 @@
     --card-foreground: #150202;
     --popover: #ffffff;
     --popover-foreground: #150202;
-    --primary: #29136c;              /* key colour */
-    --primary-hover: #4729a3;
+    --primary: #162f6a;              /* key colour */
+    --primary-hover: #214aab;
     --primary-foreground: #ffffff;
-    --secondary: #4729a3;
+    --secondary: #214aab;
     --secondary-foreground: #ffffff;
-    --accent: #eeebfa;
-    --accent-foreground: #29136c;
+    --accent: #d2dfff;
+    --accent-foreground: #162f6a;
     --muted: #ebeaea;                /* Linen */
     --muted-foreground: #606060;     /* Grey 03 */
     --destructive: #dc3545;          /* Coral Red - error / AI verdict */
@@ -42,13 +42,13 @@
     --link: #0d6efd;
     --border: #ebeaea;               /* Linen outlines */
     --input: #8e8e8e;                /* Grey 02 */
-    --ring: #4729a3;
+    --ring: #214aab;
     --disabled: #ebeaea;             /* Linen */
     --disabled-foreground: #606060;  /* Grey 03 */
-    --footer: #29136c;
+    --footer: #162f6a;
     --footer-foreground: #ffffff;
-    --chart-1: #29136c;
-    --chart-2: #8b70db;
+    --chart-1: #162f6a;
+    --chart-2: #5279d7;
     --chart-3: #dc3545;
     --chart-4: #198754;
     --chart-5: #0d6efd;
@@ -69,18 +69,18 @@
   .dark {
     --background: #000000;
     --foreground: #ffffff;
-    --card: #1a0c45;                 /* between key #29136C and black, so cards read on black */
+    --card: #0b1835;                 /* between key #162F6A and black, so cards read on black */
     --card-foreground: #ffffff;
-    --popover: #29136c;
+    --popover: #162f6a;
     --popover-foreground: #ffffff;
-    --primary: #bdadeb;
-    --primary-hover: #eeebfa;
+    --primary: #a3bbf3;
+    --primary-hover: #d2dfff;
     --primary-foreground: #150202;
-    --secondary: #8b70db;
+    --secondary: #5279d7;
     --secondary-foreground: #150202;
-    --accent: #29136c;
-    --accent-foreground: #eeebfa;
-    --muted: #29136c;
+    --accent: #162f6a;
+    --accent-foreground: #d2dfff;
+    --muted: #162f6a;
     --muted-foreground: #c6c6c6;     /* Grey 01 */
     --destructive: #dc3545;
     --destructive-foreground: #ffffff;
@@ -94,16 +94,16 @@
     --info: #0d6efd;
     --info-foreground: #ffffff;
     --info-text: #a3bbf3;
-    --link: #bdadeb;
-    --border: #4729a3;
+    --link: #a3bbf3;
+    --border: #214aab;
     --input: #8e8e8e;
-    --ring: #bdadeb;
+    --ring: #a3bbf3;
     --disabled: #606060;
     --disabled-foreground: #ebeaea;
-    --footer: #29136c;
+    --footer: #162f6a;
     --footer-foreground: #ffffff;
-    --chart-1: #bdadeb;
-    --chart-2: #8b70db;
+    --chart-1: #a3bbf3;
+    --chart-2: #5279d7;
     --chart-3: #faaaaa;
     --chart-4: #75d6a6;
     --chart-5: #a3bbf3;
@@ -155,6 +155,15 @@
   ::selection {
     @apply bg-primary text-primary-foreground;
   }
+  /* Phones: iOS Safari zooms into any field whose text is under 16 px, so form
+     fields stay at 16 px even though the mobile body scale (§4.3.2) is 14/12. */
+  @media (max-width: 639px) {
+    input:not([type='checkbox']):not([type='radio']),
+    select,
+    textarea {
+      font-size: max(1rem, 16px);
+    }
+  }
   /* DBIM §4.5: every clickable item shows a visible keyboard focus. */
   :focus-visible {
     outline: 2px solid var(--ring);
@@ -168,6 +177,7 @@
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-semibold
            border transition-colors select-none;
+    min-height: 2.5rem; /* a 40 px touch target on phones */
   }
   .btn:focus-visible {
     outline: 2px solid var(--ring);
@@ -199,6 +209,47 @@
   }
   .btn-danger:not(:disabled):hover {
     filter: brightness(0.9);
+  }
+  /* Landing page: title-page sizes (above the DBIM body scale, owner's
+     choice) that shrink with the window height so header, credits and footer
+     fit without scrolling. --fit is the height left after header, main
+     padding and footer (~16rem); the factors are each size's share of the
+     ~477 px the block needs at full size. Never larger than the max. */
+  .landing {
+    --fit: calc(100vh - 16rem);
+  }
+  .landing-title {
+    font-size: clamp(1.75rem, calc(var(--fit) * 0.1), 3rem);
+    line-height: 1.25;
+  }
+  .landing-subtitle {
+    font-size: clamp(1.125rem, calc(var(--fit) * 0.063), 1.875rem);
+    line-height: 1.25;
+  }
+  .landing-heading {
+    font-size: clamp(1.125rem, calc(var(--fit) * 0.059), 1.75rem);
+    line-height: 1.25;
+  }
+  .landing-body {
+    font-size: clamp(1rem, calc(var(--fit) * 0.046), 1.375rem);
+    line-height: 1.45;
+  }
+  .landing-gap {
+    margin-top: clamp(0.75rem, calc(var(--fit) * 0.067), 2rem);
+  }
+  @media (max-width: 639px) {
+    .landing-title {
+      font-size: clamp(1.75rem, calc(var(--fit) * 0.1), 2.25rem);
+    }
+    .landing-subtitle {
+      font-size: clamp(1.125rem, calc(var(--fit) * 0.063), 1.5rem);
+    }
+    .landing-heading {
+      font-size: clamp(1.125rem, calc(var(--fit) * 0.059), 1.375rem);
+    }
+    .landing-body {
+      font-size: clamp(1rem, calc(var(--fit) * 0.046), 1.125rem);
+    }
   }
   .skip-link {
     @apply sr-only;

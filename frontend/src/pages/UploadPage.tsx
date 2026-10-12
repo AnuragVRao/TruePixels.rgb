@@ -94,14 +94,13 @@ export const UploadPage: React.FC = () => {
 
   const busy = phase !== 'idle';
   return (
-    <div className="max-w-3xl mx-auto space-y-8 pt-4">
+    <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8 sm:pt-4">
       <div className="text-center space-y-4">
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-medium">
           <ScanLine className="w-5 h-5" aria-hidden="true" /> AI Image Detection
         </span>
-        <h1 className="text-4xl sm:text-5xl font-bold text-foreground">
-          Analyse{' '}
-          <span className="text-primary">an Image</span>
+        <h1 className="text-4xl sm:text-5xl font-bold text-primary">
+          Analyse an Image
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
           Upload a JPG or PNG image (up to 10 MB).
@@ -111,9 +110,9 @@ export const UploadPage: React.FC = () => {
       {/* Drag-and-drop as in M1's original ImageUpload; a dropped file goes
           through exactly the same checks as one picked with the dialog. */}
       <label
-        className={`relative flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-10 text-center cursor-pointer bg-card transition-colors ${
+        className={`relative flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-6 sm:p-10 text-center cursor-pointer bg-card transition-colors ${
           busy ? 'opacity-50 pointer-events-none'
-            : dragOver ? 'border-primary bg-primary/10' : 'border-primary/50 hover:border-primary'
+            : dragOver ? 'border-primary bg-primary/10' : 'border-primary/70 hover:border-primary'
         }`}
         onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
@@ -134,8 +133,8 @@ export const UploadPage: React.FC = () => {
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
               <CloudUpload className="w-8 h-8 text-white" aria-hidden="true" />
             </div>
-            <span className="text-lg font-semibold text-foreground">Drag &amp; drop an image here</span>
-            <span className="text-xs text-muted-foreground">or</span>
+            <span className="hidden sm:block text-lg font-semibold text-primary">Drag &amp; drop an image here</span>
+            <span className="hidden sm:block text-xs text-muted-foreground">or</span>
             <span className="btn-primary px-6">
               <Upload className="w-5 h-5" aria-hidden="true" /> Choose an image
             </span>

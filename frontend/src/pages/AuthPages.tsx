@@ -13,7 +13,7 @@ import { Req, RequiredNote } from '../components/Required';
 const field =
   'w-full rounded-md bg-card border border-input px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground ' +
   'focus:outline-none focus:ring-2 focus:ring-ring';
-// The admin portal uses the same Purple group as the rest of the site (DBIM §2.1: one colour group).
+// The admin portal uses the same Blue group as the rest of the site (DBIM §2.1: one colour group).
 const adminField = field;
 const button = 'btn-primary w-full py-2.5';
 const adminButton = button;

@@ -13,7 +13,7 @@ import { AccessibilityControls } from './AccessibilityControls';
  * controls (accessibility, account) and the global navigation. Signed in:
  * the numbered tabs of M3's original dashboard (admins also see Admin
  * Dashboard & Analytics and 1-Click Verification). Signed out: M1's three
- * entry points. The footer is in the key colour of the Purple group (§5.6).
+ * entry points. The footer is in the key colour of the Blue group (§5.6).
  */
 const tabClass = (active: boolean) =>
   `flex items-center gap-2 px-3 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition-colors ${
@@ -80,13 +80,13 @@ export const Layout: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <a href="#main" className="skip-link">Skip to main content</a>
-      <header className="border-b border-border bg-background sticky top-0 z-30">
+      <header className="border-b border-border bg-background sm:sticky sm:top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 py-2 min-h-16 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           {/* Lockup 3B: the organisation's own mark and name, with a tagline. */}
           <Link to="/" className="flex items-center gap-2.5 shrink-0" aria-label="TruePixels.rgb home">
             <ShieldCheck className="w-8 h-8 text-primary" aria-hidden="true" />
             <span className="flex flex-col leading-tight">
-              <span className="text-base font-bold text-primary">TruePixels.rgb</span>
+              <span className="text-base font-bold text-primary whitespace-nowrap">TruePixels.rgb</span>
               <span className="text-xs text-muted-foreground hidden sm:block">AI-generated image detection</span>
             </span>
           </Link>
@@ -122,7 +122,7 @@ export const Layout: React.FC = () => {
         </div>
         {user && <Tabs isAdmin={isAdmin} />}
       </header>
-      <main id="main" tabIndex={-1} className="flex-1 w-full max-w-6xl mx-auto px-4 py-8 focus:outline-none">
+      <main id="main" tabIndex={-1} className="flex-1 w-full max-w-6xl mx-auto px-4 py-5 sm:py-8 focus:outline-none">
         <Outlet />
       </main>
       <footer className="bg-footer text-footer-foreground">

@@ -50,7 +50,7 @@ const PrivacyPanel: React.FC = () => {
         </div>
       </div>
       <button type="button" onClick={probe} disabled={busy}
-              className="btn-primary whitespace-nowrap">
+              className="btn-primary whitespace-nowrap w-full sm:w-auto">
         Test Security Barrier
       </button>
     </div>
@@ -101,7 +101,7 @@ export const HistoryPage: React.FC = () => {
                     {formatDateTime(item.prediction_timestamp)}
                   </p>
                 </div>
-                <span className="text-xs text-muted-foreground font-mono">#{item.prediction_id}</span>
+                <span className="hidden sm:inline text-xs text-muted-foreground font-mono">#{item.prediction_id}</span>
               </Link>
             </li>
           ))}

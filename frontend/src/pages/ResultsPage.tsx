@@ -108,17 +108,17 @@ const SpectrumKey: React.FC = () => (
 const Panel: React.FC<{ v: Visualization; label?: string }> = ({ v, label = PANEL_LABEL[v.branch] }) => {
   const tipId = `panel-tip-${v.branch}`;
   return (
-    <figure className="space-y-2">
+    <figure className="relative space-y-2">
       <figcaption className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
         {label}
         {/* The backend's caption, rendered as text, exactly as returned - shown on hover, focus or tap. */}
-        <span className="group relative inline-flex">
+        <span className="group sm:relative inline-flex">
           <button type="button" aria-label={`About the ${label}`} aria-describedby={tipId}
                   className="rounded-full text-muted-foreground hover:text-primary focus:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <Info className="w-5 h-5" aria-hidden="true" />
           </button>
           <span id={tipId} role="tooltip"
-                className="pointer-events-none invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity absolute left-1/2 -translate-x-1/2 top-6 z-20 w-72 max-w-[80vw] rounded-lg border border-border bg-card px-3 py-2 text-xs font-normal leading-relaxed text-muted-foreground shadow-lg">
+                className="pointer-events-none invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity absolute inset-x-0 top-7 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:top-6 z-20 sm:w-72 sm:max-w-[80vw] rounded-lg border border-border bg-card px-3 py-2 text-xs font-normal leading-relaxed text-muted-foreground shadow-lg">
             {v.caption}
           </span>
         </span>
@@ -196,7 +196,7 @@ export const ResultsPage: React.FC = () => {
       </div>
       <ErrorNotice error={pdfError} />
 
-      <div className="relative overflow-hidden rounded-lg border border-border bg-card p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-lg border border-border bg-card p-5 sm:p-8 flex flex-wrap items-center justify-center sm:justify-between gap-6">
         <div className="space-y-2">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground">
             <Info className="w-5 h-5 text-primary" aria-hidden="true" /> Result #{result.prediction_id}

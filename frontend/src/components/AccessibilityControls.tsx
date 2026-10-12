@@ -34,12 +34,12 @@ export const AccessibilityControls: React.FC = () => {
     <div className="relative" ref={box}>
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="true"
               aria-controls="a11y-panel" title="Accessibility controls" aria-label="Accessibility controls"
-              className="w-9 h-9 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-primary hover:bg-accent">
+              className="w-10 h-10 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-primary hover:bg-accent">
         <Accessibility className="w-5 h-5" aria-hidden="true" />
       </button>
       {open && (
         <div id="a11y-panel" role="group" aria-label="Accessibility controls"
-             className="absolute right-0 mt-2 w-72 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg p-4 z-40 space-y-4">
+             className="fixed inset-x-4 top-20 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-72 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg p-4 z-40 space-y-4">
           <div className="flex items-center justify-between">
             <p className="flex items-center gap-2 font-semibold text-sm">
               <Accessibility className="w-5 h-5 text-primary" aria-hidden="true" /> Accessibility controls

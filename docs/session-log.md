@@ -8,10 +8,31 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-12 — phone layout pass; landing page sized to fit one screen
+- Landing page: larger title-page type (owner's mock-up, above the DBIM
+  scale on purpose), shrinking with window height (`.landing-*` in
+  `index.css`) so header, credits and footer fit without scrolling;
+  checked at 1536x730, 1366x657 and 1280x600.
+- Phones: form fields stay at 16 px (iOS zooms into smaller ones);
+  buttons at least 40 px tall; header sticky only from `sm` up (two rows
+  plus tabs covered too much of a phone); accessibility panel becomes a
+  full-width sheet; upload page drops the drag-and-drop wording; history
+  hides the result number; result-panel captions span the figure; admin
+  filter fields go full width. Signed-out pages checked at 375 px (no
+  sideways scroll); **signed-in pages not viewed** (no session available).
+
+### 2026-10-12 — colour group switched from Purple to Blue
+- Owner asked for blue instead of purple. Same DBIM rules, now the **Blue**
+  group: key #162F6A, #214AAB, #5279D7, #A3BBF3, #D2DFFF (light: primary,
+  footer and focus ring from the key and second shade; dark: primary
+  #A3BBF3, cards #0B1835 between key and black). Functional palette and
+  status colours unchanged; favicon recoloured. All token pairs still pass
+  WCAG AA (the hyperlink blue #0D6EFD on white is exactly 4.50:1).
+
 ### 2026-10-12 — frontend aligned with the Digital Brand Identity Manual
 - Asked for: the React UI to follow MeitY's *Digital Brand Identity Manual*
   (DBIM v3, Jan 2025), frontend only. Owner's choices: colour group
-  **Purple**, **Lockup 3B**, visual + structural scope, dark mode kept.
+  **Purple** (switched to Blue the same day, entry above), **Lockup 3B**, visual + structural scope, dark mode kept.
 - Tokens (`index.css`, `tailwind.config.js`): key #29136C with its group,
   plus the functional palette (Inclusive White, Linen, Deep Earthy Brown,
   Greys 01-03, Coral Red / Liberty Green / Mustard / Blue as new

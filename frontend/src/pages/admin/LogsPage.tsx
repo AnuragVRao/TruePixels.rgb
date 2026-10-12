@@ -12,7 +12,7 @@ const SEVERITIES = ['info', 'warning', 'error'];
 const SEVERITY_TONE: Record<string, string> = {
   error: 'text-destructive-text', warning: 'text-warning-text', info: 'text-foreground/80',
 };
-const select = 'rounded-lg bg-card border border-border px-2 py-1.5 text-sm text-foreground';
+const select = 'w-full sm:w-auto min-h-10 rounded-md bg-card border border-input px-2 py-1.5 text-sm text-foreground';
 
 /** datetime-local (browser-local time) -> ISO 8601 in UTC, as the API expects. */
 function toIso(local: string): string | null {
@@ -64,25 +64,25 @@ export const LogsPage: React.FC = () => {
     <div className="space-y-5">
       <h1 className="text-2xl font-bold text-foreground">Audit log</h1>
       <form className="flex flex-wrap items-end gap-3" aria-label="Log filters" onSubmit={(e) => e.preventDefault()}>
-        <label className="text-xs text-muted-foreground space-y-1">
+        <label className="w-full sm:w-auto text-xs text-muted-foreground space-y-1">
           <span className="block">Event type</span>
           <select className={select} value={eventType} onChange={(e) => update({ event_type: e.target.value })}>
             <option value="">all</option>
             {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </label>
-        <label className="text-xs text-muted-foreground space-y-1">
+        <label className="w-full sm:w-auto text-xs text-muted-foreground space-y-1">
           <span className="block">Severity</span>
           <select className={select} value={severity} onChange={(e) => update({ severity: e.target.value })}>
             <option value="">all</option>
             {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </label>
-        <label className="text-xs text-muted-foreground space-y-1">
+        <label className="w-full sm:w-auto text-xs text-muted-foreground space-y-1">
           <span className="block">From (your local time)</span>
           <input type="datetime-local" className={select} value={from} onChange={(e) => update({ from: e.target.value })} />
         </label>
-        <label className="text-xs text-muted-foreground space-y-1">
+        <label className="w-full sm:w-auto text-xs text-muted-foreground space-y-1">
           <span className="block">To</span>
           <input type="datetime-local" className={select} value={to} onChange={(e) => update({ to: e.target.value })} />
         </label>

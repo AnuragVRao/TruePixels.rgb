@@ -8,7 +8,7 @@ import { LoginActivityTable, OUTCOME } from '../../components/LoginActivityTable
 import { Pager } from './AdminLayout';
 
 const PAGE_SIZE = 25;
-const select = 'rounded-lg bg-card border border-border px-2 py-1.5 text-sm text-foreground';
+const select = 'w-full sm:w-auto min-h-10 rounded-md bg-card border border-input px-2 py-1.5 text-sm text-foreground';
 
 /** Every account's sign-ins and password changes, including attempts on unknown addresses. Viewing is audited. */
 export const LoginActivityPage: React.FC = () => {
@@ -45,14 +45,14 @@ export const LoginActivityPage: React.FC = () => {
       <h1 className="text-2xl font-bold text-foreground">Login activity</h1>
       <form className="flex flex-wrap items-end gap-3" aria-label="Login activity filters"
             onSubmit={(e) => { e.preventDefault(); update({ email: emailDraft.trim().toLowerCase() }); }}>
-        <label className="text-xs text-muted-foreground space-y-1">
+        <label className="w-full sm:w-auto text-xs text-muted-foreground space-y-1">
           <span className="block">Result</span>
           <select className={select} value={outcome} onChange={(e) => update({ outcome: e.target.value })}>
             <option value="">all</option>
             {(Object.keys(OUTCOME) as LoginOutcome[]).map((o) => <option key={o} value={o}>{OUTCOME[o].label}</option>)}
           </select>
         </label>
-        <label className="text-xs text-muted-foreground space-y-1">
+        <label className="w-full sm:w-auto text-xs text-muted-foreground space-y-1">
           <span className="block">E-mail contains</span>
           <input className={select} value={emailDraft} onChange={(e) => setEmailDraft(e.target.value)}
                  placeholder="press Enter to filter" />
