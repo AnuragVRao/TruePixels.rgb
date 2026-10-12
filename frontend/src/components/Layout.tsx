@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react
 import { BarChart3, CheckCircle, Clock, LogOut, ScanSearch, ShieldAlert, ShieldCheck, UserCog } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from './ConfirmDialog';
+import { CONTACT_EMAIL } from '../lib/contact';
 import { formatDate } from '../lib/format';
 import { AccessibilityControls } from './AccessibilityControls';
 
@@ -49,26 +50,31 @@ const Tabs: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
 };
 
 /** Footer links: only pages that exist (DBIM §5.6 asks for more; the rest are recorded as not built). */
-const FooterLinks: React.FC<{ signedIn: boolean }> = ({ signedIn }) => (
-  <nav aria-label="Useful links">
-    <p className="text-xs font-semibold mb-2">Useful links</p>
-    <ul className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-      {signedIn ? (
-        <>
-          <li><Link to="/" className="hover:underline">› Analyse an image</Link></li>
-          <li><Link to="/history" className="hover:underline">› Scan history</Link></li>
-          <li><Link to="/account" className="hover:underline">› Account</Link></li>
-        </>
-      ) : (
-        <>
-          <li><Link to="/login" className="hover:underline">› Sign in</Link></li>
-          <li><Link to="/register" className="hover:underline">› Create account</Link></li>
-          <li><Link to="/forgot-password" className="hover:underline">› Forgot password</Link></li>
-        </>
-      )}
-    </ul>
-  </nav>
-);
+const FooterLinks: React.FC<{ signedIn: boolean }> = ({ signedIn }) => {
+  const link = 'hover:underline';
+  return (
+    <nav aria-label="Useful links">
+      <p className="text-xs font-semibold mb-2">Useful links</p>
+      <ul className="grid grid-cols-2 sm:flex sm:flex-wrap gap-x-6 gap-y-1 text-sm">
+        {signedIn ? (
+          <>
+            <li><Link to="/" className={link}>› Analyse an image</Link></li>
+            <li><Link to="/history" className={link}>› Scan history</Link></li>
+            <li><Link to="/account" className={link}>› Account</Link></li>
+          </>
+        ) : (
+          <>
+            <li><Link to="/login" className={link}>› Sign in</Link></li>
+            <li><Link to="/register" className={link}>› Create account</Link></li>
+            <li><Link to="/forgot-password" className={link}>› Forgot password</Link></li>
+          </>
+        )}
+        <li><Link to="/faq" className={link}>› FAQ</Link></li>
+        <li><a href={`mailto:${CONTACT_EMAIL}`} className={link} title={CONTACT_EMAIL}>› Contact us</a></li>
+      </ul>
+    </nav>
+  );
+};
 
 export const Layout: React.FC = () => {
   const { user, signOut } = useAuth();

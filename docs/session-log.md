@@ -8,6 +8,16 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-12 — FAQ page and contact address
+- New public page `/faq` (`pages/FaqPage.tsx`): twelve questions as an
+  accessible `<details>` list. Every figure is the system's own (§5-6 of
+  CLAUDE.md, docs/how-a-score-is-computed.md) - update them together when the
+  operating point or measurements change.
+- Contact: `truepixel.rgb@gmail.com` (`lib/contact.ts`), as a mailto link in
+  the footer ("Contact us") and at the foot of the FAQ.
+- Footer "Useful links" now always ends with FAQ and Contact us; two columns
+  on phones.
+
 ### 2026-10-12 — phone layout pass; landing page sized to fit one screen
 - Landing page: larger title-page type (owner's mock-up, above the DBIM
   scale on purpose), shrinking with window height (`.landing-*` in
