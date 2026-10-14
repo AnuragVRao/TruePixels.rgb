@@ -159,7 +159,7 @@ export const UploadPage: React.FC = () => {
 
       <button
         type="button" onClick={run} disabled={!file || busy}
-        className="btn-primary w-full max-w-xl mx-auto py-3 text-base"
+        className="btn-primary flex w-full max-w-xl mx-auto py-3 text-base"
       >
         {busy ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> : <ScanLine className="w-5 h-5" aria-hidden="true" />}
         {phase === 'uploading' ? 'Uploading and validating…' : phase === 'analysing' ? `Analysing… ${elapsed}s` : 'Analyse Image'}
