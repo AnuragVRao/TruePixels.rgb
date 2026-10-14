@@ -210,3 +210,22 @@ own source) and user-agent.
   the UI returns to sign-in ("Your session has expired").
 - A `.env` that still sets `SESSION_EXPIRE_HOURS` is ignored; set
   `SESSION_EXPIRE_MINUTES` instead.
+
+## Password policy: upper, lower, digit and special character (2026-10-14)
+
+- `validate_password_strength` (`m1_access/security.py`) now requires, besides
+  the 10-character minimum and the common-password list: an uppercase letter,
+  a lowercase letter, a digit and a special character (any character that is
+  neither a letter, a digit nor whitespace). Previously: a letter and a digit.
+- Applies wherever a password is set: registration, reset and change.
+  Existing passwords are not re-checked and keep working.
+- The sign-up checklist (`frontend/src/components/PasswordRules.tsx`) mirrors
+  the four rules; `seed_admin.py`'s generated password gets the suffix `Aa1!`.
+
+## OTP fields accept typed input only (2026-10-14)
+
+- The verification-code and reset-code fields refuse paste, drag-and-drop, the
+  context menu and one-time-code autofill (`frontend/src/pages/AuthPages.tsx`).
+- Browser-side only: the API cannot tell a typed code from a pasted one. The
+  server-side protections (expiry, five wrong entries, resend cooldown) are
+  unchanged.

@@ -222,7 +222,8 @@ photographs*, never as "the accuracy of the system".
 **Built and working:** sign-in with optional e-mail 2FA, password reset and
 change, login activity; upload validation; both branches; fusion and verdict;
 explanation panels (content-detector attention rollout over the whole image
-from a panel-only tiled pass, SPAI patch spectrum); history; PDF reports; admin dashboard,
+from a panel-only tiled pass, SPAI patch spectrum); history; PDF reports;
+batch upload of up to 10 images with one results page and a ZIP of the reports; admin dashboard,
 users, logs and model management (register, gate preview, activate,
 rollback); PostgreSQL + Alembic; HTTPS via Caddy; UI styled to MeitY's
 Digital Brand Identity Manual (Blue group, Noto Sans, Lockup 3B - no
@@ -270,6 +271,10 @@ and over HTTP in `test_api_predict.py`.
 
 ## 8. Recent work (full entries: [docs/session-log.md](docs/session-log.md))
 
+- **2026-10-14** — batch upload (up to 10, analysed one at a time) with a
+  batch results page and `POST /reports/zip`; stricter password rule (upper,
+  lower, digit, special); page text read-only; OTP fields typed-only;
+  sessions last 10 minutes.
 - **2026-10-12** — FAQ page and contact address (truepixel.rgb@gmail.com);
   README rewritten without history; WebP uploads tried and dropped (session log).
 - **2026-10-12** — frontend aligned with the DBIM (palette, Noto Sans, type

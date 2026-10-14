@@ -8,6 +8,39 @@ in commit `4bf5c15`; they remain in git history (`git show 4bf5c15^:changes.md`)
 
 ---
 
+### 2026-10-14 — batch upload with a ZIP of reports
+- Upload page takes up to 10 JPG/PNG files (pick or drop). One file behaves as
+  before; 2-10 are uploaded and analysed **one at a time** through the
+  existing `POST /images` + `POST /predictions` (one GPU; parallel analyses
+  risk the WDDM stall), each with its own status, a failure not stopping the
+  rest, and a Stop button. The explainability checkbox applies to the batch.
+- New page `/batch?ids=…` (`BatchResultsPage.tsx`): every result on one page
+  (verdict, confidence + band, the three scores, Full result, PDF) and
+  "Download all reports (.zip)". Failed files are listed with their reasons.
+- New endpoint `POST /api/v1/reports/zip {prediction_ids}` (M3,
+  `router_reports.py`): 1-10 ids, one `TruePixels_Report_<id>.pdf` each,
+  all-or-nothing ownership (another user's or a missing id → the same 404 as
+  the single report; Admin may include any), one D6 audit row. The single-
+  report endpoint shares the same ownership check and PDF builder.
+- Tests: `tests/m3/test_reporting.py` (own ZIP, not-yours = not-found, admin,
+  limits and sign-in). Not exercised end to end on the GPU.
+
+### 2026-10-14 — page text read-only; OTP fields typed-only
+- Page text cannot be selected (`user-select: none` on `body`) and
+  copy / cut outside form fields is cancelled (`main.tsx`). Form fields stay
+  selectable. Casual copying only: source view, dev tools, screenshots and
+  the PDF report still expose the text.
+- Both OTP fields (verify, password reset) refuse paste, drop, the context
+  menu and one-time-code autofill (`typedOnly` in `AuthPages.tsx`). Browser-
+  side only; the server's protections (expiry, 5 wrong tries, resend
+  cooldown) are unchanged.
+
+### 2026-10-14 — password policy; session lifetime
+- Password rule now: at least 10 characters with an uppercase letter, a
+  lowercase letter, a digit and a special character, not a common password
+  (M1, recorded in docs/auth-hardening.md). Existing passwords keep working.
+- Session lifetime 8 hours → 10 minutes, absolute (docs/auth-hardening.md).
+
 ### 2026-10-12 — WebP uploads tried, not adopted
 - Built: RIFF/WEBP sniffing, multi-frame refusal, WebP stored as lossless PNG,
   and migration 0008 widening `chk_image_format`.
