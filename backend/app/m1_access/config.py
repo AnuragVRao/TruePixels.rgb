@@ -39,7 +39,7 @@ if not JWT_SECRET_KEY:
         "each other's tokens. Set it in backend/.env before deploying."
     )
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-SESSION_EXPIRE_HOURS = int(os.getenv("SESSION_EXPIRE_HOURS", "8"))
+SESSION_EXPIRE_MINUTES = int(os.getenv("SESSION_EXPIRE_MINUTES", "10"))
 
 # Storage Configuration
 # INTEGRATION: default moved from backend/storage to the repository-root

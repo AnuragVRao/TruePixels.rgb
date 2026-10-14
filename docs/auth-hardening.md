@@ -199,3 +199,14 @@ own source) and user-agent.
 - Why: `removed` behaved exactly like `disabled` (soft, reversible, email still reserved).
 - The `removed` status is still allowed in D1 and still refused at sign-in, so existing rows keep
   working and `enable` restores them.
+
+## Session lifetime: 8 hours → 10 minutes (2026-10-14)
+
+- `SESSION_EXPIRE_HOURS` (default 8) is replaced by `SESSION_EXPIRE_MINUTES`
+  (default 10) in `m1_access/config.py`; `create_session_token` now counts in
+  minutes (`custom_expire_minutes`).
+- The lifetime is **absolute**, not idle: a token expires 10 minutes after
+  sign-in whatever the user is doing. The next request then gets a 401 and
+  the UI returns to sign-in ("Your session has expired").
+- A `.env` that still sets `SESSION_EXPIRE_HOURS` is ignored; set
+  `SESSION_EXPIRE_MINUTES` instead.

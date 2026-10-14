@@ -171,7 +171,7 @@ Remove-Item backend\.env.before-rotation   # it still holds the old values
 - After these steps both old values are dead:
   - the old database password no longer authenticates;
   - old tokens no longer verify, and they would have expired within
-    8 hours anyway (`SESSION_EXPIRE_HOURS`).
+    10 minutes anyway (`SESSION_EXPIRE_MINUTES`).
 - **This conversation's transcript** still contains the old database
   password (from 2026-10-03). Rotating makes it useless; it cannot be
   erased from the transcript.

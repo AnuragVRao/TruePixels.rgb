@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.m1_access.config import (
     JWT_ALGORITHM,
     JWT_SECRET_KEY,
-    SESSION_EXPIRE_HOURS,
+    SESSION_EXPIRE_MINUTES,
     OTP_EXPIRE_MINUTES,
 )
 from app.m1_access.models import User
@@ -83,11 +83,11 @@ def validate_password_strength(password: str) -> None:
 TupleToken = tuple[str, datetime, datetime]
 
 
-def create_session_token(user: User, custom_expire_hours: Optional[int] = None) -> TupleToken:
+def create_session_token(user: User, custom_expire_minutes: Optional[int] = None) -> TupleToken:
     """Generates an opaque JWT session token with UTC timestamps."""
     issued_at = datetime.now(timezone.utc)
-    expire_hours = custom_expire_hours or SESSION_EXPIRE_HOURS
-    expires_at = issued_at + timedelta(hours=expire_hours)
+    expire_minutes = custom_expire_minutes or SESSION_EXPIRE_MINUTES
+    expires_at = issued_at + timedelta(minutes=expire_minutes)
 
     payload = {
         "sub": str(user.user_id),
