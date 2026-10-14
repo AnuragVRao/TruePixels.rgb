@@ -8,6 +8,7 @@ import { AdminLoginPage, ForgotPasswordPage, LoginPage, RegisterPage, VerifyOtpP
 import { AccountPage } from './pages/AccountPage';
 import { UploadPage } from './pages/UploadPage';
 import { ResultsPage } from './pages/ResultsPage';
+import { BatchResultsPage } from './pages/BatchResultsPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { VerificationPage } from './pages/VerificationPage';
 import { FaqPage } from './pages/FaqPage';
@@ -58,6 +59,7 @@ const Routed: React.FC = () => {
           <Route path="/faq" element={<FaqPage />} />
           <Route element={<RequireAuth />}>
             <Route path="/results/:id" element={<ResultsPage />} />
+            <Route path="/batch" element={<BatchResultsPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/verification" element={<VerificationPage />} />
             <Route path="/account" element={<AccountPage />} />

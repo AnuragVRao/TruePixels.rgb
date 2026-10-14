@@ -130,6 +130,29 @@ export async function apiBlob(endpoint: string, signal?: AbortSignal): Promise<B
   return response.blob();
 }
 
+/** A file from an authenticated POST with a JSON body (e.g. the reports ZIP), as a Blob. */
+export async function postBlob(endpoint: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
+  const response = await send(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  }, undefined);
+  return response.blob();
+}
+
+/** Hand a Blob to the browser as a file download. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** Strip the /api/v1 prefix the backend puts on its own URLs. */
 export function apiPath(url: string): string {
   return url.startsWith(API_BASE) ? url.slice(API_BASE.length) : url;

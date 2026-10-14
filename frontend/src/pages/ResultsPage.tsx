@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { Activity, AlertCircle, ArrowLeft, Brain, Download, Info, Layers, Loader2, RefreshCw } from 'lucide-react';
-import { apiBlob, apiRequest } from '../api/client';
+import { apiBlob, apiRequest, saveBlob } from '../api/client';
 import type { ResultView, Visualization, XaiStatus } from '../api/types';
 import { AuthImage } from '../components/AuthImage';
 import { formatDateTime } from '../lib/format';
@@ -153,15 +153,7 @@ export const ResultsPage: React.FC = () => {
     setPdfBusy(true);
     setPdfError(null);
     try {
-      const blob = await apiBlob(`/reports/${id}`);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `TruePixels_Report_${id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      saveBlob(await apiBlob(`/reports/${id}`), `TruePixels_Report_${id}.pdf`);
     } catch (err) {
       setPdfError(err);
     } finally {
