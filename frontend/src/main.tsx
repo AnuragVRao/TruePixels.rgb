@@ -17,6 +17,16 @@ import { applyTextSize, applyTheme, storedTextSize, storedTheme } from './lib/th
 applyTheme(storedTheme());
 applyTextSize(storedTextSize());
 
+// Read-only site: block copy / cut of page text (selection is already off in
+// index.css). Form fields are exempt so users can still edit what they type.
+const isFormField = (t: EventTarget | null) =>
+  t instanceof HTMLElement && t.closest('input, textarea, [contenteditable="true"]') !== null;
+for (const type of ['copy', 'cut'] as const) {
+  document.addEventListener(type, (e) => {
+    if (!isFormField(e.target)) e.preventDefault();
+  });
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

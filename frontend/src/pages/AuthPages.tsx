@@ -10,6 +10,21 @@ import { PasswordInput } from '../components/PasswordInput';
 import { PasswordRules, passwordOk } from '../components/PasswordRules';
 import { Req, RequiredNote } from '../components/Required';
 
+/** OTP fields accept typed digits only: no paste (keyboard, menu or long-press),
+    no drag-and-drop, and no browser / OS one-time-code autofill. */
+const block = (e: React.SyntheticEvent) => e.preventDefault();
+const typedOnly = {
+  autoComplete: 'off',
+  onPaste: block,
+  onDrop: block,
+  onDragOver: block,
+  onContextMenu: block,
+  onBeforeInput: (e: React.FormEvent<HTMLInputElement>) => {
+    const kind = (e.nativeEvent as InputEvent).inputType;
+    if (kind === 'insertFromPaste' || kind === 'insertFromDrop' || kind === 'insertReplacementText') e.preventDefault();
+  },
+};
+
 const field =
   'w-full rounded-md bg-card border border-input px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground ' +
   'focus:outline-none focus:ring-2 focus:ring-ring';
@@ -313,7 +328,7 @@ export const VerifyOtpPage: React.FC = () => {
       <form onSubmit={verify} className="space-y-4">
         <input
           className={`${field} text-center tracking-[0.5em] text-lg font-mono`}
-          inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required
+          inputMode="numeric" {...typedOnly} pattern="[0-9]{6}" maxLength={6} required
           aria-label="Verification code" value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
         />
@@ -428,7 +443,7 @@ export const ForgotPasswordPage: React.FC = () => {
             <label className="block space-y-1.5 text-sm">
               <span className="text-foreground font-medium">Reset code <Req /></span>
               <input className={`${field} text-center tracking-[0.5em] text-lg font-mono`}
-                     inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required
+                     inputMode="numeric" {...typedOnly} pattern="[0-9]{6}" maxLength={6} required
                      value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
             </label>
             <label className="block space-y-1.5 text-sm">

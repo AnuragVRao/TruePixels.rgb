@@ -145,6 +145,14 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     line-height: 1.5;
+    /* Read-only site: page text cannot be selected (copying is also blocked in
+       main.tsx). Form fields stay selectable so typing and editing still work. */
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input, textarea, [contenteditable='true'] {
+    -webkit-user-select: text;
+    user-select: text;
   }
   h1, h2, h3, h4 {
     line-height: 1.25;
