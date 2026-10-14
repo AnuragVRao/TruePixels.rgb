@@ -20,8 +20,8 @@ from app.shared.db import SessionLocal
 
 client = TestClient(app)
 _n = itertools.count()
-PASSWORD = "ResetMe12345"
-NEW = "BrandNew67890"
+PASSWORD = "ResetMe12345!"
+NEW = "BrandNew67890!"
 
 
 @pytest.fixture
@@ -120,7 +120,7 @@ def test_a_reset_code_works_once(mailed):
     forgot(email)
     code = resets[-1][1]
     assert reset(email, code).status_code == 200
-    assert reset(email, code, "AnotherOne13579").status_code == 401
+    assert reset(email, code, "AnotherOne13579!").status_code == 401
 
 
 def test_a_weak_new_password_is_refused_before_the_code_is_checked(mailed):

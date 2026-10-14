@@ -27,7 +27,7 @@ from conftest import assert_no_swallowed_log_writes, make_image, png_bytes
 
 client = TestClient(app)
 _n = itertools.count()
-PASSWORD = "AuditLogTest12345"
+PASSWORD = "AuditLogTest12345!"
 
 
 @pytest.fixture

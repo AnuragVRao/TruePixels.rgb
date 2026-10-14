@@ -20,8 +20,9 @@ admin_email = os.getenv("SEED_ADMIN_EMAIL", "admin@truepixels.rgb").strip().lowe
 admin_pwd = os.getenv("SEED_ADMIN_PASSWORD")
 generated = admin_pwd is None
 if generated:
-    # token_urlsafe(18) is 24 chars; the suffix guarantees M1's letter + digit rule.
-    admin_pwd = secrets.token_urlsafe(18) + "a1"
+    # token_urlsafe(18) is 24 chars; the suffix guarantees M1's upper / lower /
+    # digit / special-character rules.
+    admin_pwd = secrets.token_urlsafe(18) + "Aa1!"
 validate_password_strength(admin_pwd)
 
 existing = db.query(User).filter(func.lower(User.email) == admin_email).first()

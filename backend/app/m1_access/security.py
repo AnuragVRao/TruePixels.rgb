@@ -69,15 +69,21 @@ http_bearer = HTTPBearer(auto_error=False)
 
 
 def validate_password_strength(password: str) -> None:
-    """Enforces PRD password policy (min 10 chars, letter + digit, not common)."""
+    """Enforces the password policy: min 10 chars, an uppercase letter, a lowercase
+    letter, a digit and a special character, and not a common password.
+    Mirrored as the user types in frontend/src/components/PasswordRules.tsx."""
     if len(password) < 10:
         raise ValueError("Password must be at least 10 characters long.")
     if password.lower() in COMMON_PASSWORDS:
         raise ValueError("Password is too common. Please choose a stronger password.")
-    if not any(c.isalpha() for c in password):
-        raise ValueError("Password must contain at least one letter.")
+    if not any(c.isupper() for c in password):
+        raise ValueError("Password must contain at least one uppercase letter.")
+    if not any(c.islower() for c in password):
+        raise ValueError("Password must contain at least one lowercase letter.")
     if not any(c.isdigit() for c in password):
         raise ValueError("Password must contain at least one digit.")
+    if not any(not c.isalnum() and not c.isspace() for c in password):
+        raise ValueError("Password must contain at least one special character (e.g. ! @ # $ %).")
 
 
 TupleToken = tuple[str, datetime, datetime]

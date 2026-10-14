@@ -23,7 +23,7 @@ from test_admin_policy import make_user
 
 client = TestClient(app)
 _n = itertools.count()
-PASSWORD = "StatusTest12345"
+PASSWORD = "StatusTest12345!"
 
 
 def register_and_login() -> tuple[int, str, dict[str, str]]:
@@ -71,7 +71,7 @@ def test_reregistering_a_taken_email_does_not_reveal_the_account_status(action):
     if action:
         client.patch(f"/api/v1/admin/users/{user_id}/status", headers=admin, json={"action": action})
     r = client.post("/api/v1/auth/register",
-                    json={"full_name": "Someone Else", "email": email.upper(), "password": "Another12345"})
+                    json={"full_name": "Someone Else", "email": email.upper(), "password": "Another12345!"})
     assert r.status_code == 409, r.text
     error = r.json()["error"]
     # Identical for active and disabled accounts.

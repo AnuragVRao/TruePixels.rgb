@@ -15,13 +15,25 @@ def test_password_policy():
     with pytest.raises(ValueError, match="at least 10 characters"):
         validate_password_strength("Short1")
 
+    # No uppercase letter
+    with pytest.raises(ValueError, match="at least one uppercase letter"):
+        validate_password_strength("supersecret999!")
+
+    # No lowercase letter
+    with pytest.raises(ValueError, match="at least one lowercase letter"):
+        validate_password_strength("SUPERSECRET999!")
+
     # No digits
     with pytest.raises(ValueError, match="at least one digit"):
-        validate_password_strength("NoDigitsHere")
+        validate_password_strength("NoDigitsHere!")
 
-    # No letters
-    with pytest.raises(ValueError, match="at least one letter"):
-        validate_password_strength("1234567890123")
+    # No special character (a space does not count)
+    with pytest.raises(ValueError, match="at least one special character"):
+        validate_password_strength("Super Secret999")
+
+    # No letters at all
+    with pytest.raises(ValueError, match="at least one uppercase letter"):
+        validate_password_strength("1234567890123!")
 
     # Blacklisted common password
     with pytest.raises(ValueError, match="too common"):

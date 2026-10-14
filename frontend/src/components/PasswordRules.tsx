@@ -4,8 +4,10 @@ import React from 'react';
 export function passwordRules(password: string) {
   return [
     { ok: password.length >= 10, text: 'at least 10 characters' },
-    { ok: /[a-zA-Z]/.test(password), text: 'a letter' },
-    { ok: /[0-9]/.test(password), text: 'a digit' },
+    { ok: /\p{Lu}/u.test(password), text: 'an uppercase letter' },
+    { ok: /\p{Ll}/u.test(password), text: 'a lowercase letter' },
+    { ok: /\p{Nd}/u.test(password), text: 'a digit' },
+    { ok: /[^\p{L}\p{N}\s]/u.test(password), text: 'a special character (e.g. ! @ # $ %)' },
   ];
 }
 

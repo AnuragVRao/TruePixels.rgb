@@ -21,7 +21,7 @@ from app.shared.db import SessionLocal
 
 client = TestClient(app)
 _n = itertools.count()
-PASSWORD = "OtpChallenge12345"
+PASSWORD = "OtpChallenge12345!"
 
 
 @pytest.fixture

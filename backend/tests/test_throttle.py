@@ -18,7 +18,7 @@ from app.shared.db import SessionLocal
 
 client = TestClient(app)
 _n = itertools.count()
-PASSWORD = "Throttle12345"
+PASSWORD = "Throttle12345!"
 
 
 class FakeClock:

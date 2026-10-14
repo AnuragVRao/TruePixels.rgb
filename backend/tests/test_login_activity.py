@@ -19,7 +19,7 @@ from app.shared.db import SessionLocal
 
 client = TestClient(app)
 _n = itertools.count()
-PASSWORD = "Activity12345"
+PASSWORD = "Activity12345!"
 UA = {"User-Agent": "Mozilla/5.0 (TestBrowser) TruePixelsTest/1.0"}
 
 
@@ -103,7 +103,7 @@ def test_password_change_is_recorded():
     email = make_user()
     token = login(email).json()["token"]
     client.post("/api/v1/auth/password/change", headers={**auth(token), **UA},
-                json={"current_password": PASSWORD, "new_password": "Changed24680"})
+                json={"current_password": PASSWORD, "new_password": "Changed24680!"})
     assert [e.outcome for e in events(email)] == ["success", "password_changed"]
 
 
